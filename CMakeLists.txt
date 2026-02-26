@@ -4,10 +4,9 @@ project (KRAKENAPI)
 add_definitions("-std=c++11")
 
 #-------------------------------------------------------------------------------
-IF (CMAKE_CXX_COMPILER_ID STREQUAL Clang)
-	add_definitions("-Wno-tautological-compare")
-
-ENDIF()
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    add_compile_options(-Wno-tautological-undefined-compare)
+endif()
 
 #-------------------------------------------------------------------------------
 IF (APPLE)
