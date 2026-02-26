@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 2.8.12)
+cmake_minimum_required (VERSION 3.15)
 project (KRAKENAPI)
 
 add_definitions("-std=c++11")
@@ -13,11 +13,6 @@ ENDIF()
 IF (APPLE)
 	set (CMAKE_MODULE_LINKER_FLAGS "-Wl,-flat_namespace -Wl,-undefined -Wl,suppress")
 ENDIF (APPLE)
-
-#-------------------------------------------------------------------------------
-IF (POLICY CMP0043)
-	cmake_policy(SET CMP0043 OLD)
-ENDIF()
 
 #-------------------------------------------------------------------------------
 # Control CMAKE_BUILD_TYPE, default: Debug
