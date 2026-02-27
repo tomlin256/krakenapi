@@ -5,6 +5,9 @@
 #include <cstring>
 #include <ctime>
 #include <cerrno>
+#include <fstream>
+
+
 
 #include <openssl/buffer.h>
 #include <openssl/sha.h>
@@ -149,6 +152,29 @@ static std::string create_nonce()
    return oss.str();
 }
 
+Keys load_keys(const std::string& name, const std::string& location) {
+    std::string dir = location.empty()
+        ? std::string(getenv("HOME")) + "/.kraken"
+        : location;
+
+    std::string filepath = dir + "/" + name;
+
+    std::ifstream file(filepath);
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open key file: " + filepath);
+    }
+
+    Keys keys;
+    if (!std::getline(file, keys.apiKey) || keys.apiKey.empty()) {
+        throw std::runtime_error("Missing or empty API key in: " + filepath);
+    }
+    if (!std::getline(file, keys.privateKey) || keys.privateKey.empty()) {
+        throw std::runtime_error("Missing or empty private key in: " + filepath);
+    }
+
+    return keys;
+}
+
 //------------------------------------------------------------------------------
 // constructor with all explicit parameters
 KAPI::KAPI(const std::string& key, const std::string& secret, 
@@ -266,6 +292,12 @@ std::string KAPI::public_method(const std::string& method,
    return response;
 }
 
+std::string KAPI::public_method(const std::string& method) const
+{
+   KAPI::Input input;
+   return public_method(method, input);
+}
+
 //------------------------------------------------------------------------------
 // deals with private API methods:
 std::string KAPI::private_method(const std::string& method, 
@@ -315,6 +347,12 @@ std::string KAPI::private_method(const std::string& method,
    
    return response;
 }
+
+std::string KAPI::private_method(const std::string& method) const
+{
+   KAPI::Input input;
+   return private_method(method, input);
+}  
 
 //------------------------------------------------------------------------------
 // helper function to initialize Kraken API library's resources:

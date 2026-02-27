@@ -61,6 +61,12 @@ list(APPEND LIBS ixwebsocket)
 
 find_package(fmt REQUIRED)
 
+#-------------------------------------------------------------------------------
+# A sensible json library
+#-------------------------------------------------------------------------------
+
+find_package(nlohmann_json REQUIRED)
+
 if(INCLUDE_KCLIENT_APIS)
 
 #-------------------------------------------------------------------------------
@@ -138,7 +144,13 @@ set_target_properties (public_method PROPERTIES
 target_link_libraries (public_method ${LIBS})
 
 #-------------------------------------------------------------------------------
-# Add the executable 'ws'
+# Add the executable 'public_ws'
 #-------------------------------------------------------------------------------
 add_executable (public_ws examples/public_ws.cpp kapi.cpp)
 target_link_libraries (public_ws ${LIBS} fmt::fmt)
+
+#-------------------------------------------------------------------------------
+# Add the executable 'private_ws'
+#-------------------------------------------------------------------------------
+add_executable (private_ws examples/private_ws.cpp kapi.cpp)
+target_link_libraries (private_ws ${LIBS} fmt::fmt nlohmann_json::nlohmann_json)

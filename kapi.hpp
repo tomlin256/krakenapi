@@ -33,15 +33,13 @@ public:
    // makes public method to kraken.com 
    std::string public_method(const std::string& method,
 			     const KAPI::Input& input) const;
+   std::string public_method(const std::string& method) const;
 
    // makes private method to kraken.com
    std::string private_method(const std::string& method,
 			      const KAPI::Input& input) const;
+   std::string private_method(const std::string& method) const;
 
-   
-   // TODO: public market data
-   //void time();
-   //void assets();
 
 private:
    // init CURL and other stuffs
@@ -77,6 +75,18 @@ private:
 
 void initialize();
 void terminate();
+
+//------------------------------------------------------------------------------
+// Helpers to get API keys from a file, the file should be in the format:
+// <api_key>
+// <private_key>
+
+struct Keys {
+    std::string apiKey;
+    std::string privateKey;
+};
+
+Keys load_keys(const std::string& name, const std::string& location = "");
 
 //------------------------------------------------------------------------------
 

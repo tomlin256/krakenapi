@@ -1,26 +1,29 @@
 // ws.cpp
+#include "../kapi.hpp"
+
 #include <ixwebsocket/IXWebSocket.h>
+#include <nlohmann/json.hpp>
 
 #include <fmt/format.h>
-#include <nlohmann/json.hpp>
 
 #include <iostream>
 
+using namespace Kraken;
+
 int main(int argc, char* argv[])
 {
+
+   // we need a token to subscribe to private channels, so we need to call a private method first
+   auto keys = load_keys("default");
+   KAPI kapi(keys.apiKey, keys.privateKey);
+   auto tokenResponse = kapi.private_method("GetWebSocketsToken");
+   auto json = nlohmann::json::parse(tokenResponse);
+   std::string token = json["result"]["token"];
+   std::cout << "Token: " << token << std::endl;
+
+   // using v2 api,
    ix::WebSocket webSocket;
-
-    std::string symbol;
-   if (argc > 1)
-   {
-      symbol = argv[1];
-   }
-   else
-   {
-      throw std::runtime_error("Usage: public_ws <symbol>");
-   }
-
-   webSocket.setUrl("wss://ws.kraken.com/v2");
+   webSocket.setUrl("wss://ws-auth.kraken.com/v2");
 
    webSocket.setOnMessageCallback(
       [&](const ix::WebSocketMessagePtr& msg)
@@ -32,8 +35,8 @@ int main(int argc, char* argv[])
             nlohmann::json sub = {
                {"method", "subscribe"},
                {"params", {
-                  {"channel", "ticker"},
-                  {"symbol", nlohmann::json::array({symbol})}
+                  {"channel", "balances"},
+                  {"token", token}
                }}
             };
             webSocket.send(sub.dump());
