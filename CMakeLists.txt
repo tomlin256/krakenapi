@@ -7,16 +7,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 #-------------------------------------------------------------------------------
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-    add_compile_options(-Wno-tautological-undefined-compare)
-endif()
-
-#-------------------------------------------------------------------------------
-IF (APPLE)
-	set (CMAKE_MODULE_LINKER_FLAGS "-Wl,-flat_namespace -Wl,-undefined -Wl,suppress")
-ENDIF (APPLE)
-
-#-------------------------------------------------------------------------------
 # Control CMAKE_BUILD_TYPE, default: Debug
 #-------------------------------------------------------------------------------
 if (NOT CMAKE_BUILD_TYPE)
@@ -47,7 +37,6 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/gabime/spdlog.git
   GIT_TAG        v1.13.0
 )
-
 FetchContent_MakeAvailable(spdlog)
 
 #-------------------------------------------------------------------------------
