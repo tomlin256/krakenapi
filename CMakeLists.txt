@@ -47,12 +47,19 @@ include(FetchContent)
 FetchContent_Declare(
   ixwebsocket
   GIT_REPOSITORY https://github.com/machinezone/IXWebSocket.git
-  GIT_TAG        v11.0.0
+  GIT_TAG        v11.4.6
 )
+set(USE_TLS ON CACHE BOOL "" FORCE)
+set(USE_OPEN_SSL ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(ixwebsocket)
 include_directories(${ixwebsocket_SOURCE_DIR}/include)
 list(APPEND LIBS ixwebsocket)
 
+#-------------------------------------------------------------------------------
+# Add fmt for std::format
+#-------------------------------------------------------------------------------
+
+find_package(fmt REQUIRED)
 
 if(INCLUDE_KCLIENT_APIS)
 
@@ -129,3 +136,9 @@ add_executable (public_method examples/public_method.cpp kapi.cpp)
 set_target_properties (public_method PROPERTIES
 		COMPILE_DEFINITIONS_DEBUG "JSON_DEBUG;JSON_SAFE;JSON_ISO_STRICT")
 target_link_libraries (public_method ${LIBS})
+
+#-------------------------------------------------------------------------------
+# Add the executable 'ws'
+#-------------------------------------------------------------------------------
+add_executable (ws examples/ws.cpp kapi.cpp)
+target_link_libraries (ws ${LIBS} fmt::fmt)
