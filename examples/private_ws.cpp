@@ -4,7 +4,7 @@
 #include <ixwebsocket/IXWebSocket.h>
 #include <nlohmann/json.hpp>
 
-#include <fmt/format.h>
+#include <spdlog/spdlog.h>
 
 #include <iostream>
 
@@ -19,7 +19,7 @@ int main(int argc, char* argv[])
    auto tokenResponse = kapi.private_method("GetWebSocketsToken");
    auto json = nlohmann::json::parse(tokenResponse);
    std::string token = json["result"]["token"];
-   std::cout << "Token: " << token << std::endl;
+   spdlog::info("Token: {}", token);
 
    // using v2 api,
    ix::WebSocket webSocket;
@@ -30,7 +30,7 @@ int main(int argc, char* argv[])
       {
          if (msg->type == ix::WebSocketMessageType::Open)
          {
-            std::cout << "ws opened" << std::endl;
+            spdlog::info("ws opened");
 
             nlohmann::json sub = {
                {"method", "subscribe"},
@@ -43,15 +43,15 @@ int main(int argc, char* argv[])
          }
          else if (msg->type == ix::WebSocketMessageType::Close)
          {
-            std::cout << "ws closed" << std::endl;
+            spdlog::info("ws closed");
          }
          else if (msg->type == ix::WebSocketMessageType::Error)
          {
-            std::cout << "ws error: " << msg->errorInfo.reason << std::endl;
+            spdlog::error("ws error: {}", msg->errorInfo.reason);
          }
          else if (msg->type == ix::WebSocketMessageType::Message)
          {
-            std::cout << "ws message: " << msg->str << std::endl;
+            spdlog::info("ws message: {}", msg->str);
          }
       }
    );

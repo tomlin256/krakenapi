@@ -1,8 +1,8 @@
 // ws.cpp
 #include <ixwebsocket/IXWebSocket.h>
 
-#include <fmt/format.h>
 #include <nlohmann/json.hpp>
+#include <spdlog/spdlog.h>
 
 #include <iostream>
 
@@ -27,7 +27,7 @@ int main(int argc, char* argv[])
       {
          if (msg->type == ix::WebSocketMessageType::Open)
          {
-            std::cout << "ws opened" << std::endl;
+            spdlog::info("ws opened");
 
             nlohmann::json sub = {
                {"method", "subscribe"},
@@ -40,15 +40,15 @@ int main(int argc, char* argv[])
          }
          else if (msg->type == ix::WebSocketMessageType::Close)
          {
-            std::cout << "ws closed" << std::endl;
+            spdlog::info("ws closed");
          }
          else if (msg->type == ix::WebSocketMessageType::Error)
          {
-            std::cout << "ws error: " << msg->errorInfo.reason << std::endl;
+            spdlog::error("ws error: {}", msg->errorInfo.reason);
          }
          else if (msg->type == ix::WebSocketMessageType::Message)
          {
-            std::cout << "ws message: " << msg->str << std::endl;
+            spdlog::info("ws message: {}", msg->str);
          }
       }
    );

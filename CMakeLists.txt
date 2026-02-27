@@ -1,6 +1,8 @@
 cmake_minimum_required (VERSION 3.15)
 project (KRAKENAPI)
 
+include(FetchContent)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -37,10 +39,20 @@ include_directories (${CURL_INCLUDE_DIR})
 list(APPEND LIBS ${CURL_LIBRARIES})
 
 #-------------------------------------------------------------------------------
-# Add ixwebsocket
+# Find spdlog
 #-------------------------------------------------------------------------------
 
-include(FetchContent)
+FetchContent_Declare(
+  spdlog
+  GIT_REPOSITORY https://github.com/gabime/spdlog.git
+  GIT_TAG        v1.13.0
+)
+
+FetchContent_MakeAvailable(spdlog)
+
+#-------------------------------------------------------------------------------
+# Add ixwebsocket
+#-------------------------------------------------------------------------------
 
 FetchContent_Declare(
   ixwebsocket
@@ -52,12 +64,6 @@ set(USE_OPEN_SSL ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(ixwebsocket)
 include_directories(${ixwebsocket_SOURCE_DIR}/include)
 list(APPEND LIBS ixwebsocket)
-
-#-------------------------------------------------------------------------------
-# Add fmt for std::format
-#-------------------------------------------------------------------------------
-
-find_package(fmt REQUIRED)
 
 #-------------------------------------------------------------------------------
 # A sensible json library
@@ -75,7 +81,7 @@ add_executable (public_method examples/public_method.cpp kapi.cpp)
 target_link_libraries (public_method ${LIBS})
 
 add_executable (public_ws examples/public_ws.cpp kapi.cpp)
-target_link_libraries (public_ws ${LIBS} fmt::fmt)
+target_link_libraries (public_ws ${LIBS} nlohmann_json::nlohmann_json spdlog::spdlog)
 
 add_executable (private_ws examples/private_ws.cpp kapi.cpp)
-target_link_libraries (private_ws ${LIBS} fmt::fmt nlohmann_json::nlohmann_json)
+target_link_libraries (private_ws ${LIBS} nlohmann_json::nlohmann_json spdlog::spdlog)
