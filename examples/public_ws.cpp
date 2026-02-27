@@ -10,7 +10,7 @@ int main(int argc, char* argv[])
 {
    ix::WebSocket webSocket;
 
-    std::string symbol;
+   std::string symbol;
    if (argc > 1)
    {
       symbol = argv[1];
@@ -48,7 +48,29 @@ int main(int argc, char* argv[])
          }
          else if (msg->type == ix::WebSocketMessageType::Message)
          {
-            spdlog::info("ws message: {}", msg->str);
+            auto json = nlohmann::json::parse(msg->str);
+            if (json.contains("method"))
+            {
+               spdlog::info("{}: {}", json["method"], json["success"] ? "success" : "failure");
+            }
+            else if (json.contains("channel")) 
+            {
+               std::string channel = json["channel"];
+               if (channel == "ticker")
+               {
+                  auto data = json["data"].get<std::vector<nlohmann::json>>();
+                  for (auto datum : data) {
+                     std::string symbol = datum["symbol"];
+                     float bid = datum["bid"];
+                     float ask = datum["ask"];
+                     spdlog::info("Ticker update for {}: bid={}, ask={}", symbol, bid, ask);
+                  }
+               }
+               else
+               {
+                  spdlog::info("channel {}", channel);
+               }
+            }
          }
       }
    );
