@@ -140,5 +140,5 @@ target_link_libraries (public_method ${LIBS})
 #-------------------------------------------------------------------------------
 # Add the executable 'ws'
 #-------------------------------------------------------------------------------
-add_executable (ws examples/ws.cpp kapi.cpp)
-target_link_libraries (ws ${LIBS} fmt::fmt)
+add_executable (public_ws examples/public_ws.cpp kapi.cpp)
+target_link_libraries (public_ws ${LIBS} fmt::fmt)
