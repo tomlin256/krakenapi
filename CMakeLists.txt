@@ -4,8 +4,6 @@ project (KRAKENAPI)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-option(INCLUDE_KCLIENT_APIS "should you build the json layer" OFF)
-
 #-------------------------------------------------------------------------------
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
     add_compile_options(-Wno-tautological-undefined-compare)
@@ -67,72 +65,17 @@ find_package(fmt REQUIRED)
 
 find_package(nlohmann_json REQUIRED)
 
-if(INCLUDE_KCLIENT_APIS)
-
 #-------------------------------------------------------------------------------
-# Add library kapi (krakenapi)
-#-------------------------------------------------------------------------------
-
-	aux_source_directory(kraken KAPI_FILES)
-	add_library (kapi STATIC ${KAPI_FILES})
-
-	# set some properties when CMAKE_BUILD_TYPE is "Debug"
-	set_target_properties (kapi PROPERTIES 
-				COMPILE_DEFINITIONS_DEBUG "JSON_DEBUG;JSON_SAFE;JSON_ISO_STRICT"
-				DEBUG_POSTFIX "d")
-
-	list (INSERT LIBS 0 kapi)
-
-endif()
-
-#-------------------------------------------------------------------------------
-# Add the executable 'kph'
-#-------------------------------------------------------------------------------
-if(INCLUDE_KCLIENT_APIS)
-
-	add_executable (kph kph.cpp)
-	set_target_properties (kph PROPERTIES 
-				COMPILE_DEFINITIONS_DEBUG "JSON_DEBUG;JSON_SAFE;JSON_ISO_STRICT")
-	target_link_libraries (kph ${LIBS})
-
-endif()
-
-#-------------------------------------------------------------------------------
-# Add the executable 'krt'
-#-------------------------------------------------------------------------------
-if(INCLUDE_KCLIENT_APIS)
-
-	add_executable (krt krt.cpp)
-	set_target_properties (krt PROPERTIES 
-				COMPILE_DEFINITIONS_DEBUG "JSON_DEBUG;JSON_SAFE;JSON_ISO_STRICT")
-	target_link_libraries (krt ${LIBS})
-
-endif()
-
-#-------------------------------------------------------------------------------
-# Add the executable 'private_method'
+# Add the examples using both REST and WebSockets
 #-------------------------------------------------------------------------------
 add_executable (private_method examples/private_method.cpp kapi.cpp)
-set_target_properties (private_method PROPERTIES
-		COMPILE_DEFINITIONS_DEBUG "JSON_DEBUG;JSON_SAFE;JSON_ISO_STRICT")
 target_link_libraries (private_method ${LIBS})
 
-#-------------------------------------------------------------------------------
-# Add the executable 'public_method'
-#-------------------------------------------------------------------------------
 add_executable (public_method examples/public_method.cpp kapi.cpp)
-set_target_properties (public_method PROPERTIES
-		COMPILE_DEFINITIONS_DEBUG "JSON_DEBUG;JSON_SAFE;JSON_ISO_STRICT")
 target_link_libraries (public_method ${LIBS})
 
-#-------------------------------------------------------------------------------
-# Add the executable 'public_ws'
-#-------------------------------------------------------------------------------
 add_executable (public_ws examples/public_ws.cpp kapi.cpp)
 target_link_libraries (public_ws ${LIBS} fmt::fmt)
 
-#-------------------------------------------------------------------------------
-# Add the executable 'private_ws'
-#-------------------------------------------------------------------------------
 add_executable (private_ws examples/private_ws.cpp kapi.cpp)
 target_link_libraries (private_ws ${LIBS} fmt::fmt nlohmann_json::nlohmann_json)
