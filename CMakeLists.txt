@@ -1,7 +1,10 @@
 cmake_minimum_required (VERSION 3.15)
 project (KRAKENAPI)
 
-add_definitions("-std=c++11")
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+option(INCLUDE_KCLIENT_APIS "should you build the json layer" OFF)
 
 #-------------------------------------------------------------------------------
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
@@ -36,50 +39,80 @@ include_directories (${CURL_INCLUDE_DIR})
 list(APPEND LIBS ${CURL_LIBRARIES})
 
 #-------------------------------------------------------------------------------
+# Add ixwebsocket
+#-------------------------------------------------------------------------------
+
+include(FetchContent)
+
+FetchContent_Declare(
+  ixwebsocket
+  GIT_REPOSITORY https://github.com/machinezone/IXWebSocket.git
+  GIT_TAG        v11.0.0
+)
+FetchContent_MakeAvailable(ixwebsocket)
+include_directories(${ixwebsocket_SOURCE_DIR}/include)
+list(APPEND LIBS ixwebsocket)
+
+
+if(INCLUDE_KCLIENT_APIS)
+
+#-------------------------------------------------------------------------------
 # Add library kapi (krakenapi)
 #-------------------------------------------------------------------------------
-aux_source_directory(kraken KAPI_FILES)
-add_library (kapi STATIC ${KAPI_FILES})
 
-# set some properties when CMAKE_BUILD_TYPE is "Debug"
-set_target_properties (kapi PROPERTIES 
-		      COMPILE_DEFINITIONS_DEBUG "JSON_DEBUG;JSON_SAFE;JSON_ISO_STRICT"
-		      DEBUG_POSTFIX "d")
+	aux_source_directory(kraken KAPI_FILES)
+	add_library (kapi STATIC ${KAPI_FILES})
 
-list (INSERT LIBS 0 kapi)
+	# set some properties when CMAKE_BUILD_TYPE is "Debug"
+	set_target_properties (kapi PROPERTIES 
+				COMPILE_DEFINITIONS_DEBUG "JSON_DEBUG;JSON_SAFE;JSON_ISO_STRICT"
+				DEBUG_POSTFIX "d")
+
+	list (INSERT LIBS 0 kapi)
 
 #-------------------------------------------------------------------------------
 # Add library libjson
 #-------------------------------------------------------------------------------
-set (LIBJSON_SOURCE_DIR ${CMAKE_HOME_DIRECTORY}/libjson/_internal/Source)
-aux_source_directory (${LIBJSON_SOURCE_DIR} LIBJSON_SOURCE_FILES)
-add_library (libjson STATIC ${LIBJSON_SOURCE_FILES})
 
-# remove "lib" prefix from the name of the libjson archive
-set_target_properties (libjson PROPERTIES PREFIX "")
+	set (LIBJSON_SOURCE_DIR ${CMAKE_HOME_DIRECTORY}/libjson/_internal/Source)
+	aux_source_directory (${LIBJSON_SOURCE_DIR} LIBJSON_SOURCE_FILES)
+	add_library (libjson STATIC ${LIBJSON_SOURCE_FILES})
 
-# set some properties when CMAKE_BUILD_TYPE is "Debug"
-set_target_properties (libjson PROPERTIES 
-		      COMPILE_DEFINITIONS_DEBUG "JSON_DEBUG;JSON_SAFE;JSON_ISO_STRICT"
-		      DEBUG_POSTFIX "d")
+	# remove "lib" prefix from the name of the libjson archive
+	set_target_properties (libjson PROPERTIES PREFIX "")
 
-list (APPEND LIBS libjson)
+	# set some properties when CMAKE_BUILD_TYPE is "Debug"
+	set_target_properties (libjson PROPERTIES 
+				COMPILE_DEFINITIONS_DEBUG "JSON_DEBUG;JSON_SAFE;JSON_ISO_STRICT"
+				DEBUG_POSTFIX "d")
+
+	list (APPEND LIBS libjson)
+
+endif()
 
 #-------------------------------------------------------------------------------
 # Add the executable 'kph'
 #-------------------------------------------------------------------------------
-add_executable (kph kph.cpp)
-set_target_properties (kph PROPERTIES 
-		      COMPILE_DEFINITIONS_DEBUG "JSON_DEBUG;JSON_SAFE;JSON_ISO_STRICT")
-target_link_libraries (kph ${LIBS})
+if(INCLUDE_KCLIENT_APIS)
+
+	add_executable (kph kph.cpp)
+	set_target_properties (kph PROPERTIES 
+				COMPILE_DEFINITIONS_DEBUG "JSON_DEBUG;JSON_SAFE;JSON_ISO_STRICT")
+	target_link_libraries (kph ${LIBS})
+
+endif()
 
 #-------------------------------------------------------------------------------
 # Add the executable 'krt'
 #-------------------------------------------------------------------------------
-add_executable (krt krt.cpp)
-set_target_properties (krt PROPERTIES 
-		      COMPILE_DEFINITIONS_DEBUG "JSON_DEBUG;JSON_SAFE;JSON_ISO_STRICT")
-target_link_libraries (krt ${LIBS})
+if(INCLUDE_KCLIENT_APIS)
+
+	add_executable (krt krt.cpp)
+	set_target_properties (krt PROPERTIES 
+				COMPILE_DEFINITIONS_DEBUG "JSON_DEBUG;JSON_SAFE;JSON_ISO_STRICT")
+	target_link_libraries (krt ${LIBS})
+
+endif()
 
 #-------------------------------------------------------------------------------
 # Add the executable 'private_method'

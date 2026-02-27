@@ -28,14 +28,14 @@
  *  it simply tells you about them, which is nice for debugging, but not preferable
  *  for release candidates
  */
-//#define JSON_DEBUG
+#define JSON_DEBUG
 
 
 /*
  *  JSON_ISO_STRICT turns off all code that uses non-standard C++.  This removes all
  *  references to long long and long double as well as a few others
  */
-//#define JSON_ISO_STRICT
+#define JSON_ISO_STRICT
 
 
 /*
