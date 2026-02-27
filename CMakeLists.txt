@@ -83,24 +83,6 @@ if(INCLUDE_KCLIENT_APIS)
 
 	list (INSERT LIBS 0 kapi)
 
-#-------------------------------------------------------------------------------
-# Add library libjson
-#-------------------------------------------------------------------------------
-
-	set (LIBJSON_SOURCE_DIR ${CMAKE_HOME_DIRECTORY}/libjson/_internal/Source)
-	aux_source_directory (${LIBJSON_SOURCE_DIR} LIBJSON_SOURCE_FILES)
-	add_library (libjson STATIC ${LIBJSON_SOURCE_FILES})
-
-	# remove "lib" prefix from the name of the libjson archive
-	set_target_properties (libjson PROPERTIES PREFIX "")
-
-	# set some properties when CMAKE_BUILD_TYPE is "Debug"
-	set_target_properties (libjson PROPERTIES 
-				COMPILE_DEFINITIONS_DEBUG "JSON_DEBUG;JSON_SAFE;JSON_ISO_STRICT"
-				DEBUG_POSTFIX "d")
-
-	list (APPEND LIBS libjson)
-
 endif()
 
 #-------------------------------------------------------------------------------
