@@ -25,10 +25,12 @@ static std::vector<unsigned char> sha256(const std::string& data)
 {
    std::vector<unsigned char> digest(SHA256_DIGEST_LENGTH);
 
-   SHA256_CTX ctx;
-   SHA256_Init(&ctx);
-   SHA256_Update(&ctx, data.c_str(), data.length());
-   SHA256_Final(digest.data(), &ctx);
+   auto ctx = std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)>(
+      EVP_MD_CTX_new(), EVP_MD_CTX_free
+   );
+   EVP_DigestInit_ex(ctx.get(), EVP_sha256(), nullptr);
+   EVP_DigestUpdate(ctx.get(), data.c_str(), data.length());
+   EVP_DigestFinal_ex(ctx.get(), digest.data(), nullptr);
 
    return digest;
 }
@@ -81,19 +83,33 @@ static std::vector<unsigned char>
 hmac_sha512(const std::vector<unsigned char>& data, 
 	    const std::vector<unsigned char>& key)
 {   
-   unsigned int len = EVP_MAX_MD_SIZE;
+   size_t len = EVP_MAX_MD_SIZE;
    std::vector<unsigned char> digest(len);
 
-   HMAC_CTX *ctx = HMAC_CTX_new();
-   if (ctx == NULL) {
-       throw std::runtime_error("cannot create HMAC_CTX");
+   auto mac = std::unique_ptr<EVP_MAC, decltype(&EVP_MAC_free)>(
+      EVP_MAC_fetch(nullptr, "HMAC", nullptr), EVP_MAC_free
+   );
+
+   if (!mac) {
+      throw std::runtime_error("cannot fetch HMAC");
    }
 
-   HMAC_Init_ex(ctx, key.data(), key.size(), EVP_sha512(), NULL);
-   HMAC_Update(ctx, data.data(), data.size());
-   HMAC_Final(ctx, digest.data(), &len);
-   
-   HMAC_CTX_free(ctx);
+   auto ctx = std::unique_ptr<EVP_MAC_CTX, decltype(&EVP_MAC_CTX_free)>(
+      EVP_MAC_CTX_new(mac.get()), EVP_MAC_CTX_free
+   );
+
+   if (!ctx) {
+      throw std::runtime_error("cannot create EVP_MAC_CTX");
+   }
+
+   OSSL_PARAM params[] = {
+      OSSL_PARAM_construct_utf8_string("digest", (char*)"SHA512", 0),
+      OSSL_PARAM_construct_end()
+   };
+
+   EVP_MAC_init(ctx.get(), key.data(), key.size(), params);
+   EVP_MAC_update(ctx.get(), data.data(), data.size());
+   EVP_MAC_final(ctx.get(), digest.data(), &len, digest.size());
    
    return digest;
 }
