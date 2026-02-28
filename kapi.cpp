@@ -6,7 +6,7 @@
 #include <ctime>
 #include <cerrno>
 #include <fstream>
-
+#include <memory>
 
 
 #include <openssl/buffer.h>
