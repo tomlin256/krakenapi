@@ -7,37 +7,22 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 #-------------------------------------------------------------------------------
-# Control CMAKE_BUILD_TYPE, default: Debug
+# Library options
 #-------------------------------------------------------------------------------
-if (NOT CMAKE_BUILD_TYPE)
-	set (CMAKE_BUILD_TYPE "Debug" CACHE string "Build type" FORCE)
-endif (NOT CMAKE_BUILD_TYPE)
-message (STATUS "Build type: " ${CMAKE_BUILD_TYPE})
+
+option(KRAKENAPI_BUILD_TESTS "Build tests" ON)
 
 #-------------------------------------------------------------------------------
 # Find OpenSSL
 #-------------------------------------------------------------------------------
-find_package (OpenSSL REQUIRED)
-include_directories (${OPENSSL_INCLUDE_DIR})
-list(APPEND LIBS ${OPENSSL_LIBRARIES}) 
+
+find_package(OpenSSL REQUIRED)
 
 #-------------------------------------------------------------------------------
 # Find CURL
 #-------------------------------------------------------------------------------
-find_package (CURL REQUIRED)
-include_directories (${CURL_INCLUDE_DIR})
-list(APPEND LIBS ${CURL_LIBRARIES})
 
-#-------------------------------------------------------------------------------
-# Find spdlog
-#-------------------------------------------------------------------------------
-
-FetchContent_Declare(
-  spdlog
-  GIT_REPOSITORY https://github.com/gabime/spdlog.git
-  GIT_TAG        v1.13.0
-)
-FetchContent_MakeAvailable(spdlog)
+find_package(CURL REQUIRED)
 
 #-------------------------------------------------------------------------------
 # Add ixwebsocket
@@ -51,8 +36,6 @@ FetchContent_Declare(
 set(USE_TLS ON CACHE BOOL "" FORCE)
 set(USE_OPEN_SSL ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(ixwebsocket)
-include_directories(${ixwebsocket_SOURCE_DIR}/include)
-list(APPEND LIBS ixwebsocket)
 
 #-------------------------------------------------------------------------------
 # A sensible json library
@@ -63,5 +46,9 @@ find_package(nlohmann_json REQUIRED)
 #-------------------------------------------------------------------------------
 # Subdirectories
 #-------------------------------------------------------------------------------
-add_subdirectory (src)
-add_subdirectory (tests)
+
+add_subdirectory(src)
+
+if(KRAKENAPI_BUILD_TESTS)
+  add_subdirectory(tests)
+endif()
