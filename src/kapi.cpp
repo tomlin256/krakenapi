@@ -1,3 +1,10 @@
+#include "kapi.hpp"
+
+#include <openssl/buffer.h>
+#include <openssl/sha.h>
+#include <openssl/hmac.h>
+#include <openssl/bio.h>
+
 #include <iostream>
 #include <iomanip>
 #include <stdexcept>
@@ -7,14 +14,6 @@
 #include <cerrno>
 #include <fstream>
 #include <memory>
-
-
-#include <openssl/buffer.h>
-#include <openssl/sha.h>
-#include <openssl/hmac.h>
-#include <openssl/bio.h>
-
-#include "kapi.hpp"
 
 #define CURL_VERBOSE 0L //1L = enabled, 0L = disabled
 
