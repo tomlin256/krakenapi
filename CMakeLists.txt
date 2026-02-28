@@ -61,20 +61,7 @@ list(APPEND LIBS ixwebsocket)
 find_package(nlohmann_json REQUIRED)
 
 #-------------------------------------------------------------------------------
-# Add the examples using both REST and WebSockets
+# Subdirectories
 #-------------------------------------------------------------------------------
-add_executable (private_method tests/examples/private_method.cpp src/kapi.cpp)
-target_include_directories (private_method PRIVATE include)
-target_link_libraries (private_method ${LIBS})
-
-add_executable (public_method tests/examples/public_method.cpp src/kapi.cpp)
-target_include_directories (public_method PRIVATE include)
-target_link_libraries (public_method ${LIBS})
-
-add_executable (public_ws tests/examples/public_ws.cpp src/kapi.cpp)
-target_include_directories (public_ws PRIVATE include)
-target_link_libraries (public_ws ${LIBS} nlohmann_json::nlohmann_json spdlog::spdlog)
-
-add_executable (private_ws tests/examples/private_ws.cpp src/kapi.cpp)
-target_include_directories (private_ws PRIVATE include)
-target_link_libraries (private_ws ${LIBS} nlohmann_json::nlohmann_json spdlog::spdlog)
+add_subdirectory (src)
+add_subdirectory (tests)
