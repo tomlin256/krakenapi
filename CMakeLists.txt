@@ -1,5 +1,5 @@
-cmake_minimum_required (VERSION 3.15)
-project (KRAKENAPI)
+cmake_minimum_required(VERSION 3.15)
+project(KRAKENAPI)
 
 include(FetchContent)
 
