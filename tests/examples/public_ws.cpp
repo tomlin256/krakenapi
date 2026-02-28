@@ -51,7 +51,7 @@ int main(int argc, char* argv[])
             auto json = nlohmann::json::parse(msg->str);
             if (json.contains("method"))
             {
-               spdlog::info("{}: {}", json["method"], json["success"] ? "success" : "failure");
+               spdlog::info("{}: {}", json["method"], json["success"].get<bool>() ? "success" : "failure");
             }
             else if (json.contains("channel")) 
             {
