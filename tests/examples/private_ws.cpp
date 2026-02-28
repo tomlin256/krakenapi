@@ -1,5 +1,5 @@
 // ws.cpp
-#include "../kapi.hpp"
+#include "kapi.hpp"
 
 #include <ixwebsocket/IXWebSocket.h>
 #include <nlohmann/json.hpp>
