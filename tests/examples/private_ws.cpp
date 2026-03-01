@@ -37,6 +37,7 @@ int main(int argc, char* argv[])
             spdlog::info("ws opened");
 
             kraken::ws::SubscribeRequest req;
+            req.req_id = 10;
             req.channel = kraken::ws::SubscribeChannel::Balances;
             req.token   = token;
             webSocket.send(req.to_json().dump());
@@ -57,7 +58,10 @@ int main(int argc, char* argv[])
                case kraken::ws::MessageKind::SubscribeResponse:
                {
                   auto r = kraken::ws::SubscribeResponse::from_json(j);
-                  spdlog::info("subscribe {}: {}", r.method, r.success ? "success" : "failure");
+                  spdlog::info("subscribe {}({}): {}", 
+                     r.method, 
+                     r.req_id.value_or(-1), 
+                     r.success ? "success" : "failure");
                   break;
                }
                case kraken::ws::MessageKind::Balances:
