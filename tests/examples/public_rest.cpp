@@ -2,31 +2,41 @@
 #include <stdexcept>
 
 #include "kapi.hpp"
+#include "kraken_rest_client.hpp"
 
 using namespace std;
-using namespace Kraken;
+using namespace kraken::rest;
 
-//------------------------------------------------------------------------------
+int main()
+{
+    curl_global_init(CURL_GLOBAL_ALL);
 
-int main() 
-{ 
-   curl_global_init(CURL_GLOBAL_ALL);
+    try {
+        KrakenRestClient client;
 
-   try {
-      KAPI kapi;
-      KAPI::Input in;
+        GetRecentTradesRequest req;
+        req.pair = "XXBTZEUR";
 
-      // get recent trades 
-      in.insert(make_pair("pair", "XXBTZEUR"));
-      cout << kapi.public_method("Trades", in) << endl;
-   }
-   catch(exception& e) {
-      cerr << "Error: " << e.what() << endl;
-   }
-   catch(...) {
-      cerr << "Unknow exception." << endl;
-   }
+        auto resp = client.execute(req);
+        if (resp.ok && resp.result) {
+            cout << "pair: " << resp.result->pair << "\n";
+            cout << "last: " << resp.result->last << "\n";
+            cout << "trades (" << resp.result->trades.size() << "):\n";
+            for (const auto& t : resp.result->trades)
+                cout << "  price=" << t.price << " volume=" << t.volume
+                     << " side=" << (t.side == kraken::Side::Buy ? "buy" : "sell") << "\n";
+        } else {
+            for (const auto& e : resp.errors)
+                cerr << "Error: " << e << "\n";
+        }
+    }
+    catch(exception& e) {
+        cerr << "Error: " << e.what() << endl;
+    }
+    catch(...) {
+        cerr << "Unknown exception." << endl;
+    }
 
-   curl_global_cleanup();
-   return 0;
+    curl_global_cleanup();
+    return 0;
 }

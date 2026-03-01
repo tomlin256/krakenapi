@@ -41,17 +41,15 @@ public:
    std::string private_method(const std::string& method) const;
 
 
+   // create signature for private requests:
+   //   base64( hmac_sha512( path + sha256(nonce + postdata),  b64decode(secret) ) )
+   std::string signature(const std::string& path,
+                         const std::string& nonce,
+                         const std::string& postdata) const;
+
 private:
    // init CURL and other stuffs
    void init();
-
-   // TODO: gather common commands from public_method and 
-   // private_method in a single method: curl_perform
-
-   // create signature for private requests
-   std::string signature(const std::string& path,
-			 const std::string& nonce,
-			 const std::string& postdata) const;
 
    // CURL callback
    static size_t write_cb(char* ptr, size_t size, 

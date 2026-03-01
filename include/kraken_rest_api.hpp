@@ -136,11 +136,15 @@ inline std::string build_form_body(const std::map<std::string, std::string>& par
 // Nonce helper
 // ============================================================
 
-// Returns a monotonically increasing nonce based on the system clock (ms).
+// Returns a monotonically increasing nonce based on the system clock.
+// Uses microseconds to match the KAPI nonce scale (16-digit numbers).
+// Kraken rejects nonces smaller than the last one used for a given API key,
+// so switching to a lower-resolution clock (e.g. ms) causes "invalid nonce"
+// if the key was previously used with KAPI.
 inline uint64_t make_nonce() {
     using namespace std::chrono;
     return static_cast<uint64_t>(
-        duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
+        duration_cast<microseconds>(system_clock::now().time_since_epoch()).count());
 }
 
 // ============================================================
