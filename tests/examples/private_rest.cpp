@@ -1,7 +1,6 @@
 #include <iostream>
 #include <stdexcept>
 
-#include "kapi.hpp"
 #include "kraken_rest_client.hpp"
 
 using namespace std;
@@ -11,11 +10,9 @@ int main(int argc, char* argv[])
 {
     curl_global_init(CURL_GLOBAL_ALL);
 
-    auto keys = Kraken::load_keys("default");
-
     try {
         KrakenRestClient client;
-        Credentials creds{keys.apiKey, keys.privateKey};
+        auto creds = Credentials::from_file("default");
 
         auto resp = client.execute(GetWebSocketsTokenRequest{}, creds);
         if (resp.ok && resp.result) {

@@ -37,6 +37,7 @@
 #include <iomanip>
 #include <chrono>
 #include <stdexcept>
+#include <fstream>
 
 // OpenSSL headers – only needed for sign().
 // If you bring your own signing, remove these and the sign() body.
@@ -154,6 +155,29 @@ inline uint64_t make_nonce() {
 struct Credentials {
     std::string api_key;     // public key  → API-Key header
     std::string api_secret;  // base64-encoded private key → used for signing
+
+    static Credentials from_file(const std::string& name, const std::string& location="") {
+        std::string dir = location.empty()
+            ? std::string(getenv("HOME")) + "/.kraken"
+            : location;
+
+        std::string filepath = dir + "/" + name;
+
+        std::ifstream file(filepath);
+        if (!file.is_open()) {
+            throw std::runtime_error("Failed to open key file: " + filepath);
+        }
+
+        Credentials cred;
+        if (!std::getline(file, cred.api_key) || cred.api_key.empty()) {
+            throw std::runtime_error("Missing or empty API key in: " + filepath);
+        }
+        if (!std::getline(file, cred.api_secret) || cred.api_secret.empty()) {
+            throw std::runtime_error("Missing or empty private key in: " + filepath);
+        }
+
+        return cred;
+    }
 
     // Compute the API-Sign header value.
     //   uri_path : e.g. "/0/private/AddOrder"
