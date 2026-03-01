@@ -26,3 +26,12 @@ target_link_libraries(public_ws krakenapi ixwebsocket spdlog::spdlog)
 
 add_executable (private_ws examples/private_ws.cpp)
 target_link_libraries(private_ws krakenapi ixwebsocket spdlog::spdlog)
+
+add_executable (kraken_example examples/kraken_example.cpp)
+target_link_libraries(kraken_example krakenapi ixwebsocket spdlog::spdlog)
+
+#-------------------------------------------------------------------------------
+# Unit tests
+#-------------------------------------------------------------------------------
+
+add_subdirectory(unit)

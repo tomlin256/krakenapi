@@ -6,6 +6,8 @@ include(FetchContent)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
 #-------------------------------------------------------------------------------
 # Library options
 #-------------------------------------------------------------------------------
@@ -55,5 +57,17 @@ FetchContent_MakeAvailable(nlohmann_json)
 add_subdirectory(src)
 
 if(KRAKENAPI_BUILD_TESTS)
+  #-----------------------------------------------------------------------------
+  # Google Test
+  #-----------------------------------------------------------------------------
+  FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG        v1.16.0
+  )
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(googletest)
+
+  enable_testing()
   add_subdirectory(tests)
 endif()

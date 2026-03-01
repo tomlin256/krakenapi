@@ -1,0 +1,139 @@
+#include "kraken_rest_client.hpp"
+
+#include <gtest/gtest.h>
+#include <string>
+
+using namespace kraken::rest;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+static Credentials dummy_creds() {
+    return Credentials{"test-api-key", "dGVzdA=="};
+}
+
+// ---------------------------------------------------------------------------
+// Public endpoint execute()
+// ---------------------------------------------------------------------------
+
+TEST(KrakenRestClient, PublicExecute_CallsBuildAndParsesResult) {
+    auto client = make_test_client([](const HttpRequest& http) {
+        EXPECT_EQ(http.path, "/0/public/Time");
+        EXPECT_EQ(http.method, HttpRequest::Method::GET);
+        return R"({"error":[],"result":{"unixtime":1700000000,"rfc1123":"Mon, 14 Nov 2023 00:00:00 +0000"}})";
+    });
+
+    auto resp = client.execute(GetServerTimeRequest{});
+    ASSERT_TRUE(resp.ok);
+    EXPECT_TRUE(resp.errors.empty());
+    ASSERT_TRUE(resp.result.has_value());
+    EXPECT_EQ(resp.result->unixtime, 1700000000);
+    EXPECT_EQ(resp.result->rfc1123, "Mon, 14 Nov 2023 00:00:00 +0000");
+}
+
+TEST(KrakenRestClient, PublicExecute_PropagatesErrors) {
+    auto client = make_test_client([](const HttpRequest&) {
+        return R"({"error":["EGeneral:Invalid arguments"]})";
+    });
+
+    auto resp = client.execute(GetServerTimeRequest{});
+    EXPECT_FALSE(resp.ok);
+    ASSERT_EQ(resp.errors.size(), 1u);
+    EXPECT_EQ(resp.errors[0], "EGeneral:Invalid arguments");
+    EXPECT_FALSE(resp.result.has_value());
+}
+
+TEST(KrakenRestClient, PublicExecute_Ticker) {
+    auto client = make_test_client([](const HttpRequest& http) {
+        EXPECT_EQ(http.path, "/0/public/Ticker");
+        EXPECT_EQ(http.method, HttpRequest::Method::GET);
+        EXPECT_NE(http.query.find("pair=XBTUSD"), std::string::npos);
+        return R"({
+            "error":[],
+            "result":{
+                "XBTUSD":{
+                    "a":["30000.00","1","1.000"],
+                    "b":["29999.00","1","1.000"],
+                    "c":["30000.50","0.001"],
+                    "v":["100.0","200.0"],
+                    "p":["30001.0","30002.0"],
+                    "t":[500,1000],
+                    "l":["29500.0","29000.0"],
+                    "h":["30500.0","31000.0"],
+                    "o":"29800.0"
+                }
+            }
+        })";
+    });
+
+    GetTickerRequest req;
+    req.pairs = {"XBTUSD"};
+    auto resp = client.execute(req);
+    ASSERT_TRUE(resp.ok);
+    ASSERT_TRUE(resp.result.has_value());
+    ASSERT_EQ(resp.result->tickers.count("XBTUSD"), 1u);
+    EXPECT_DOUBLE_EQ(resp.result->tickers.at("XBTUSD").last, 30000.50);
+}
+
+// ---------------------------------------------------------------------------
+// Private endpoint execute()
+// ---------------------------------------------------------------------------
+
+TEST(KrakenRestClient, PrivateExecute_SendsPostWithAuthHeaders) {
+    auto client = make_test_client([](const HttpRequest& http) {
+        EXPECT_EQ(http.path, "/0/private/Balance");
+        EXPECT_EQ(http.method, HttpRequest::Method::POST);
+        EXPECT_EQ(http.headers.count("API-Key"), 1u);
+        EXPECT_EQ(http.headers.at("API-Key"), "test-api-key");
+        EXPECT_EQ(http.headers.count("API-Sign"), 1u);
+        EXPECT_NE(http.body.find("nonce="), std::string::npos);
+        return R"({"error":[],"result":{"XXBT":"1.5","ZUSD":"10000.00"}})";
+    });
+
+    auto resp = client.execute(GetAccountBalanceRequest{}, dummy_creds());
+    ASSERT_TRUE(resp.ok);
+    ASSERT_TRUE(resp.result.has_value());
+    EXPECT_DOUBLE_EQ(resp.result->balances.at("XXBT"), 1.5);
+    EXPECT_DOUBLE_EQ(resp.result->balances.at("ZUSD"), 10000.0);
+}
+
+TEST(KrakenRestClient, PrivateExecute_AddOrder) {
+    auto client = make_test_client([](const HttpRequest& http) {
+        EXPECT_EQ(http.path, "/0/private/AddOrder");
+        EXPECT_EQ(http.method, HttpRequest::Method::POST);
+        EXPECT_NE(http.body.find("pair=XBTUSD"), std::string::npos);
+        return R"({
+            "error":[],
+            "result":{
+                "descr":{"order":"buy 0.001 XBTUSD @ limit 30000"},
+                "txid":["OABC12-DEFG34-HIJKL5"]
+            }
+        })";
+    });
+
+    AddOrderRequest req;
+    req.params.order_type  = kraken::OrderType::Limit;
+    req.params.side        = kraken::Side::Buy;
+    req.params.symbol      = "XBTUSD";
+    req.params.order_qty   = 0.001;
+    req.params.limit_price = 30000.0;
+
+    auto resp = client.execute(req, dummy_creds());
+    ASSERT_TRUE(resp.ok);
+    ASSERT_TRUE(resp.result.has_value());
+    EXPECT_EQ(resp.result->descr_order, "buy 0.001 XBTUSD @ limit 30000");
+    ASSERT_EQ(resp.result->txids.size(), 1u);
+    EXPECT_EQ(resp.result->txids[0], "OABC12-DEFG34-HIJKL5");
+}
+
+TEST(KrakenRestClient, PrivateExecute_PropagatesErrors) {
+    auto client = make_test_client([](const HttpRequest&) {
+        return R"({"error":["EOrder:Insufficient funds"]})";
+    });
+
+    auto resp = client.execute(AddOrderRequest{}, dummy_creds());
+    EXPECT_FALSE(resp.ok);
+    ASSERT_EQ(resp.errors.size(), 1u);
+    EXPECT_EQ(resp.errors[0], "EOrder:Insufficient funds");
+}

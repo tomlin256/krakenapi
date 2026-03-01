@@ -1,4 +1,4 @@
-add_library(krakenapi STATIC kapi.cpp)
+add_library(krakenapi STATIC kapi.cpp kraken_rest_client.cpp)
 add_library(krakenapi::krakenapi ALIAS krakenapi)
 target_include_directories(krakenapi PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
