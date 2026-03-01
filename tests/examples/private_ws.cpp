@@ -1,9 +1,8 @@
 // ws.cpp
 #include "kraken_rest_client.hpp"
+#include "kraken_ws_api.hpp"
 
 #include <ixwebsocket/IXWebSocket.h>
-#include <nlohmann/json.hpp>
-
 #include <spdlog/spdlog.h>
 
 #include <stdexcept>
@@ -27,7 +26,6 @@ int main(int argc, char* argv[])
    std::string token = resp.result->token;
    spdlog::info("Token: {}", token);
 
-   // using v2 api,
    ix::WebSocket webSocket;
    webSocket.setUrl("wss://ws-auth.kraken.com/v2");
 
@@ -38,14 +36,10 @@ int main(int argc, char* argv[])
          {
             spdlog::info("ws opened");
 
-            nlohmann::json sub = {
-               {"method", "subscribe"},
-               {"params", {
-                  {"channel", "balances"},
-                  {"token", token}
-               }}
-            };
-            webSocket.send(sub.dump());
+            kraken::ws::SubscribeRequest req;
+            req.channel = kraken::ws::SubscribeChannel::Balances;
+            req.token   = token;
+            webSocket.send(req.to_json().dump());
          }
          else if (msg->type == ix::WebSocketMessageType::Close)
          {
@@ -57,7 +51,26 @@ int main(int argc, char* argv[])
          }
          else if (msg->type == ix::WebSocketMessageType::Message)
          {
-            spdlog::info("ws message: {}", msg->str);
+            auto j = nlohmann::json::parse(msg->str);
+            switch (kraken::ws::identify_message(j))
+            {
+               case kraken::ws::MessageKind::SubscribeResponse:
+               {
+                  auto r = kraken::ws::SubscribeResponse::from_json(j);
+                  spdlog::info("subscribe {}: {}", r.method, r.success ? "success" : "failure");
+                  break;
+               }
+               case kraken::ws::MessageKind::Balances:
+               {
+                  auto bals = kraken::ws::BalancesMessage::from_json(j);
+                  for (const auto& b : bals.data)
+                     spdlog::info("Balance {}: {:.8f} (hold: {:.8f})", b.asset, b.balance, b.hold_trade);
+                  break;
+               }
+               default:
+                  spdlog::debug("ws message: {}", msg->str);
+                  break;
+            }
          }
       }
    );

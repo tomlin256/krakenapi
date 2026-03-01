@@ -4,6 +4,8 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
+#include "kraken_ws_api.hpp"
+
 #include <iostream>
 
 int main(int argc, char* argv[])
@@ -29,14 +31,10 @@ int main(int argc, char* argv[])
          {
             spdlog::info("ws opened");
 
-            nlohmann::json sub = {
-               {"method", "subscribe"},
-               {"params", {
-                  {"channel", "ticker"},
-                  {"symbol", nlohmann::json::array({symbol})}
-               }}
-            };
-            webSocket.send(sub.dump());
+            kraken::ws::SubscribeRequest req;
+            req.channel = kraken::ws::SubscribeChannel::Ticker;
+            req.symbols = std::vector<std::string>{symbol};
+            webSocket.send(req.to_json().dump());
          }
          else if (msg->type == ix::WebSocketMessageType::Close)
          {
@@ -48,30 +46,24 @@ int main(int argc, char* argv[])
          }
          else if (msg->type == ix::WebSocketMessageType::Message)
          {
-            auto json = nlohmann::json::parse(msg->str);
-            if (json.contains("method"))
+            auto j = nlohmann::json::parse(msg->str);
+            switch (kraken::ws::identify_message(j))
             {
-               spdlog::info("{}: {}", 
-                  json["method"].get<std::string>(), 
-                  json["success"].get<bool>() ? "success" : "failure");
-            }
-            else if (json.contains("channel")) 
-            {
-               std::string channel = json["channel"];
-               if (channel == "ticker")
+               case kraken::ws::MessageKind::SubscribeResponse:
                {
-                  auto data = json["data"].get<std::vector<nlohmann::json>>();
-                  for (auto datum : data) {
-                     std::string symbol = datum["symbol"];
-                     float bid = datum["bid"];
-                     float ask = datum["ask"];
-                     spdlog::info("Ticker update for {}: bid={}, ask={}", symbol, bid, ask);
-                  }
+                  auto resp = kraken::ws::SubscribeResponse::from_json(j);
+                  spdlog::info("subscribe {}: {}", resp.method, resp.success ? "success" : "failure");
+                  break;
                }
-               else
+               case kraken::ws::MessageKind::Ticker:
                {
-                  spdlog::info("channel {}", channel);
+                  auto ticker = kraken::ws::TickerMessage::from_json(j);
+                  for (const auto& t : ticker.data)
+                     spdlog::info("Ticker update for {}: bid={}, ask={}", t.symbol, t.bid, t.ask);
+                  break;
                }
+               default:
+                  break;
             }
          }
       }
