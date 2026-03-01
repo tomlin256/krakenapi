@@ -13,24 +13,24 @@ namespace Kraken {
 //------------------------------------------------------------------------------
 
 class KAPI {
-public:  
+public:
    // helper type to make requests
    typedef std::map<std::string,std::string> Input;
 
    // constructor with all explicit parameters
-   KAPI(const std::string& key, const std::string& secret, 
+   KAPI(const std::string& key, const std::string& secret,
         const std::string& url, const std::string& version);
 
    // default API base URL and API version
    KAPI(const std::string& key, const std::string& secret);
-   
+
    // constructor with empty API key and API secret
    KAPI();
 
    // destructor
    ~KAPI();
 
-   // makes public method to kraken.com 
+   // makes public method to kraken.com
    std::string public_method(const std::string& method,
 			     const KAPI::Input& input) const;
    std::string public_method(const std::string& method) const;
@@ -52,7 +52,7 @@ private:
    void init();
 
    // CURL callback
-   static size_t write_cb(char* ptr, size_t size, 
+   static size_t write_cb(char* ptr, size_t size,
 			  size_t nmemb, void* userdata);
 
    std::string key_;     // API key
@@ -68,8 +68,8 @@ private:
 
 //------------------------------------------------------------------------------
 // helper functions to initialize and terminate Kraken API library.
-// KAPI uses CURL, the latter has a no thread-safe function called 
-// curl_global_init(). 
+// KAPI uses CURL, the latter has a no thread-safe function called
+// curl_global_init().
 
 void initialize();
 void terminate();
@@ -92,6 +92,6 @@ Keys load_keys(const std::string& name, const std::string& location = "");
 
 //------------------------------------------------------------------------------
 
-#endif 
+#endif
 
 

@@ -2,7 +2,6 @@
 
 #include <spdlog/spdlog.h>
 
-#include "kapi.hpp"
 #include "kraken_rest_client.hpp"
 
 using namespace kraken::rest;

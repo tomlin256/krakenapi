@@ -6,6 +6,7 @@ add_executable(kraken_unit_tests
 )
 
 target_link_libraries(kraken_unit_tests
+    kapi
     krakenapi
     GTest::gtest_main
 )

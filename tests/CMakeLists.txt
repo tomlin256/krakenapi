@@ -12,6 +12,14 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(spdlog)
 
 #-------------------------------------------------------------------------------
+# Legacy KAPI library (lives in examples/, not installed/exported)
+#-------------------------------------------------------------------------------
+
+add_library(kapi STATIC examples/kapi.cpp)
+target_include_directories(kapi PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/examples)
+target_link_libraries(kapi CURL::libcurl OpenSSL::SSL)
+
+#-------------------------------------------------------------------------------
 # Example apps
 #-------------------------------------------------------------------------------
 
