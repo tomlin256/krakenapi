@@ -1,9 +1,9 @@
-#include <iostream>
 #include <stdexcept>
+
+#include <spdlog/spdlog.h>
 
 #include "kraken_rest_client.hpp"
 
-using namespace std;
 using namespace kraken::rest;
 
 int main(int argc, char* argv[])
@@ -16,18 +16,18 @@ int main(int argc, char* argv[])
 
         auto resp = client.execute(GetWebSocketsTokenRequest{}, creds);
         if (resp.ok && resp.result) {
-            cout << "token:   " << resp.result->token   << "\n";
-            cout << "expires: " << resp.result->expires << "\n";
+            spdlog::info("token:   {}", resp.result->token);
+            spdlog::info("expires: {}", resp.result->expires);
         } else {
             for (const auto& e : resp.errors)
-                cerr << "Error: " << e << "\n";
+                spdlog::error("Error: {}", e);
         }
     }
-    catch(exception& e) {
-        cerr << "Error: " << e.what() << endl;
+    catch (std::exception& e) {
+        spdlog::error("Error: {}", e.what());
     }
-    catch(...) {
-        cerr << "Unknown exception." << endl;
+    catch (...) {
+        spdlog::error("Unknown exception.");
     }
 
     curl_global_cleanup();

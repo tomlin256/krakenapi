@@ -1,24 +1,30 @@
 // ws.cpp
-#include "kapi.hpp"
+#include "kraken_rest_client.hpp"
 
 #include <ixwebsocket/IXWebSocket.h>
 #include <nlohmann/json.hpp>
 
 #include <spdlog/spdlog.h>
 
-#include <iostream>
+#include <stdexcept>
 
-using namespace Kraken;
+using namespace kraken::rest;
 
 int main(int argc, char* argv[])
 {
+   curl_global_init(CURL_GLOBAL_ALL);
 
    // we need a token to subscribe to private channels, so we need to call a private method first
-   auto keys = load_keys("default");
-   KAPI kapi(keys.apiKey, keys.privateKey);
-   auto tokenResponse = kapi.private_method("GetWebSocketsToken");
-   auto json = nlohmann::json::parse(tokenResponse);
-   std::string token = json["result"]["token"];
+   KrakenRestClient client;
+   auto creds = Credentials::from_file("default");
+   auto resp = client.execute(GetWebSocketsTokenRequest{}, creds);
+   if (!resp.ok || !resp.result) {
+      for (const auto& e : resp.errors)
+         spdlog::error("Error: {}", e);
+      curl_global_cleanup();
+      return 1;
+   }
+   std::string token = resp.result->token;
    spdlog::info("Token: {}", token);
 
    // using v2 api,
@@ -60,5 +66,6 @@ int main(int argc, char* argv[])
    std::this_thread::sleep_for(std::chrono::seconds(10));
    webSocket.stop();
 
+   curl_global_cleanup();
    return 0;
 }

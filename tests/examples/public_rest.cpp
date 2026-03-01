@@ -1,10 +1,10 @@
-#include <iostream>
 #include <stdexcept>
+
+#include <spdlog/spdlog.h>
 
 #include "kapi.hpp"
 #include "kraken_rest_client.hpp"
 
-using namespace std;
 using namespace kraken::rest;
 
 int main()
@@ -19,22 +19,22 @@ int main()
 
         auto resp = client.execute(req);
         if (resp.ok && resp.result) {
-            cout << "pair: " << resp.result->pair << "\n";
-            cout << "last: " << resp.result->last << "\n";
-            cout << "trades (" << resp.result->trades.size() << "):\n";
+            spdlog::info("pair: {}", resp.result->pair);
+            spdlog::info("last: {}", resp.result->last);
+            spdlog::info("trades ({}):", resp.result->trades.size());
             for (const auto& t : resp.result->trades)
-                cout << "  price=" << t.price << " volume=" << t.volume
-                     << " side=" << (t.side == kraken::Side::Buy ? "buy" : "sell") << "\n";
+                spdlog::info("  price={} volume={} side={}", t.price, t.volume,
+                             t.side == kraken::Side::Buy ? "buy" : "sell");
         } else {
             for (const auto& e : resp.errors)
-                cerr << "Error: " << e << "\n";
+                spdlog::error("Error: {}", e);
         }
     }
-    catch(exception& e) {
-        cerr << "Error: " << e.what() << endl;
+    catch (std::exception& e) {
+        spdlog::error("Error: {}", e.what());
     }
-    catch(...) {
-        cerr << "Unknown exception." << endl;
+    catch (...) {
+        spdlog::error("Unknown exception.");
     }
 
     curl_global_cleanup();
