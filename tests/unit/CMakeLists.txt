@@ -13,3 +13,11 @@ target_link_libraries(kraken_unit_tests
 
 include(GoogleTest)
 gtest_discover_tests(kraken_unit_tests)
+
+#-------------------------------------------------------------------------------
+# WebSocket client unit tests (no network I/O – mock connection only)
+#-------------------------------------------------------------------------------
+
+add_executable(test_ws_client test_ws_client.cpp)
+target_link_libraries(test_ws_client krakenapi GTest::gtest_main)
+gtest_discover_tests(test_ws_client)
