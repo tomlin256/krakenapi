@@ -82,6 +82,30 @@ struct Conditional {
 };
 
 // ============================================================
+// Typed request bases  (mirror TypedPublicRequest/TypedPrivateRequest from REST)
+// ============================================================
+
+// Method-call requests: declares the expected single response type.
+template<typename R>
+struct TypedWsRequest {
+    using response_type = R;
+};
+
+// Forward declarations of all response types so that TypedWsRequest<Resp>
+// can be used as a base class before the response struct is fully defined.
+// (TypedWsRequest<R> only stores 'using response_type = R', so R need not
+// be complete – but the name must be visible in scope.)
+struct AddOrderResponse;
+struct AmendOrderResponse;
+struct CancelOrderResponse;
+struct CancelAllResponse;
+struct CancelOnDisconnectResponse;
+struct BatchAddResponse;
+struct BatchCancelResponse;
+struct EditOrderResponse;
+struct PongMessage;
+
+// ============================================================
 // Response base
 // ============================================================
 
@@ -107,7 +131,7 @@ struct BaseResponse {
 //  1. ADD ORDER
 // ============================================================
 
-struct AddOrderRequest {
+struct AddOrderRequest : TypedWsRequest<AddOrderResponse> {
     // Required
     OrderType   order_type;
     Side        side;
@@ -203,7 +227,7 @@ struct AddOrderResponse : BaseResponse {
 //  2. AMEND ORDER
 // ============================================================
 
-struct AmendOrderRequest {
+struct AmendOrderRequest : TypedWsRequest<AmendOrderResponse> {
     std::string token;
     // Must provide one of:
     std::optional<std::string> order_id;
@@ -261,7 +285,7 @@ struct AmendOrderResponse : BaseResponse {
 //  3. CANCEL ORDER
 // ============================================================
 
-struct CancelOrderRequest {
+struct CancelOrderRequest : TypedWsRequest<CancelOrderResponse> {
     std::string token;
     // Provide one or more order ids OR cl_ord_ids
     std::optional<std::vector<std::string>> order_ids;
@@ -316,7 +340,7 @@ struct CancelOrderResponse : BaseResponse {
 //  4. CANCEL ALL
 // ============================================================
 
-struct CancelAllRequest {
+struct CancelAllRequest : TypedWsRequest<CancelAllResponse> {
     std::string token;
     std::optional<int64_t> req_id;
 
@@ -347,7 +371,7 @@ struct CancelAllResponse : BaseResponse {
 //  5. CANCEL ON DISCONNECT (cancel_after)
 // ============================================================
 
-struct CancelOnDisconnectRequest {
+struct CancelOnDisconnectRequest : TypedWsRequest<CancelOnDisconnectResponse> {
     std::string token;
     int32_t     timeout{60};  // seconds; 0 = disable
     std::optional<int64_t> req_id;
@@ -382,7 +406,7 @@ struct CancelOnDisconnectResponse : BaseResponse {
 //  6. BATCH ADD
 // ============================================================
 
-struct BatchAddRequest {
+struct BatchAddRequest : TypedWsRequest<BatchAddResponse> {
     std::string token;
     std::string symbol;
     std::optional<std::string> deadline;
@@ -450,7 +474,7 @@ struct BatchAddResponse : BaseResponse {
 //  7. BATCH CANCEL
 // ============================================================
 
-struct BatchCancelRequest {
+struct BatchCancelRequest : TypedWsRequest<BatchCancelResponse> {
     std::string token;
     std::optional<std::vector<std::string>> order_ids;
     std::optional<std::vector<std::string>> cl_ord_ids;
@@ -488,7 +512,7 @@ struct BatchCancelResponse : BaseResponse {
 //  8. EDIT ORDER
 // ============================================================
 
-struct EditOrderRequest {
+struct EditOrderRequest : TypedWsRequest<EditOrderResponse> {
     std::string token;
     // Must provide one of:
     std::optional<std::string> order_id;
@@ -635,6 +659,23 @@ struct SubscribeResponse : BaseResponse {
         }
         return r;
     }
+};
+
+// ============================================================
+// Typed subscription request base
+//
+// Inherits all SubscribeRequest fields (channel, symbols, token, depth, …)
+// and adds compile-time type information:
+//   push_type     — the push-data message type streamed after a successful ack
+//   response_type — SubscribeResponse (the Phase 3 acknowledgement)
+//
+// Per-channel convenience aliases are provided at the bottom of this file.
+// ============================================================
+
+template<typename PushMsg>
+struct TypedSubscribeRequest : SubscribeRequest {
+    using push_type     = PushMsg;
+    using response_type = SubscribeResponse;
 };
 
 // ============================================================
@@ -1016,7 +1057,7 @@ struct StatusMessage {
     }
 };
 
-struct PingRequest {
+struct PingRequest : TypedWsRequest<PongMessage> {
     std::optional<int64_t> req_id;
 
     json to_json() const {
@@ -1103,5 +1144,22 @@ inline MessageKind identify_message(const json& j) {
     }
     return MessageKind::Unknown;
 }
+
+// ============================================================
+// Per-channel typed subscribe request aliases
+//
+// Usage:
+//   kraken::ws::TickerSubscribeRequest req;
+//   req.symbols = {"BTC/USD"};
+//   auto [ack, handle] = client->subscribe(req, [](TickerMessage msg) { ... });
+// ============================================================
+
+using TickerSubscribeRequest     = TypedSubscribeRequest<TickerMessage>;
+using BookSubscribeRequest       = TypedSubscribeRequest<BookMessage>;
+using TradeSubscribeRequest      = TypedSubscribeRequest<TradeMessage>;
+using OHLCSubscribeRequest       = TypedSubscribeRequest<OHLCMessage>;
+using InstrumentSubscribeRequest = TypedSubscribeRequest<InstrumentMessage>;
+using ExecutionsSubscribeRequest = TypedSubscribeRequest<ExecutionsMessage>;
+using BalancesSubscribeRequest   = TypedSubscribeRequest<BalancesMessage>;
 
 } // namespace kraken::ws

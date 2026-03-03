@@ -38,6 +38,9 @@ target_link_libraries(private_ws krakenapi ixwebsocket spdlog::spdlog)
 add_executable (kraken_example examples/kraken_example.cpp)
 target_link_libraries(kraken_example krakenapi ixwebsocket spdlog::spdlog)
 
+add_executable (ws_client_example examples/ws_client_example.cpp)
+target_link_libraries(ws_client_example krakenapi ixwebsocket spdlog::spdlog)
+
 #-------------------------------------------------------------------------------
 # Unit tests
 #-------------------------------------------------------------------------------
