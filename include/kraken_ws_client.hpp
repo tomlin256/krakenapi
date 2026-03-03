@@ -168,22 +168,7 @@ public:
 
     // Must be called once after the shared_ptr<KrakenWsClient> is created
     // (i.e. after std::make_shared). The factory functions handle this.
-    void init() {
-        if (conn_->is_connected())
-            connected_.store(true);
-
-        auto weak_self = std::weak_ptr<KrakenWsClient>(shared_from_this());
-
-        conn_->on_message([weak_self](const std::string& raw) {
-            if (auto self = weak_self.lock()) self->on_raw_message(raw);
-        });
-        conn_->on_open([weak_self]() {
-            if (auto self = weak_self.lock()) self->on_open_handler();
-        });
-        conn_->on_close([weak_self]() {
-            if (auto self = weak_self.lock()) self->connected_.store(false);
-        });
-    }
+    void init();
 
     // ── Method calls (request → single typed response) ────────────────────
 
@@ -316,13 +301,7 @@ public:
 
     // Called by SubscriptionHandle::cancel() to remove the push callback
     // and transmit an UnsubscribeRequest.
-    void cancel_subscription(const std::string& channel, const std::string& unsub_json) {
-        {
-            std::lock_guard<std::mutex> lk(subs_mu_);
-            subscriptions_.erase(channel);
-        }
-        enqueue_or_send(unsub_json);
-    }
+    void cancel_subscription(const std::string& channel, const std::string& unsub_json);
 
 private:
     std::shared_ptr<IWsConnection> conn_;
@@ -348,74 +327,17 @@ private:
     // Send immediately if connected; otherwise queue for flush on on_open.
     // queue_mu_ serialises the connected_ check and the queue push to avoid
     // a race with on_open_handler().
-    void enqueue_or_send(const std::string& msg) {
-        std::lock_guard<std::mutex> lk(queue_mu_);
-        if (connected_.load()) {
-            conn_->send(msg);
-        } else {
-            send_queue_.push_back(msg);
-        }
-    }
+    void enqueue_or_send(const std::string& msg);
 
     // Called by the registered on_open callback.
     // Atomically marks connected and drains the outbound queue.
-    void on_open_handler() {
-        std::vector<std::string> queued;
-        {
-            std::lock_guard<std::mutex> lk(queue_mu_);
-            connected_.store(true);
-            queued = std::move(send_queue_);
-        }
-        for (const auto& msg : queued)
-            conn_->send(msg);
-    }
+    void on_open_handler();
 
     // Dispatch an incoming raw JSON frame to either:
     //   – a pending method-call / subscribe-ack handler (matched by req_id), or
     //   – an active push subscription callback (matched by channel name).
-    void on_raw_message(const std::string& raw) {
-        json j;
-        try { j = json::parse(raw); } catch (...) { return; }
-
-        // Method responses and subscribe/unsubscribe acks carry req_id.
-        if (j.contains("req_id") && j["req_id"].is_number_integer()) {
-            const auto id = j["req_id"].get<int64_t>();
-            std::function<void(const json&)> handler;
-            {
-                std::lock_guard<std::mutex> lk(pending_mu_);
-                auto it = pending_.find(id);
-                if (it != pending_.end()) {
-                    handler = std::move(it->second);
-                    pending_.erase(it);
-                }
-            }
-            if (handler) { handler(j); return; }
-        }
-
-        // Push channel frames (no req_id; identified by "channel" field).
-        if (j.contains("channel") && j["channel"].is_string()) {
-            const auto ch = j["channel"].get<std::string>();
-            std::function<void(const json&)> cb;
-            {
-                std::lock_guard<std::mutex> lk(subs_mu_);
-                auto it = subscriptions_.find(ch);
-                if (it != subscriptions_.end()) cb = it->second;
-            }
-            if (cb) cb(j);
-        }
-    }
+    void on_raw_message(const std::string& raw);
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SubscriptionHandle::cancel() – defined here after KrakenWsClient is complete
-// ─────────────────────────────────────────────────────────────────────────────
-
-inline void SubscriptionHandle::cancel() {
-    if (!active_ || !active_->exchange(false))
-        return;  // already cancelled or default-constructed (inactive)
-    if (auto c = client_.lock())
-        c->cancel_subscription(channel_, unsub_json_);
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Factory functions
