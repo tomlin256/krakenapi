@@ -244,12 +244,8 @@ inline constexpr std::string_view PRIVATE_WS_URL = "wss://ws-auth.kraken.com/v2"
 // send immediately rather than queuing.
 // See kraken_ix_ws_connection.hpp for the overload that creates a fresh
 // IxWsConnection from a URL string.
-inline std::shared_ptr<KrakenWsClient>
-make_ws_client(std::shared_ptr<IWsConnection> conn) {
-    auto client = std::make_shared<KrakenWsClient>(conn);
-    client->init();
-    return client;
-}
+std::shared_ptr<KrakenWsClient>
+make_ws_client(std::shared_ptr<IWsConnection> conn);
 
 } // namespace kraken::ws
 

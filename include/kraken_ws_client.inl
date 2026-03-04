@@ -147,4 +147,15 @@ KrakenWsClient::subscribe(Req req,
     return fut.get();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Factory functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+inline std::shared_ptr<KrakenWsClient>
+make_ws_client(std::shared_ptr<IWsConnection> conn) {
+    auto client = std::make_shared<KrakenWsClient>(conn);
+    client->init();
+    return client;
+}
+
 } // namespace kraken::ws
