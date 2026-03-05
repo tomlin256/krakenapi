@@ -126,6 +126,264 @@ Tests do **not** require network access or credentials — all I/O is mocked.
 
 ---
 
+## Shared types reference (`kraken_types.hpp`)
+
+### Enumerations
+
+All enums have free-function converters: `to_string(Enum)` and `foo_from_string(const std::string&)`. The `*_from_string` functions throw `std::invalid_argument` on unknown input.
+
+| Enum | Values |
+|---|---|
+| `OrderType` | `Limit`, `Market`, `Iceberg`, `StopLoss`, `StopLossLimit`, `TakeProfit`, `TakeProfitLimit`, `TrailingStop`, `TrailingStopLimit`, `SettlePosition` |
+| `Side` | `Buy`, `Sell` |
+| `TimeInForce` | `GTC`, `GTD`, `IOC` |
+| `PriceType` | `Static`, `Pct`, `Quote` |
+| `TriggerReference` | `Index`, `Last` |
+| `StpType` | `CancelNewest`, `CancelOldest`, `CancelBoth` |
+| `FeePreference` | `Base`, `Quote` |
+| `OrderStatus` | `PendingNew`, `New`, `PartiallyFilled`, `Filled`, `Canceled`, `Expired`, `Unknown` |
+
+### Core structs
+
+| Struct | Key fields | Used for |
+|---|---|---|
+| `Triggers` | `price`, `reference` (`TriggerReference`), `price_type` (`PriceType`) | Stop/trailing order trigger configuration |
+| `Conditional` | `order_type` (`OrderType`), `limit_price`, `limit_price_type`, `trigger_price`, `trigger_price_type` | OTO (One Triggers Other) close orders |
+| `OrderParams` | `order_type`, `side`, `symbol`, `limit_price`, `qty`, `display_qty`, `time_in_force`, `triggers`, `conditional`, `stp_type`, `fee_preference`, `reduce_only`, `sender_sub_id`, `client_order_id`, `order_userref`, `validate`, `token` | Universal order parameter block (26+ fields) |
+| `OrderDescription` | `pair`, `type` (`Side`), `order_type` (`OrderType`), `price`, `price2`, `leverage`, `order`, `close` | Order metadata returned by REST API |
+| `OrderInfo` | `status` (`OrderStatus`), `descr` (`OrderDescription`), `open_tm`, `close_tm`, `vol`, `vol_exec`, `cost`, `fee`, `avg_price`, `stop_price`, `limit_price`, `misc`, `oflags`, `trades` | Full order record |
+| `TradeInfo` | `pair`, `price`, `vol`, `cost`, `fee`, `margin`, `time`, `type` (`Side`), `order_type` (`OrderType`), `pos_status`, `closing` | Trade execution record |
+| `LedgerEntry` | `refid`, `time`, `type`, `subtype`, `aclass`, `asset`, `amount`, `fee`, `balance` | Ledger transaction record |
+
+### Generic REST response envelope
+
+```cpp
+template<typename T>
+struct RestResponse {
+    bool ok;                         // true when error array is empty
+    std::optional<T> result;         // populated on success
+    std::vector<std::string> errors; // populated on failure
+};
+
+template<typename T>
+RestResponse<T> parse_rest_response(const json& j);
+```
+
+Always check `resp.ok` before accessing `resp.result`.
+
+---
+
+## REST API reference (`kraken_rest_api.hpp`)
+
+### Crypto utilities (header-only)
+
+| Function | Signature | Purpose |
+|---|---|---|
+| `base64_decode` | `(std::string_view) → std::vector<uint8_t>` | Decode base64 (handles unpadded input) |
+| `base64_encode` | `(const std::vector<uint8_t>&) → std::string` | Encode binary to base64 |
+| `sha256` | `(const std::string&) → std::vector<uint8_t>` | SHA-256 digest |
+| `hmac_sha512` | `(const std::vector<uint8_t>& key, const std::string& msg) → std::vector<uint8_t>` | HMAC-SHA512 |
+| `url_encode` | `(const std::string&) → std::string` | URL-encode a string |
+| `build_form_body` | `(const std::map<std::string,std::string>&) → std::string` | Build URL-encoded form body |
+| `make_nonce` | `() → uint64_t` | Monotonic µs-based nonce |
+
+### Authentication
+
+```cpp
+struct Credentials {
+    std::string api_key;
+    std::string api_secret;  // base64-encoded
+
+    // sign(uri_path, nonce_str, post_body) → API-Sign header value
+    // Algorithm: base64_encode(HMAC-SHA512(base64_decode(secret),
+    //                          uri_path + SHA256(nonce + post_body)))
+    std::string sign(const std::string& path,
+                     const std::string& nonce_str,
+                     const std::string& postdata) const;
+
+    static Credentials from_file(const std::string& name,
+                                 const std::string& location = "~/.kraken");
+};
+```
+
+### Public REST endpoints
+
+| Request type | HTTP | Path | Response type |
+|---|---|---|---|
+| `GetServerTimeRequest` | GET | `/0/public/Time` | `ServerTime` |
+| `GetSystemStatusRequest` | GET | `/0/public/SystemStatus` | `SystemStatus` |
+| `GetAssetInfoRequest` | GET | `/0/public/Assets` | `AssetInfoResult` |
+| `GetAssetPairsRequest` | GET | `/0/public/AssetPairs` | `AssetPairsResult` |
+| `GetTickerRequest` | GET | `/0/public/Ticker` | `TickerResult` |
+| `GetOHLCRequest` | GET | `/0/public/OHLC` | `OHLCResult` |
+| `GetOrderBookRequest` | GET | `/0/public/Depth` | `OrderBookResult` |
+| `GetRecentTradesRequest` | GET | `/0/public/Trades` | `RecentTradesResult` |
+
+### Private REST endpoints
+
+| Request type | HTTP | Path | Response type |
+|---|---|---|---|
+| `GetAccountBalanceRequest` | POST | `/0/private/Balance` | `AccountBalanceResult` |
+| `GetExtendedBalanceRequest` | POST | `/0/private/BalanceEx` | `ExtendedBalanceResult` |
+| `GetTradeBalanceRequest` | POST | `/0/private/TradeBalance` | `TradeBalance` |
+| `GetOpenOrdersRequest` | POST | `/0/private/OpenOrders` | `OpenOrdersResult` |
+| `GetClosedOrdersRequest` | POST | `/0/private/ClosedOrders` | `ClosedOrdersResult` |
+| `QueryOrdersRequest` | POST | `/0/private/QueryOrders` | `QueryOrdersResultWrapper` |
+| `GetTradesHistoryRequest` | POST | `/0/private/TradesHistory` | `TradesHistoryResult` |
+| `QueryTradesRequest` | POST | `/0/private/QueryTrades` | `QueryTradesResultWrapper` |
+| `GetOpenPositionsRequest` | POST | `/0/private/OpenPositions` | `OpenPositionsResult` |
+| `GetLedgersRequest` | POST | `/0/private/Ledgers` | `LedgersResult` |
+| `QueryLedgersRequest` | POST | `/0/private/QueryLedgers` | `QueryLedgersResultWrapper` |
+| `AddOrderRequest` | POST | `/0/private/AddOrder` | `AddOrderResult` |
+| `AddOrderBatchRequest` | POST | `/0/private/AddOrderBatch` | `AddOrderBatchResult` |
+| `EditOrderRequest` | POST | `/0/private/EditOrder` | `EditOrderResult` |
+| `AmendOrderRequest` | POST | `/0/private/AmendOrder` | `AmendOrderResult` |
+| `CancelOrderRequest` | POST | `/0/private/CancelOrder` | `CancelOrderResult` |
+| `CancelAllOrdersRequest` | POST | `/0/private/CancelAllOrders` | `CancelAllResult` |
+| `CancelAllOrdersAfterRequest` | POST | `/0/private/CancelAllOrdersAfter` | `CancelAllAfterResult` |
+| `CancelOrderBatchRequest` | POST | `/0/private/CancelOrderBatch` | `CancelOrderBatchResult` |
+| `GetWebSocketsTokenRequest` | POST | `/0/private/GetWebSocketsToken` | `WebSocketsTokenResult` |
+| `GetDepositMethodsRequest` | POST | `/0/private/GetDepositMethods` | `DepositMethodsResult` |
+| `GetDepositAddressesRequest` | POST | `/0/private/GetDepositAddresses` | `DepositAddressesResult` |
+| `WithdrawRequest` | POST | `/0/private/Withdraw` | `WithdrawResult` |
+| `CancelWithdrawalRequest` | POST | `/0/private/CancelWithdrawal` | `CancelWithdrawalResult` |
+| `CreateSubaccountRequest` | POST | `/0/private/CreateSubaccount` | `CreateSubaccountResult` |
+| `AllocateEarnRequest` | POST | `/0/private/AllocateEarn` | `EarnBoolResult` |
+| `DeallocateEarnRequest` | POST | `/0/private/DeallocateEarn` | `EarnBoolResult` |
+
+### REST client API
+
+```cpp
+class KrakenRestClient {
+public:
+    explicit KrakenRestClient(std::string base_url = "https://api.kraken.com");
+
+    // Public endpoint — no credentials needed
+    template<typename Req>
+    RestResponse<typename Req::response_type> execute(const Req& req);
+
+    // Private endpoint — credentials required
+    template<typename Req>
+    RestResponse<typename Req::response_type> execute(const Req& req,
+                                                       const Credentials& creds);
+};
+
+// Test factory — injects a custom HTTP performer (no libcurl)
+inline KrakenRestClient make_test_client(
+    std::function<std::string(const HttpRequest&)> fn);
+```
+
+---
+
+## WebSocket API reference (`kraken_ws_api.hpp`)
+
+### WebSocket endpoints
+
+| Endpoint | URL |
+|---|---|
+| Public | `wss://ws.kraken.com/v2` (`kraken::ws::PUBLIC_WS_URL`) |
+| Private (authenticated) | `wss://ws-auth.kraken.com/v2` (`kraken::ws::PRIVATE_WS_URL`) |
+
+### Authentication
+
+```cpp
+struct WsCredentials {
+    std::string token;  // obtained via GetWebSocketsTokenRequest over REST
+};
+```
+
+Private WebSocket channels require a session token, not the API key/secret directly. Obtain it once via REST, then pass it in WebSocket requests.
+
+### Method-call request/response pairs
+
+These use `execute()` / `execute_async()` (single request → single response):
+
+| Request type | Response type | Purpose |
+|---|---|---|
+| `PingRequest` | `PongMessage` | Heartbeat / latency check |
+| `AddOrderRequest` | `AddOrderResponse` | Place a new order |
+| `AmendOrderRequest` | `AmendOrderResponse` | Amend an existing order's price/qty |
+| `EditOrderRequest` | `EditOrderResponse` | Edit an existing order |
+| `CancelOrderRequest` | `CancelOrderResponse` | Cancel one or more orders |
+| `CancelAllRequest` | `CancelAllResponse` | Cancel all open orders |
+| `CancelOnDisconnectRequest` | `CancelOnDisconnectResponse` | Set cancel-on-disconnect mode |
+| `BatchAddRequest` | `BatchAddResponse` | Place multiple orders atomically |
+| `BatchCancelRequest` | `BatchCancelResponse` | Cancel multiple orders atomically |
+
+`AddOrderRequest`, `BatchAddRequest`, `EditOrderRequest`, and `AmendOrderRequest` accept a `WsCredentials` token for private channels.
+
+### Subscription channels
+
+These use `subscribe()` / `subscribe_async()` (request → ack + continuous push callbacks):
+
+| Channel enum | Type alias | Push message | Token required |
+|---|---|---|---|
+| `SubscribeChannel::Ticker` | `TickerSubscribeRequest` | `TickerMessage` | No |
+| `SubscribeChannel::Book` | `BookSubscribeRequest` | `BookMessage` | No |
+| `SubscribeChannel::Level3` | `Level3SubscribeRequest` | `Level3Message` | No |
+| `SubscribeChannel::Trade` | `TradeSubscribeRequest` | `TradeMessage` | No |
+| `SubscribeChannel::OHLC` | `OHLCSubscribeRequest` | `OHLCMessage` | No |
+| `SubscribeChannel::Instrument` | `InstrumentSubscribeRequest` | `InstrumentMessage` | No |
+| `SubscribeChannel::Executions` | `ExecutionsSubscribeRequest` | `ExecutionsMessage` | Yes |
+| `SubscribeChannel::Balances` | `BalancesSubscribeRequest` | `BalancesMessage` | Yes |
+
+`UnsubscribeRequest` mirrors `SubscribeRequest` for the same channels.
+
+### BaseResponse (inherited by all method-call responses)
+
+```cpp
+struct BaseResponse {
+    std::string method;
+    bool success;
+    std::optional<int64_t> req_id;
+    std::optional<std::string> error;
+    std::optional<std::string> time_in;
+    std::optional<std::string> time_out;
+};
+```
+
+### MessageKind and dispatch
+
+`identify_message(const json&)` classifies inbound frames by inspecting `"method"` (for replies) or `"channel"` (for push messages):
+
+| MessageKind value | Trigger |
+|---|---|
+| `AddOrderResponse` | `"method": "add_order"` |
+| `AmendOrderResponse` | `"method": "amend_order"` |
+| `EditOrderResponse` | `"method": "edit_order"` |
+| `CancelOrderResponse` | `"method": "cancel_order"` |
+| `CancelAllResponse` | `"method": "cancel_all"` |
+| `CancelOnDisconnectResponse` | `"method": "cancel_on_disconnect"` |
+| `BatchAddResponse` | `"method": "batch_add"` |
+| `BatchCancelResponse` | `"method": "batch_cancel"` |
+| `PongMessage` | `"method": "pong"` |
+| `Ticker` | `"channel": "ticker"` |
+| `Book` | `"channel": "book"` |
+| `Level3` | `"channel": "level3"` |
+| `Trade` | `"channel": "trade"` |
+| `OHLC` | `"channel": "ohlc"` |
+| `Instrument` | `"channel": "instrument"` |
+| `Executions` | `"channel": "executions"` |
+| `Balances` | `"channel": "balances"` |
+| `SubscribeResponse` | `"method": "subscribe"` |
+| `StatusMessage` | `"channel": "status"` |
+| `Unknown` | No match |
+
+### WsResponse<T>
+
+```cpp
+template<typename T>
+struct WsResponse {
+    bool ok{false};
+    std::optional<std::string> error;
+    std::optional<T>           result;
+};
+```
+
+`ok` is derived from `BaseResponse::success` for response types that inherit `BaseResponse`; for plain types like `PongMessage` it is always `true`.
+
+---
+
 ## Architecture and key patterns
 
 ### REST layer
@@ -157,7 +415,7 @@ auto resp = client.execute(GetServerTimeRequest{});
 
 ### REST authentication (private endpoints)
 
-1. Generate a nonce — a monotonically increasing `uint64` (millisecond timestamp is used by default).
+1. Generate a nonce — a monotonically increasing `uint64` (microsecond timestamp via `make_nonce()`).
 2. Build the POST body as `nonce=<value>[&extra_params]`.
 3. Compute signature:
    ```
@@ -205,6 +463,20 @@ handle.cancel();  // unsubscribes; idempotent
    - Failure: push callback never installed; `SubscriptionHandle` is inactive.
 
 Incoming server frames are dispatched to either a pending handler (matched by `req_id`) or an active push subscription callback (matched by the `"channel"` field).
+
+#### Internal state and thread safety
+
+All mutable state is protected by `std::mutex` with RAII lock guards:
+
+| Field | Type | Purpose |
+|---|---|---|
+| `next_req_id_` | `std::atomic<int64_t>` | Auto-incrementing request ID (1-based) |
+| `connected_` | `std::atomic<bool>` | Connection state flag |
+| `send_queue_` | `std::vector<std::string>` | Outbound messages queued before `on_open` |
+| `pending_` | `std::map<int64_t, handler>` | One-shot handlers keyed by `req_id` |
+| `subscriptions_` | `std::map<std::string, callback>` | Active push callbacks keyed by channel |
+
+`SubscriptionHandle` holds a `std::weak_ptr<KrakenWsClient>` and an atomic active flag, making `cancel()` safe to call from any thread and after the client is destroyed.
 
 #### Connection abstraction
 
@@ -258,21 +530,6 @@ Private WebSocket channels use a **session token** (not the API key/secret direc
 2. Pass the token as the `"token"` field inside each WebSocket request's `params`.
 
 `WsCredentials` wraps the token; `AddOrderRequest`, `SubscribeRequest`, etc. accept it directly.
-
-### `WsResponse<T>`
-
-Mirrors `RestResponse<T>` for the WebSocket layer:
-
-```cpp
-template<typename T>
-struct WsResponse {
-    bool ok{false};
-    std::optional<std::string> error;
-    std::optional<T>           result;
-};
-```
-
-`ok` is derived from `BaseResponse::success` for response types that inherit `BaseResponse`; for plain types like `PongMessage` it is always `true`.
 
 ### Generic REST response envelope
 
@@ -344,7 +601,9 @@ switch (kind) {
    - `json to_json() const` method.
 2. Add `YourPushMessage` with `static YourPushMessage from_json(const json&)`.
 3. Add the channel string mapping in `to_string(SubscribeChannel)`.
-4. Add unit tests in `test_ws_client.cpp`.
+4. Add the `MessageKind` enum value and handle it in `identify_message()`.
+5. Add a convenience type alias (e.g., `using YourSubscribeRequest = TypedSubscribeRequest<YourPushMessage>;`).
+6. Add unit tests in `test_ws_client.cpp`.
 
 ---
 
@@ -420,19 +679,7 @@ auto creds = kraken::rest::Credentials::from_file("default");
 - The static library (`libkrakenapi.a`) links against libcurl and OpenSSL. It also compiles `kraken_ws_client.cpp`, but does **not** link against ixwebsocket. Callers that use `IxWsConnection` must separately link against `ixwebsocket`.
 - IXWebSocket and spdlog are **not** linked into `libkrakenapi.a`; they are used only by examples and tests.
 - Template methods for `KrakenWsClient` live in `kraken_ws_client.inl` (included at the bottom of `.hpp`). Non-template methods live in `src/kraken_ws_client.cpp`. Keep this split consistent when adding new methods.
-
----
-
-## WebSocket endpoints
-
-| Endpoint | URL |
-|---|---|
-| Public | `wss://ws.kraken.com/v2` |
-| Private (authenticated) | `wss://ws-auth.kraken.com/v2` |
-
-URL constants are available as `kraken::ws::PUBLIC_WS_URL` and `kraken::ws::PRIVATE_WS_URL` (declared in `kraken_ws_client.hpp`).
-
-The private endpoint requires a token obtained via `GetWebSocketsTokenRequest` before connecting.
+- Push callbacks stored in `subscriptions_` are type-erased to `std::function<void(const json&)>` internally; the typed lambda wrapper is created once in the template method and stored at subscription time.
 
 ---
 
