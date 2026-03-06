@@ -1,4 +1,12 @@
-// ws.cpp
+// =============================================================================
+// krakenapi — A type-safe C++ library for the Kraken Spot REST and WebSocket v2 APIs
+//
+// Copyright (c) 2026 Rob Tomlin
+//
+// Licensed under the MIT License. See LICENSE file in the project root for
+// full license information.
+// =============================================================================
+
 #include <ixwebsocket/IXWebSocket.h>
 
 #include <nlohmann/json.hpp>
