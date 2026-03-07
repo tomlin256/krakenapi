@@ -290,6 +290,7 @@ TEST(ExecuteAsync, TwoRequestsInFlightResolvedInReverseOrder) {
 
 TEST(Execute, BlocksUntilResponse) {
     auto [client, conn] = make_test_client();
+    auto& conn_ref = conn;
 
     kraken::ws::AddOrderRequest req;
     req.order_type  = kraken::OrderType::Limit;
@@ -302,8 +303,8 @@ TEST(Execute, BlocksUntilResponse) {
     // Inject the response from a separate thread after a short delay.
     std::thread injector([&] {
         std::this_thread::sleep_for(50ms);
-        int64_t id = json::parse(conn->sent_messages[0])["req_id"].get<int64_t>();
-        conn->inject_message(make_add_order_response(id, true, "ORDER-SYNC"));
+        int64_t id = json::parse(conn_ref->sent_messages[0])["req_id"].get<int64_t>();
+        conn_ref->inject_message(make_add_order_response(id, true, "ORDER-SYNC"));
     });
 
     auto resp = client->execute(req, 2000ms);
