@@ -681,10 +681,12 @@ struct SubscribeResponse : BaseResponse {
 // Per-channel convenience aliases are provided at the bottom of this file.
 // ============================================================
 
-template<typename PushMsg>
+template<typename PushMsg, SubscribeChannel Ch>
 struct TypedSubscribeRequest : SubscribeRequest {
     using push_type     = PushMsg;
     using response_type = SubscribeResponse;
+    static constexpr SubscribeChannel channel_value = Ch;
+    TypedSubscribeRequest() { this->channel = Ch; }
 };
 
 // ============================================================
@@ -1163,12 +1165,12 @@ inline MessageKind identify_message(const json& j) {
 //   auto [ack, handle] = client->subscribe(req, [](TickerMessage msg) { ... });
 // ============================================================
 
-using TickerSubscribeRequest     = TypedSubscribeRequest<TickerMessage>;
-using BookSubscribeRequest       = TypedSubscribeRequest<BookMessage>;
-using TradeSubscribeRequest      = TypedSubscribeRequest<TradeMessage>;
-using OHLCSubscribeRequest       = TypedSubscribeRequest<OHLCMessage>;
-using InstrumentSubscribeRequest = TypedSubscribeRequest<InstrumentMessage>;
-using ExecutionsSubscribeRequest = TypedSubscribeRequest<ExecutionsMessage>;
-using BalancesSubscribeRequest   = TypedSubscribeRequest<BalancesMessage>;
+using TickerSubscribeRequest     = TypedSubscribeRequest<TickerMessage,     SubscribeChannel::Ticker>;
+using BookSubscribeRequest       = TypedSubscribeRequest<BookMessage,       SubscribeChannel::Book>;
+using TradeSubscribeRequest      = TypedSubscribeRequest<TradeMessage,      SubscribeChannel::Trade>;
+using OHLCSubscribeRequest       = TypedSubscribeRequest<OHLCMessage,       SubscribeChannel::OHLC>;
+using InstrumentSubscribeRequest = TypedSubscribeRequest<InstrumentMessage, SubscribeChannel::Instrument>;
+using ExecutionsSubscribeRequest = TypedSubscribeRequest<ExecutionsMessage,  SubscribeChannel::Executions>;
+using BalancesSubscribeRequest   = TypedSubscribeRequest<BalancesMessage,   SubscribeChannel::Balances>;
 
 } // namespace kraken::ws

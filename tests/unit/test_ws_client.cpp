@@ -341,7 +341,6 @@ TEST(Subscribe, PushCallbackNotFiredBeforeAck) {
 
     kraken::ws::TickerSubscribeRequest sub_req;
     sub_req.symbols = std::vector<std::string>{"BTC/USD"};
-    sub_req.channel = kraken::ws::SubscribeChannel::Ticker;
 
     std::atomic<int> push_count{0};
 
@@ -368,7 +367,6 @@ TEST(Subscribe, SuccessfulAckThenPushData) {
 
     kraken::ws::TickerSubscribeRequest sub_req;
     sub_req.symbols = std::vector<std::string>{"BTC/USD"};
-    sub_req.channel = kraken::ws::SubscribeChannel::Ticker;
 
     std::atomic<int>    push_count{0};
     std::atomic<double> last_bid{0.0};
@@ -402,7 +400,6 @@ TEST(Subscribe, FailedAckPushCallbackNeverFires) {
 
     kraken::ws::TickerSubscribeRequest sub_req;
     sub_req.symbols = std::vector<std::string>{"BTC/USD"};
-    sub_req.channel = kraken::ws::SubscribeChannel::Ticker;
 
     std::atomic<int> push_count{0};
 
@@ -427,7 +424,6 @@ TEST(Subscribe, HandleIsInactiveAfterFailedAck) {
     auto [client, conn] = make_test_client();
 
     kraken::ws::TickerSubscribeRequest sub_req;
-    sub_req.channel = kraken::ws::SubscribeChannel::Ticker;
 
     auto fut = client->subscribe_async(
         sub_req, [](const kraken::ws::TickerMessage&) {}
@@ -444,7 +440,6 @@ TEST(Subscribe, HandleIsActiveAfterSuccessfulAck) {
     auto [client, conn] = make_test_client();
 
     kraken::ws::TickerSubscribeRequest sub_req;
-    sub_req.channel = kraken::ws::SubscribeChannel::Ticker;
 
     auto fut = client->subscribe_async(
         sub_req, [](const kraken::ws::TickerMessage&) {}
@@ -465,7 +460,6 @@ TEST(Cancel, RemovesPushCallback) {
     auto [client, conn] = make_test_client();
 
     kraken::ws::TickerSubscribeRequest sub_req;
-    sub_req.channel = kraken::ws::SubscribeChannel::Ticker;
 
     std::atomic<int> push_count{0};
 
@@ -495,7 +489,6 @@ TEST(Cancel, SendsUnsubscribeRequest) {
     auto [client, conn] = make_test_client();
 
     kraken::ws::TickerSubscribeRequest sub_req;
-    sub_req.channel = kraken::ws::SubscribeChannel::Ticker;
     sub_req.symbols = std::vector<std::string>{"BTC/USD"};
 
     auto fut = client->subscribe_async(
@@ -520,7 +513,6 @@ TEST(Cancel, IsIdempotent) {
     auto [client, conn] = make_test_client();
 
     kraken::ws::TickerSubscribeRequest sub_req;
-    sub_req.channel = kraken::ws::SubscribeChannel::Ticker;
 
     auto fut = client->subscribe_async(
         sub_req, [](const kraken::ws::TickerMessage&) {}
@@ -634,4 +626,37 @@ TEST(PreConnectionQueue, DirectSendWhenAlreadyConnected) {
     int64_t id = json::parse(conn->sent_messages[0])["req_id"].get<int64_t>();
     conn->inject_message(make_add_order_response(id));
     fut.get();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Group: TypedSubscribeRequest channel binding
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST(TypedSubscribeRequest, ChannelIsBoundToType) {
+    static_assert(kraken::ws::TickerSubscribeRequest::channel_value     == kraken::ws::SubscribeChannel::Ticker);
+    static_assert(kraken::ws::BookSubscribeRequest::channel_value       == kraken::ws::SubscribeChannel::Book);
+    static_assert(kraken::ws::TradeSubscribeRequest::channel_value      == kraken::ws::SubscribeChannel::Trade);
+    static_assert(kraken::ws::OHLCSubscribeRequest::channel_value       == kraken::ws::SubscribeChannel::OHLC);
+    static_assert(kraken::ws::InstrumentSubscribeRequest::channel_value == kraken::ws::SubscribeChannel::Instrument);
+    static_assert(kraken::ws::ExecutionsSubscribeRequest::channel_value == kraken::ws::SubscribeChannel::Executions);
+    static_assert(kraken::ws::BalancesSubscribeRequest::channel_value   == kraken::ws::SubscribeChannel::Balances);
+    SUCCEED();
+}
+
+TEST(TypedSubscribeRequest, DefaultConstructorSetsChannelField) {
+    EXPECT_EQ(kraken::ws::TickerSubscribeRequest{}.channel,     kraken::ws::SubscribeChannel::Ticker);
+    EXPECT_EQ(kraken::ws::BookSubscribeRequest{}.channel,       kraken::ws::SubscribeChannel::Book);
+    EXPECT_EQ(kraken::ws::TradeSubscribeRequest{}.channel,      kraken::ws::SubscribeChannel::Trade);
+    EXPECT_EQ(kraken::ws::OHLCSubscribeRequest{}.channel,       kraken::ws::SubscribeChannel::OHLC);
+    EXPECT_EQ(kraken::ws::InstrumentSubscribeRequest{}.channel, kraken::ws::SubscribeChannel::Instrument);
+    EXPECT_EQ(kraken::ws::ExecutionsSubscribeRequest{}.channel, kraken::ws::SubscribeChannel::Executions);
+    EXPECT_EQ(kraken::ws::BalancesSubscribeRequest{}.channel,   kraken::ws::SubscribeChannel::Balances);
+}
+
+TEST(TypedSubscribeRequest, ToJsonContainsCorrectChannel) {
+    kraken::ws::TickerSubscribeRequest req;
+    req.symbols = std::vector<std::string>{"BTC/USD"};
+    // No manual channel assignment — channel is set by the constructor.
+    auto j = req.to_json();
+    EXPECT_EQ(j["params"]["channel"].get<std::string>(), "ticker");
 }
