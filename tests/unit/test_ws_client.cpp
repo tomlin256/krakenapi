@@ -226,7 +226,7 @@ TEST(ExecuteAsync, ResolvesOnMatchingSuccessResponse) {
     auto resp = fut.get();
     EXPECT_TRUE(resp.ok);
     ASSERT_TRUE(resp.result.has_value());
-    EXPECT_EQ(resp.result->order_id.value_or(""), "ORDER-XYZ");
+    EXPECT_EQ(resp.result->order_id().value_or(""), "ORDER-XYZ");
 }
 
 TEST(ExecuteAsync, ResolvesOnErrorResponse) {
@@ -248,7 +248,7 @@ TEST(ExecuteAsync, ResolvesOnErrorResponse) {
     auto resp = fut.get();
     EXPECT_FALSE(resp.ok);
     EXPECT_EQ(resp.error.value_or(""), "EOrder:Insufficient funds");
-    EXPECT_FALSE(resp.result->order_id.has_value());
+    EXPECT_FALSE(resp.result->order_id().has_value());
 }
 
 TEST(ExecuteAsync, TwoRequestsInFlightResolvedInReverseOrder) {
@@ -280,8 +280,8 @@ TEST(ExecuteAsync, TwoRequestsInFlightResolvedInReverseOrder) {
     auto resp1 = fut1.get();
     auto resp2 = fut2.get();
 
-    EXPECT_EQ(resp1.result->order_id.value_or(""), "ORDER-A");
-    EXPECT_EQ(resp2.result->order_id.value_or(""), "ORDER-B");
+    EXPECT_EQ(resp1.result->order_id().value_or(""), "ORDER-A");
+    EXPECT_EQ(resp2.result->order_id().value_or(""), "ORDER-B");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -311,7 +311,7 @@ TEST(Execute, BlocksUntilResponse) {
     injector.join();
 
     EXPECT_TRUE(resp.ok);
-    EXPECT_EQ(resp.result->order_id.value_or(""), "ORDER-SYNC");
+    EXPECT_EQ(resp.result->order_id().value_or(""), "ORDER-SYNC");
 }
 
 TEST(Execute, TimesOutAndReturnsError) {
@@ -375,7 +375,7 @@ TEST(Subscribe, SuccessfulAckThenPushData) {
         sub_req,
         [&](const kraken::ws::TickerMessage& msg) {
             ++push_count;
-            if (!msg.data.empty()) last_bid.store(msg.data[0].bid);
+            if (!msg.data().empty()) last_bid.store(msg.data()[0].bid());
         }
     );
 

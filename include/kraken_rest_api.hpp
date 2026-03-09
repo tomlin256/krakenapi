@@ -331,13 +331,16 @@ public:
 };
 
 class ServerTime : public kraken::IRestResult {
+private:
+    int64_t     unixtime_{0};
+    std::string rfc1123_;
 public:
-    int64_t     unixtime{0};
-    std::string rfc1123;
+    int64_t            unixtime() const { return unixtime_; }
+    const std::string& rfc1123()  const { return rfc1123_; }
     static ServerTime from_json(const json& j) {
         ServerTime t;
-        t.unixtime = j.value("unixtime", int64_t{0});
-        t.rfc1123  = j.value("rfc1123", "");
+        t.unixtime_ = j.value("unixtime", int64_t{0});
+        t.rfc1123_  = j.value("rfc1123", "");
         return t;
     }
 };
@@ -355,13 +358,16 @@ public:
 };
 
 class SystemStatus : public kraken::IRestResult {
+private:
+    std::string status_;    // "online" | "cancel_only" | "post_only" | "limit_only" | "maintenance"
+    std::string timestamp_; // RFC3339
 public:
-    std::string status;    // "online" | "cancel_only" | "post_only" | "limit_only" | "maintenance"
-    std::string timestamp; // RFC3339
+    const std::string& status()    const { return status_; }
+    const std::string& timestamp() const { return timestamp_; }
     static SystemStatus from_json(const json& j) {
         SystemStatus s;
-        s.status    = j.value("status", "");
-        s.timestamp = j.value("timestamp", "");
+        s.status_    = j.value("status", "");
+        s.timestamp_ = j.value("timestamp", "");
         return s;
     }
 };
@@ -392,28 +398,35 @@ public:
 };
 
 class AssetInfo {
+private:
+    std::string aclass_;
+    std::string altname_;
+    int         decimals_{0};
+    int         display_decimals_{0};
 public:
-    std::string aclass;
-    std::string altname;
-    int         decimals{0};
-    int         display_decimals{0};
+    const std::string& aclass()           const { return aclass_; }
+    const std::string& altname()          const { return altname_; }
+    int                decimals()         const { return decimals_; }
+    int                display_decimals() const { return display_decimals_; }
     static AssetInfo from_json(const json& j) {
         AssetInfo a;
-        a.aclass           = j.value("aclass", "");
-        a.altname          = j.value("altname", "");
-        a.decimals         = j.value("decimals", 0);
-        a.display_decimals = j.value("display_decimals", 0);
+        a.aclass_           = j.value("aclass", "");
+        a.altname_          = j.value("altname", "");
+        a.decimals_         = j.value("decimals", 0);
+        a.display_decimals_ = j.value("display_decimals", 0);
         return a;
     }
 };
 
 class AssetInfoResult : public kraken::IRestResult {
+private:
+    std::map<std::string, AssetInfo> assets_; // keyed by Kraken asset name
 public:
-    std::map<std::string, AssetInfo> assets; // keyed by Kraken asset name
+    const std::map<std::string, AssetInfo>& assets() const { return assets_; }
     static AssetInfoResult from_json(const json& j) {
         AssetInfoResult r;
         for (const auto& [k, v] : j.items())
-            r.assets[k] = AssetInfo::from_json(v);
+            r.assets_[k] = AssetInfo::from_json(v);
         return r;
     }
 };
@@ -441,39 +454,52 @@ public:
 };
 
 class AssetPairInfo {
+private:
+    std::string altname_;
+    std::string wsname_;
+    std::string base_;
+    std::string quote_;
+    int         pair_decimals_{0};
+    int         lot_decimals_{0};
+    double      ordermin_{0.0};
+    double      costmin_{0.0};
+    std::vector<std::vector<double>> fees_;
+    std::vector<std::vector<double>> fees_maker_;
 public:
-    std::string altname;
-    std::string wsname;
-    std::string base;
-    std::string quote;
-    int         pair_decimals{0};
-    int         lot_decimals{0};
-    double      ordermin{0.0};
-    double      costmin{0.0};
-    std::vector<std::vector<double>> fees;
-    std::vector<std::vector<double>> fees_maker;
+    const std::string& altname()       const { return altname_; }
+    const std::string& wsname()        const { return wsname_; }
+    const std::string& base()          const { return base_; }
+    const std::string& quote()         const { return quote_; }
+    int                pair_decimals() const { return pair_decimals_; }
+    int                lot_decimals()  const { return lot_decimals_; }
+    double             ordermin()      const { return ordermin_; }
+    double             costmin()       const { return costmin_; }
+    const std::vector<std::vector<double>>& fees()       const { return fees_; }
+    const std::vector<std::vector<double>>& fees_maker() const { return fees_maker_; }
 
     static AssetPairInfo from_json(const json& j) {
         AssetPairInfo p;
-        p.altname       = j.value("altname", "");
-        p.wsname        = j.value("wsname", "");
-        p.base          = j.value("base", "");
-        p.quote         = j.value("quote", "");
-        p.pair_decimals = j.value("pair_decimals", 0);
-        p.lot_decimals  = j.value("lot_decimals", 0);
-        if (j.contains("ordermin")) p.ordermin = std::stod(j["ordermin"].get<std::string>());
-        if (j.contains("costmin"))  p.costmin  = std::stod(j["costmin"].get<std::string>());
+        p.altname_       = j.value("altname", "");
+        p.wsname_        = j.value("wsname", "");
+        p.base_          = j.value("base", "");
+        p.quote_         = j.value("quote", "");
+        p.pair_decimals_ = j.value("pair_decimals", 0);
+        p.lot_decimals_  = j.value("lot_decimals", 0);
+        if (j.contains("ordermin")) p.ordermin_ = std::stod(j["ordermin"].get<std::string>());
+        if (j.contains("costmin"))  p.costmin_  = std::stod(j["costmin"].get<std::string>());
         return p;
     }
 };
 
 class AssetPairsResult : public kraken::IRestResult {
+private:
+    std::map<std::string, AssetPairInfo> pairs_;
 public:
-    std::map<std::string, AssetPairInfo> pairs;
+    const std::map<std::string, AssetPairInfo>& pairs() const { return pairs_; }
     static AssetPairsResult from_json(const json& j) {
         AssetPairsResult r;
         for (const auto& [k, v] : j.items())
-            r.pairs[k] = AssetPairInfo::from_json(v);
+            r.pairs_[k] = AssetPairInfo::from_json(v);
         return r;
     }
 };
@@ -498,45 +524,62 @@ public:
 
 // Ticker fields are arrays: [value, 24h-value] or [price, wholeLot, lot]
 class TickerInfo {
+private:
+    double  ask_{0.0};
+    double  bid_{0.0};
+    double  last_{0.0};
+    double  volume_today_{0.0};
+    double  volume_24h_{0.0};
+    double  vwap_today_{0.0};
+    double  vwap_24h_{0.0};
+    int64_t trades_today_{0};
+    int64_t trades_24h_{0};
+    double  low_today_{0.0};
+    double  low_24h_{0.0};
+    double  high_today_{0.0};
+    double  high_24h_{0.0};
+    double  open_{0.0};
 public:
-    double ask{0.0};
-    double bid{0.0};
-    double last{0.0};
-    double volume_today{0.0};
-    double volume_24h{0.0};
-    double vwap_today{0.0};
-    double vwap_24h{0.0};
-    int64_t trades_today{0};
-    int64_t trades_24h{0};
-    double  low_today{0.0};
-    double  low_24h{0.0};
-    double  high_today{0.0};
-    double  high_24h{0.0};
-    double  open{0.0};
+    double  ask()          const { return ask_; }
+    double  bid()          const { return bid_; }
+    double  last()         const { return last_; }
+    double  volume_today() const { return volume_today_; }
+    double  volume_24h()   const { return volume_24h_; }
+    double  vwap_today()   const { return vwap_today_; }
+    double  vwap_24h()     const { return vwap_24h_; }
+    int64_t trades_today() const { return trades_today_; }
+    int64_t trades_24h()   const { return trades_24h_; }
+    double  low_today()    const { return low_today_; }
+    double  low_24h()      const { return low_24h_; }
+    double  high_today()   const { return high_today_; }
+    double  high_24h()     const { return high_24h_; }
+    double  open()         const { return open_; }
 
     static TickerInfo from_json(const json& j) {
         TickerInfo t;
         // Each field is an array; index 0 = today, index 1 = 24h
-        if (j.contains("a")) t.ask           = std::stod(j["a"][0].get<std::string>());
-        if (j.contains("b")) t.bid           = std::stod(j["b"][0].get<std::string>());
-        if (j.contains("c")) t.last          = std::stod(j["c"][0].get<std::string>());
-        if (j.contains("v")) { t.volume_today = std::stod(j["v"][0].get<std::string>()); t.volume_24h = std::stod(j["v"][1].get<std::string>()); }
-        if (j.contains("p")) { t.vwap_today   = std::stod(j["p"][0].get<std::string>()); t.vwap_24h   = std::stod(j["p"][1].get<std::string>()); }
-        if (j.contains("t")) { t.trades_today = j["t"][0].get<int64_t>();                t.trades_24h = j["t"][1].get<int64_t>(); }
-        if (j.contains("l")) { t.low_today    = std::stod(j["l"][0].get<std::string>()); t.low_24h    = std::stod(j["l"][1].get<std::string>()); }
-        if (j.contains("h")) { t.high_today   = std::stod(j["h"][0].get<std::string>()); t.high_24h   = std::stod(j["h"][1].get<std::string>()); }
-        if (j.contains("o")) t.open          = std::stod(j["o"].get<std::string>());
+        if (j.contains("a")) t.ask_           = std::stod(j["a"][0].get<std::string>());
+        if (j.contains("b")) t.bid_           = std::stod(j["b"][0].get<std::string>());
+        if (j.contains("c")) t.last_          = std::stod(j["c"][0].get<std::string>());
+        if (j.contains("v")) { t.volume_today_ = std::stod(j["v"][0].get<std::string>()); t.volume_24h_ = std::stod(j["v"][1].get<std::string>()); }
+        if (j.contains("p")) { t.vwap_today_   = std::stod(j["p"][0].get<std::string>()); t.vwap_24h_   = std::stod(j["p"][1].get<std::string>()); }
+        if (j.contains("t")) { t.trades_today_ = j["t"][0].get<int64_t>();                t.trades_24h_ = j["t"][1].get<int64_t>(); }
+        if (j.contains("l")) { t.low_today_    = std::stod(j["l"][0].get<std::string>()); t.low_24h_    = std::stod(j["l"][1].get<std::string>()); }
+        if (j.contains("h")) { t.high_today_   = std::stod(j["h"][0].get<std::string>()); t.high_24h_   = std::stod(j["h"][1].get<std::string>()); }
+        if (j.contains("o")) t.open_          = std::stod(j["o"].get<std::string>());
         return t;
     }
 };
 
 class TickerResult : public kraken::IRestResult {
+private:
+    std::map<std::string, TickerInfo> tickers_;
 public:
-    std::map<std::string, TickerInfo> tickers;
+    const std::map<std::string, TickerInfo>& tickers() const { return tickers_; }
     static TickerResult from_json(const json& j) {
         TickerResult r;
         for (const auto& [k, v] : j.items())
-            r.tickers[k] = TickerInfo::from_json(v);
+            r.tickers_[k] = TickerInfo::from_json(v);
         return r;
     }
 };
@@ -561,40 +604,56 @@ public:
 };
 
 class OHLCCandle {
+private:
+    int64_t time_{0};
+    double  open_{0.0};
+    double  high_{0.0};
+    double  low_{0.0};
+    double  close_{0.0};
+    double  vwap_{0.0};
+    double  volume_{0.0};
+    int64_t count_{0};
 public:
-    int64_t time{0};
-    double  open{0.0};
-    double  high{0.0};
-    double  low{0.0};
-    double  close{0.0};
-    double  vwap{0.0};
-    double  volume{0.0};
-    int64_t count{0};
+    int64_t time()   const { return time_; }
+    double  open()   const { return open_; }
+    double  high()   const { return high_; }
+    double  low()    const { return low_; }
+    double  close()  const { return close_; }
+    double  vwap()   const { return vwap_; }
+    double  volume() const { return volume_; }
+    int64_t count()  const { return count_; }
+
+    static OHLCCandle from_json(const json& c) {
+        OHLCCandle candle;
+        candle.time_   = c[0].get<int64_t>();
+        candle.open_   = std::stod(c[1].get<std::string>());
+        candle.high_   = std::stod(c[2].get<std::string>());
+        candle.low_    = std::stod(c[3].get<std::string>());
+        candle.close_  = std::stod(c[4].get<std::string>());
+        candle.vwap_   = std::stod(c[5].get<std::string>());
+        candle.volume_ = std::stod(c[6].get<std::string>());
+        candle.count_  = c[7].get<int64_t>();
+        return candle;
+    }
 };
 
 class OHLCResult : public kraken::IRestResult {
+private:
+    std::string              pair_;
+    std::vector<OHLCCandle>  candles_;
+    int64_t                  last_{0};
 public:
-    std::string              pair;
-    std::vector<OHLCCandle>  candles;
-    int64_t                  last{0};
+    const std::string&             pair()    const { return pair_; }
+    const std::vector<OHLCCandle>& candles() const { return candles_; }
+    int64_t                        last()    const { return last_; }
 
     static OHLCResult from_json(const json& j) {
         OHLCResult r;
         for (const auto& [k, v] : j.items()) {
-            if (k == "last") { r.last = v.get<int64_t>(); continue; }
-            r.pair = k;
-            for (const auto& c : v) {
-                OHLCCandle candle;
-                candle.time   = c[0].get<int64_t>();
-                candle.open   = std::stod(c[1].get<std::string>());
-                candle.high   = std::stod(c[2].get<std::string>());
-                candle.low    = std::stod(c[3].get<std::string>());
-                candle.close  = std::stod(c[4].get<std::string>());
-                candle.vwap   = std::stod(c[5].get<std::string>());
-                candle.volume = std::stod(c[6].get<std::string>());
-                candle.count  = c[7].get<int64_t>();
-                r.candles.push_back(candle);
-            }
+            if (k == "last") { r.last_ = v.get<int64_t>(); continue; }
+            r.pair_ = k;
+            for (const auto& c : v)
+                r.candles_.push_back(OHLCCandle::from_json(c));
         }
         return r;
     }
@@ -617,28 +676,41 @@ public:
     }
 };
 
-class RestBookEntry { public: double price{0.0}; double volume{0.0}; int64_t timestamp{0}; };
+class RestBookEntry {
+private:
+    double  price_{0.0};
+    double  volume_{0.0};
+    int64_t timestamp_{0};
+public:
+    double  price()     const { return price_; }
+    double  volume()    const { return volume_; }
+    int64_t timestamp() const { return timestamp_; }
+
+    static RestBookEntry from_json(const json& e) {
+        RestBookEntry r;
+        r.price_     = std::stod(e[0].get<std::string>());
+        r.volume_    = std::stod(e[1].get<std::string>());
+        r.timestamp_ = e[2].get<int64_t>();
+        return r;
+    }
+};
 
 class OrderBookResult : public kraken::IRestResult {
+private:
+    std::string                 pair_;
+    std::vector<RestBookEntry>  asks_;
+    std::vector<RestBookEntry>  bids_;
 public:
-    std::string                 pair;
-    std::vector<RestBookEntry>  asks;
-    std::vector<RestBookEntry>  bids;
+    const std::string&                pair() const { return pair_; }
+    const std::vector<RestBookEntry>& asks() const { return asks_; }
+    const std::vector<RestBookEntry>& bids() const { return bids_; }
 
     static OrderBookResult from_json(const json& j) {
         OrderBookResult r;
         for (const auto& [k, v] : j.items()) {
-            r.pair = k;
-            auto parse = [](const json& arr) {
-                std::vector<RestBookEntry> entries;
-                for (const auto& e : arr)
-                    entries.push_back({std::stod(e[0].get<std::string>()),
-                                       std::stod(e[1].get<std::string>()),
-                                       e[2].get<int64_t>()});
-                return entries;
-            };
-            r.asks = parse(v["asks"]);
-            r.bids = parse(v["bids"]);
+            r.pair_ = k;
+            for (const auto& e : v["asks"]) r.asks_.push_back(RestBookEntry::from_json(e));
+            for (const auto& e : v["bids"]) r.bids_.push_back(RestBookEntry::from_json(e));
         }
         return r;
     }
@@ -664,36 +736,50 @@ public:
 };
 
 class PublicTrade {
+private:
+    double      price_{0.0};
+    double      volume_{0.0};
+    double      time_{0.0};
+    Side        side_{Side::Buy};
+    std::string order_type_; // "l" limit, "m" market
+    std::string misc_;
 public:
-    double      price{0.0};
-    double      volume{0.0};
-    double      time{0.0};
-    Side        side{Side::Buy};
-    std::string order_type; // "l" limit, "m" market
-    std::string misc;
+    double             price()      const { return price_; }
+    double             volume()     const { return volume_; }
+    double             time()       const { return time_; }
+    Side               side()       const { return side_; }
+    const std::string& order_type() const { return order_type_; }
+    const std::string& misc()       const { return misc_; }
+
+    static PublicTrade from_json(const json& t) {
+        PublicTrade pt;
+        pt.price_      = std::stod(t[0].get<std::string>());
+        pt.volume_     = std::stod(t[1].get<std::string>());
+        pt.time_       = t[2].get<double>();
+        pt.side_       = (t[3].get<std::string>() == "b") ? Side::Buy : Side::Sell;
+        pt.order_type_ = t[4].get<std::string>();
+        pt.misc_       = t[5].get<std::string>();
+        return pt;
+    }
 };
 
 class RecentTradesResult : public kraken::IRestResult {
+private:
+    std::string              pair_;
+    std::vector<PublicTrade> trades_;
+    std::string              last_;  // id for pagination
 public:
-    std::string              pair;
-    std::vector<PublicTrade> trades;
-    std::string              last;  // id for pagination
+    const std::string&              pair()   const { return pair_; }
+    const std::vector<PublicTrade>& trades() const { return trades_; }
+    const std::string&              last()   const { return last_; }
 
     static RecentTradesResult from_json(const json& j) {
         RecentTradesResult r;
         for (const auto& [k, v] : j.items()) {
-            if (k == "last") { r.last = v.get<std::string>(); continue; }
-            r.pair = k;
-            for (const auto& t : v) {
-                PublicTrade pt;
-                pt.price      = std::stod(t[0].get<std::string>());
-                pt.volume     = std::stod(t[1].get<std::string>());
-                pt.time       = t[2].get<double>();
-                pt.side       = (t[3].get<std::string>() == "b") ? Side::Buy : Side::Sell;
-                pt.order_type = t[4].get<std::string>();
-                pt.misc       = t[5].get<std::string>();
-                r.trades.push_back(pt);
-            }
+            if (k == "last") { r.last_ = v.get<std::string>(); continue; }
+            r.pair_ = k;
+            for (const auto& t : v)
+                r.trades_.push_back(PublicTrade::from_json(t));
         }
         return r;
     }
@@ -715,12 +801,14 @@ public:
 };
 
 class AccountBalanceResult : public kraken::IRestResult {
+private:
+    std::map<std::string, double> balances_; // asset -> balance
 public:
-    std::map<std::string, double> balances; // asset -> balance
+    const std::map<std::string, double>& balances() const { return balances_; }
     static AccountBalanceResult from_json(const json& j) {
         AccountBalanceResult r;
         for (const auto& [k, v] : j.items())
-            r.balances[k] = std::stod(v.get<std::string>());
+            r.balances_[k] = std::stod(v.get<std::string>());
         return r;
     }
 };
@@ -735,26 +823,36 @@ public:
 };
 
 class ExtendedBalance {
+private:
+    double balance_{0.0};
+    double hold_trade_{0.0};
+    double credit_{0.0};
+    double credit_used_{0.0};
 public:
-    double balance{0.0};
-    double hold_trade{0.0};
-    double credit{0.0};
-    double credit_used{0.0};
+    double balance()     const { return balance_; }
+    double hold_trade()  const { return hold_trade_; }
+    double credit()      const { return credit_; }
+    double credit_used() const { return credit_used_; }
+
+    static ExtendedBalance from_json(const json& v) {
+        ExtendedBalance b;
+        b.balance_     = std::stod(v.value("balance", "0"));
+        b.hold_trade_  = std::stod(v.value("hold_trade", "0"));
+        b.credit_      = std::stod(v.value("credit", "0"));
+        b.credit_used_ = std::stod(v.value("credit_used", "0"));
+        return b;
+    }
 };
 
 class ExtendedBalanceResult : public kraken::IRestResult {
+private:
+    std::map<std::string, ExtendedBalance> balances_;
 public:
-    std::map<std::string, ExtendedBalance> balances;
+    const std::map<std::string, ExtendedBalance>& balances() const { return balances_; }
     static ExtendedBalanceResult from_json(const json& j) {
         ExtendedBalanceResult r;
-        for (const auto& [k, v] : j.items()) {
-            ExtendedBalance b;
-            b.balance     = std::stod(v.value("balance", "0"));
-            b.hold_trade  = std::stod(v.value("hold_trade", "0"));
-            b.credit      = std::stod(v.value("credit", "0"));
-            b.credit_used = std::stod(v.value("credit_used", "0"));
-            r.balances[k] = b;
-        }
+        for (const auto& [k, v] : j.items())
+            r.balances_[k] = ExtendedBalance::from_json(v);
         return r;
     }
 };
@@ -773,23 +871,33 @@ public:
 };
 
 class TradeBalance : public kraken::IRestResult {
+private:
+    double eb_{0.0};  // equivalent balance
+    double tb_{0.0};  // trade balance
+    double m_{0.0};   // margin amount of open positions
+    double n_{0.0};   // unrealized net P/L of open positions
+    double c_{0.0};   // cost basis of open positions
+    double v_{0.0};   // current floating valuation
+    double e_{0.0};   // equity
+    double mf_{0.0};  // free margin
+    std::optional<double> ml_; // margin level
 public:
-    double eb{0.0};  // equivalent balance
-    double tb{0.0};  // trade balance
-    double m{0.0};   // margin amount of open positions
-    double n{0.0};   // unrealized net P/L of open positions
-    double c{0.0};   // cost basis of open positions
-    double v{0.0};   // current floating valuation
-    double e{0.0};   // equity
-    double mf{0.0};  // free margin
-    std::optional<double> ml; // margin level
+    double eb() const { return eb_; }
+    double tb() const { return tb_; }
+    double m()  const { return m_; }
+    double n()  const { return n_; }
+    double c()  const { return c_; }
+    double v()  const { return v_; }
+    double e()  const { return e_; }
+    double mf() const { return mf_; }
+    std::optional<double> ml() const { return ml_; }
 
     static TradeBalance from_json(const json& j) {
         auto d = [&](const char* k) { return j.contains(k) ? std::stod(j[k].get<std::string>()) : 0.0; };
         TradeBalance t;
-        t.eb = d("eb"); t.tb = d("tb"); t.m = d("m"); t.n = d("n");
-        t.c  = d("c");  t.v  = d("v"); t.e = d("e"); t.mf = d("mf");
-        if (j.contains("ml")) t.ml = std::stod(j["ml"].get<std::string>());
+        t.eb_ = d("eb"); t.tb_ = d("tb"); t.m_ = d("m"); t.n_ = d("n");
+        t.c_  = d("c");  t.v_  = d("v"); t.e_ = d("e"); t.mf_ = d("mf");
+        if (j.contains("ml")) t.ml_ = std::stod(j["ml"].get<std::string>());
         return t;
     }
 };
@@ -810,13 +918,15 @@ public:
 };
 
 class OpenOrdersResult : public kraken::IRestResult {
+private:
+    std::map<std::string, kraken::OrderInfo> open_;
 public:
-    std::map<std::string, kraken::OrderInfo> open;
+    const std::map<std::string, kraken::OrderInfo>& open() const { return open_; }
     static OpenOrdersResult from_json(const json& j) {
         OpenOrdersResult r;
         if (j.contains("open"))
             for (const auto& [k, v] : j["open"].items())
-                r.open[k] = kraken::OrderInfo::from_json(v, k);
+                r.open_[k] = kraken::OrderInfo::from_json(v, k);
         return r;
     }
 };
@@ -845,15 +955,18 @@ public:
 };
 
 class ClosedOrdersResult : public kraken::IRestResult {
+private:
+    std::map<std::string, kraken::OrderInfo> closed_;
+    int32_t count_{0};
 public:
-    std::map<std::string, kraken::OrderInfo> closed;
-    int32_t count{0};
+    const std::map<std::string, kraken::OrderInfo>& closed() const { return closed_; }
+    int32_t count() const { return count_; }
     static ClosedOrdersResult from_json(const json& j) {
         ClosedOrdersResult r;
         if (j.contains("closed"))
             for (const auto& [k, v] : j["closed"].items())
-                r.closed[k] = kraken::OrderInfo::from_json(v, k);
-        if (j.contains("count")) r.count = j["count"].get<int32_t>();
+                r.closed_[k] = kraken::OrderInfo::from_json(v, k);
+        if (j.contains("count")) r.count_ = j["count"].get<int32_t>();
         return r;
     }
 };
@@ -878,12 +991,14 @@ public:
 using QueryOrdersResult = std::map<std::string, kraken::OrderInfo>;
 
 class QueryOrdersResultWrapper : public kraken::IRestResult {
+private:
+    std::map<std::string, kraken::OrderInfo> orders_;
 public:
-    std::map<std::string, kraken::OrderInfo> orders;
+    const std::map<std::string, kraken::OrderInfo>& orders() const { return orders_; }
     static QueryOrdersResultWrapper from_json(const json& j) {
         QueryOrdersResultWrapper r;
         for (const auto& [k, v] : j.items())
-            r.orders[k] = kraken::OrderInfo::from_json(v, k);
+            r.orders_[k] = kraken::OrderInfo::from_json(v, k);
         return r;
     }
 };
@@ -910,15 +1025,18 @@ public:
 };
 
 class TradesHistoryResult : public kraken::IRestResult {
+private:
+    std::map<std::string, kraken::TradeInfo> trades_;
+    int32_t count_{0};
 public:
-    std::map<std::string, kraken::TradeInfo> trades;
-    int32_t count{0};
+    const std::map<std::string, kraken::TradeInfo>& trades() const { return trades_; }
+    int32_t count() const { return count_; }
     static TradesHistoryResult from_json(const json& j) {
         TradesHistoryResult r;
         if (j.contains("trades"))
             for (const auto& [k, v] : j["trades"].items())
-                r.trades[k] = kraken::TradeInfo::from_json(v, k);
-        if (j.contains("count")) r.count = j["count"].get<int32_t>();
+                r.trades_[k] = kraken::TradeInfo::from_json(v, k);
+        if (j.contains("count")) r.count_ = j["count"].get<int32_t>();
         return r;
     }
 };
@@ -941,12 +1059,14 @@ public:
 };
 
 class QueryTradesResultWrapper : public kraken::IRestResult {
+private:
+    std::map<std::string, kraken::TradeInfo> trades_;
 public:
-    std::map<std::string, kraken::TradeInfo> trades;
+    const std::map<std::string, kraken::TradeInfo>& trades() const { return trades_; }
     static QueryTradesResultWrapper from_json(const json& j) {
         QueryTradesResultWrapper r;
         for (const auto& [k, v] : j.items())
-            r.trades[k] = kraken::TradeInfo::from_json(v, k);
+            r.trades_[k] = kraken::TradeInfo::from_json(v, k);
         return r;
     }
 };
@@ -973,53 +1093,72 @@ public:
 };
 
 class PositionInfo {
+private:
+    std::string ordertxid_;
+    std::string pair_;
+    double      time_{0.0};
+    Side        type_{Side::Buy};
+    OrderType   ordertype_{OrderType::Market};
+    double      cost_{0.0};
+    double      fee_{0.0};
+    double      vol_{0.0};
+    double      vol_closed_{0.0};
+    double      margin_{0.0};
+    double      value_{0.0};
+    double      net_{0.0};
+    std::string terms_;
+    std::string rollovertm_;
+    std::string misc_;
+    std::string oflags_;
 public:
-    std::string ordertxid;
-    std::string pair;
-    double      time{0.0};
-    Side        type{Side::Buy};
-    OrderType   ordertype{OrderType::Market};
-    double      cost{0.0};
-    double      fee{0.0};
-    double      vol{0.0};
-    double      vol_closed{0.0};
-    double      margin{0.0};
-    double      value{0.0};
-    double      net{0.0};
-    std::string terms;
-    std::string rollovertm;
-    std::string misc;
-    std::string oflags;
+    const std::string& ordertxid()  const { return ordertxid_; }
+    const std::string& pair()       const { return pair_; }
+    double             time()       const { return time_; }
+    Side               type()       const { return type_; }
+    OrderType          ordertype()  const { return ordertype_; }
+    double             cost()       const { return cost_; }
+    double             fee()        const { return fee_; }
+    double             vol()        const { return vol_; }
+    double             vol_closed() const { return vol_closed_; }
+    double             margin()     const { return margin_; }
+    double             value()      const { return value_; }
+    double             net()        const { return net_; }
+    const std::string& terms()      const { return terms_; }
+    const std::string& rollovertm() const { return rollovertm_; }
+    const std::string& misc()       const { return misc_; }
+    const std::string& oflags()     const { return oflags_; }
 
     static PositionInfo from_json(const json& j) {
         PositionInfo p;
-        p.ordertxid  = j.value("ordertxid", "");
-        p.pair       = j.value("pair", "");
-        p.time       = j.value("time", 0.0);
-        p.cost       = std::stod(j.value("cost", "0"));
-        p.fee        = std::stod(j.value("fee", "0"));
-        p.vol        = std::stod(j.value("vol", "0"));
-        p.vol_closed = std::stod(j.value("vol_closed", "0"));
-        p.margin     = std::stod(j.value("margin", "0"));
-        p.terms      = j.value("terms", "");
-        p.rollovertm = j.value("rollovertm", "");
-        p.misc       = j.value("misc", "");
-        p.oflags     = j.value("oflags", "");
-        if (j.contains("type"))      p.type      = side_from_string(j["type"].get<std::string>());
-        if (j.contains("ordertype")) p.ordertype = order_type_from_string(j["ordertype"].get<std::string>());
-        if (j.contains("value"))     p.value     = std::stod(j["value"].get<std::string>());
-        if (j.contains("net"))       p.net       = std::stod(j["net"].get<std::string>());
+        p.ordertxid_  = j.value("ordertxid", "");
+        p.pair_       = j.value("pair", "");
+        p.time_       = j.value("time", 0.0);
+        p.cost_       = std::stod(j.value("cost", "0"));
+        p.fee_        = std::stod(j.value("fee", "0"));
+        p.vol_        = std::stod(j.value("vol", "0"));
+        p.vol_closed_ = std::stod(j.value("vol_closed", "0"));
+        p.margin_     = std::stod(j.value("margin", "0"));
+        p.terms_      = j.value("terms", "");
+        p.rollovertm_ = j.value("rollovertm", "");
+        p.misc_       = j.value("misc", "");
+        p.oflags_     = j.value("oflags", "");
+        if (j.contains("type"))      p.type_      = side_from_string(j["type"].get<std::string>());
+        if (j.contains("ordertype")) p.ordertype_ = order_type_from_string(j["ordertype"].get<std::string>());
+        if (j.contains("value"))     p.value_     = std::stod(j["value"].get<std::string>());
+        if (j.contains("net"))       p.net_       = std::stod(j["net"].get<std::string>());
         return p;
     }
 };
 
 class OpenPositionsResult : public kraken::IRestResult {
+private:
+    std::map<std::string, PositionInfo> positions_;
 public:
-    std::map<std::string, PositionInfo> positions;
+    const std::map<std::string, PositionInfo>& positions() const { return positions_; }
     static OpenPositionsResult from_json(const json& j) {
         OpenPositionsResult r;
         for (const auto& [k, v] : j.items())
-            r.positions[k] = PositionInfo::from_json(v);
+            r.positions_[k] = PositionInfo::from_json(v);
         return r;
     }
 };
@@ -1052,15 +1191,18 @@ public:
 };
 
 class LedgersResult : public kraken::IRestResult {
+private:
+    std::map<std::string, kraken::LedgerEntry> ledger_;
+    int32_t count_{0};
 public:
-    std::map<std::string, kraken::LedgerEntry> ledger;
-    int32_t count{0};
+    const std::map<std::string, kraken::LedgerEntry>& ledger() const { return ledger_; }
+    int32_t count() const { return count_; }
     static LedgersResult from_json(const json& j) {
         LedgersResult r;
         if (j.contains("ledger"))
             for (const auto& [k, v] : j["ledger"].items())
-                r.ledger[k] = kraken::LedgerEntry::from_json(v, k);
-        if (j.contains("count")) r.count = j["count"].get<int32_t>();
+                r.ledger_[k] = kraken::LedgerEntry::from_json(v, k);
+        if (j.contains("count")) r.count_ = j["count"].get<int32_t>();
         return r;
     }
 };
@@ -1081,12 +1223,14 @@ public:
 };
 
 class QueryLedgersResultWrapper : public kraken::IRestResult {
+private:
+    std::map<std::string, kraken::LedgerEntry> ledger_;
 public:
-    std::map<std::string, kraken::LedgerEntry> ledger;
+    const std::map<std::string, kraken::LedgerEntry>& ledger() const { return ledger_; }
     static QueryLedgersResultWrapper from_json(const json& j) {
         QueryLedgersResultWrapper r;
         for (const auto& [k, v] : j.items())
-            r.ledger[k] = kraken::LedgerEntry::from_json(v, k);
+            r.ledger_[k] = kraken::LedgerEntry::from_json(v, k);
         return r;
     }
 };
@@ -1142,19 +1286,23 @@ public:
 };
 
 class AddOrderResult : public kraken::IRestResult {
+private:
+    std::string              descr_order_;  // human-readable description
+    std::optional<std::string> descr_close_;
+    std::vector<std::string> txids_;
 public:
-    std::string              descr_order;  // human-readable description
-    std::optional<std::string> descr_close;
-    std::vector<std::string> txids;
+    const std::string&              descr_order()  const { return descr_order_; }
+    std::optional<std::string>      descr_close()  const { return descr_close_; }
+    const std::vector<std::string>& txids()        const { return txids_; }
 
     static AddOrderResult from_json(const json& j) {
         AddOrderResult r;
         if (j.contains("descr")) {
-            r.descr_order = j["descr"].value("order", "");
-            if (j["descr"].contains("close")) r.descr_close = j["descr"]["close"].get<std::string>();
+            r.descr_order_ = j["descr"].value("order", "");
+            if (j["descr"].contains("close")) r.descr_close_ = j["descr"]["close"].get<std::string>();
         }
         if (j.contains("txid"))
-            r.txids = j["txid"].get<std::vector<std::string>>();
+            r.txids_ = j["txid"].get<std::vector<std::string>>();
         return r;
     }
 };
@@ -1206,25 +1354,34 @@ public:
 };
 
 class BatchOrderResult {
+private:
+    std::string              descr_order_;
+    std::vector<std::string> txids_;
+    std::optional<std::string> error_;
 public:
-    std::string              descr_order;
-    std::vector<std::string> txids;
-    std::optional<std::string> error;
+    const std::string&              descr_order() const { return descr_order_; }
+    const std::vector<std::string>& txids()       const { return txids_; }
+    std::optional<std::string>      error()       const { return error_; }
+
+    static BatchOrderResult from_json(const json& o) {
+        BatchOrderResult br;
+        if (o.contains("descr")) br.descr_order_ = o["descr"].value("order", "");
+        if (o.contains("txid"))  br.txids_        = o["txid"].get<std::vector<std::string>>();
+        if (o.contains("error")) br.error_        = o["error"].get<std::string>();
+        return br;
+    }
 };
 
 class AddOrderBatchResult : public kraken::IRestResult {
+private:
+    std::vector<BatchOrderResult> orders_;
 public:
-    std::vector<BatchOrderResult> orders;
+    const std::vector<BatchOrderResult>& orders() const { return orders_; }
     static AddOrderBatchResult from_json(const json& j) {
         AddOrderBatchResult r;
         if (j.contains("orders")) {
-            for (const auto& o : j["orders"]) {
-                BatchOrderResult br;
-                if (o.contains("descr")) br.descr_order = o["descr"].value("order", "");
-                if (o.contains("txid"))  br.txids        = o["txid"].get<std::vector<std::string>>();
-                if (o.contains("error")) br.error        = o["error"].get<std::string>();
-                r.orders.push_back(br);
-            }
+            for (const auto& o : j["orders"])
+                r.orders_.push_back(BatchOrderResult::from_json(o));
         }
         return r;
     }
@@ -1264,16 +1421,20 @@ public:
 };
 
 class EditOrderResult : public kraken::IRestResult {
+private:
+    std::string              descr_order_;
+    std::vector<std::string> txids_;
+    std::optional<std::string> orig_txid_;
 public:
-    std::string              descr_order;
-    std::vector<std::string> txids;
-    std::optional<std::string> orig_txid;
+    const std::string&              descr_order() const { return descr_order_; }
+    const std::vector<std::string>& txids()       const { return txids_; }
+    std::optional<std::string>      orig_txid()   const { return orig_txid_; }
 
     static EditOrderResult from_json(const json& j) {
         EditOrderResult r;
-        if (j.contains("descr")) r.descr_order = j["descr"].value("order", "");
-        if (j.contains("txid"))  r.txids        = j["txid"].get<std::vector<std::string>>();
-        if (j.contains("originaltxid")) r.orig_txid = j["originaltxid"].get<std::string>();
+        if (j.contains("descr")) r.descr_order_ = j["descr"].value("order", "");
+        if (j.contains("txid"))  r.txids_        = j["txid"].get<std::vector<std::string>>();
+        if (j.contains("originaltxid")) r.orig_txid_ = j["originaltxid"].get<std::string>();
         return r;
     }
 };
@@ -1306,11 +1467,13 @@ public:
 };
 
 class AmendOrderResult : public kraken::IRestResult {
+private:
+    std::string amend_id_;
 public:
-    std::string amend_id;
+    const std::string& amend_id() const { return amend_id_; }
     static AmendOrderResult from_json(const json& j) {
         AmendOrderResult r;
-        r.amend_id = j.value("amend_id", "");
+        r.amend_id_ = j.value("amend_id", "");
         return r;
     }
 };
@@ -1327,13 +1490,16 @@ public:
 };
 
 class CancelOrderResult : public kraken::IRestResult {
+private:
+    int32_t count_{0};   // number of orders cancelled
+    bool    pending_{false};
 public:
-    int32_t count{0};   // number of orders cancelled
-    bool    pending{false};
+    int32_t count()   const { return count_; }
+    bool    pending() const { return pending_; }
     static CancelOrderResult from_json(const json& j) {
         CancelOrderResult r;
-        r.count   = j.value("count", 0);
-        r.pending = j.value("pending", false);
+        r.count_   = j.value("count", 0);
+        r.pending_ = j.value("pending", false);
         return r;
     }
 };
@@ -1348,11 +1514,13 @@ public:
 };
 
 class CancelAllResult : public kraken::IRestResult {
+private:
+    int32_t count_{0};
 public:
-    int32_t count{0};
+    int32_t count() const { return count_; }
     static CancelAllResult from_json(const json& j) {
         CancelAllResult r;
-        r.count = j.value("count", 0);
+        r.count_ = j.value("count", 0);
         return r;
     }
 };
@@ -1370,13 +1538,16 @@ public:
 };
 
 class CancelAllAfterResult : public kraken::IRestResult {
+private:
+    std::string current_time_;
+    std::string trigger_time_;
 public:
-    std::string current_time;
-    std::string trigger_time;
+    const std::string& current_time() const { return current_time_; }
+    const std::string& trigger_time() const { return trigger_time_; }
     static CancelAllAfterResult from_json(const json& j) {
         CancelAllAfterResult r;
-        r.current_time = j.value("currentTime", "");
-        r.trigger_time = j.value("triggerTime", "");
+        r.current_time_ = j.value("currentTime", "");
+        r.trigger_time_ = j.value("triggerTime", "");
         return r;
     }
 };
@@ -1409,11 +1580,13 @@ public:
 };
 
 class CancelOrderBatchResult : public kraken::IRestResult {
+private:
+    int32_t count_{0};
 public:
-    int32_t count{0};
+    int32_t count() const { return count_; }
     static CancelOrderBatchResult from_json(const json& j) {
         CancelOrderBatchResult r;
-        r.count = j.value("count", 0);
+        r.count_ = j.value("count", 0);
         return r;
     }
 };
@@ -1428,13 +1601,16 @@ public:
 };
 
 class WebSocketsTokenResult : public kraken::IRestResult {
+private:
+    std::string token_;
+    int64_t     expires_{0};
 public:
-    std::string token;
-    int64_t     expires{0};
+    const std::string& token()   const { return token_; }
+    int64_t            expires() const { return expires_; }
     static WebSocketsTokenResult from_json(const json& j) {
         WebSocketsTokenResult r;
-        r.token   = j.value("token", "");
-        r.expires = j.value("expires", int64_t{0});
+        r.token_   = j.value("token", "");
+        r.expires_ = j.value("expires", int64_t{0});
         return r;
     }
 };
@@ -1452,27 +1628,34 @@ public:
 };
 
 class DepositMethod {
+private:
+    std::string method_;
+    std::string limit_;
+    std::string fee_;
+    bool        gen_address_{false};
 public:
-    std::string method;
-    std::string limit;
-    std::string fee;
-    bool        gen_address{false};
+    const std::string& method()      const { return method_; }
+    const std::string& limit()       const { return limit_; }
+    const std::string& fee()         const { return fee_; }
+    bool               gen_address() const { return gen_address_; }
     static DepositMethod from_json(const json& j) {
         DepositMethod r;
-        r.method      = j.value("method", "");
-        r.limit       = j.value("limit", "");
-        r.fee         = j.value("fee", "");
-        r.gen_address = j.value("gen-address", false);
+        r.method_      = j.value("method", "");
+        r.limit_       = j.value("limit", "");
+        r.fee_         = j.value("fee", "");
+        r.gen_address_ = j.value("gen-address", false);
         return r;
     }
 };
 
 class DepositMethodsResult : public kraken::IRestResult {
+private:
+    std::vector<DepositMethod> methods_;
 public:
-    std::vector<DepositMethod> methods;
+    const std::vector<DepositMethod>& methods() const { return methods_; }
     static DepositMethodsResult from_json(const json& j) {
         DepositMethodsResult r;
-        for (const auto& m : j) r.methods.push_back(DepositMethod::from_json(m));
+        for (const auto& m : j) r.methods_.push_back(DepositMethod::from_json(m));
         return r;
     }
 };
@@ -1490,25 +1673,31 @@ public:
 };
 
 class DepositAddress {
+private:
+    std::string address_;
+    std::string expiretm_;
+    bool        new_addr_{false};
 public:
-    std::string address;
-    std::string expiretm;
-    bool        new_addr{false};
+    const std::string& address()  const { return address_; }
+    const std::string& expiretm() const { return expiretm_; }
+    bool               new_addr() const { return new_addr_; }
     static DepositAddress from_json(const json& j) {
         DepositAddress r;
-        r.address  = j.value("address", "");
-        r.expiretm = j.value("expiretm", "");
-        r.new_addr = j.value("new", false);
+        r.address_  = j.value("address", "");
+        r.expiretm_ = j.value("expiretm", "");
+        r.new_addr_ = j.value("new", false);
         return r;
     }
 };
 
 class DepositAddressesResult : public kraken::IRestResult {
+private:
+    std::vector<DepositAddress> addresses_;
 public:
-    std::vector<DepositAddress> addresses;
+    const std::vector<DepositAddress>& addresses() const { return addresses_; }
     static DepositAddressesResult from_json(const json& j) {
         DepositAddressesResult r;
-        for (const auto& a : j) r.addresses.push_back(DepositAddress::from_json(a));
+        for (const auto& a : j) r.addresses_.push_back(DepositAddress::from_json(a));
         return r;
     }
 };
@@ -1530,11 +1719,13 @@ public:
 };
 
 class WithdrawResult : public kraken::IRestResult {
+private:
+    std::string refid_;
 public:
-    std::string refid;
+    const std::string& refid() const { return refid_; }
     static WithdrawResult from_json(const json& j) {
         WithdrawResult r;
-        r.refid = j.value("refid", "");
+        r.refid_ = j.value("refid", "");
         return r;
     }
 };
@@ -1550,11 +1741,13 @@ public:
 };
 
 class CancelWithdrawalResult : public kraken::IRestResult {
+private:
+    bool result_{false};
 public:
-    bool result{false};
+    bool result() const { return result_; }
     static CancelWithdrawalResult from_json(const json& j) {
         CancelWithdrawalResult r;
-        r.result = j.get<bool>();
+        r.result_ = j.get<bool>();
         return r;
     }
 };
@@ -1574,11 +1767,13 @@ public:
 };
 
 class CreateSubaccountResult : public kraken::IRestResult {
+private:
+    bool result_{false};
 public:
-    bool result{false};
+    bool result() const { return result_; }
     static CreateSubaccountResult from_json(const json& j) {
         CreateSubaccountResult r;
-        r.result = j.get<bool>();
+        r.result_ = j.get<bool>();
         return r;
     }
 };
@@ -1608,11 +1803,13 @@ public:
 };
 
 class EarnBoolResult : public kraken::IRestResult {
+private:
+    bool result_{false};
 public:
-    bool result{false};
+    bool result() const { return result_; }
     static EarnBoolResult from_json(const json& j) {
         EarnBoolResult r;
-        r.result = j.get<bool>();
+        r.result_ = j.get<bool>();
         return r;
     }
 };

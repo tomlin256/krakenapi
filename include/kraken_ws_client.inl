@@ -15,8 +15,8 @@ template<typename T>
 WsResponse<T> make_ws_response(T r) {
     WsResponse<T> ws;
     if constexpr (std::is_base_of_v<BaseResponse, T>) {
-        ws.ok    = r.success;
-        ws.error = r.error;
+        ws.ok    = r.success();
+        ws.error = r.error();
     } else {
         ws.ok = true;
     }
@@ -105,12 +105,12 @@ KrakenWsClient::subscribe_async(Req req,
         {
             auto ack = SubscribeResponse::from_json(j);
             WsResponse<SubscribeResponse> ws;
-            ws.ok     = ack.success;
-            ws.error  = ack.error;
+            ws.ok     = ack.success();
+            ws.error  = ack.error();
             ws.result = ack;
 
             SubscriptionHandle handle;
-            if (ack.success) {
+            if (ack.success()) {
                 // Phase 3 success: install the push callback.
                 active->store(true);
                 {

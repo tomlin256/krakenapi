@@ -373,26 +373,36 @@ public:
 // ============================================================
 
 class OrderDescription {
+private:
+    std::string pair_;
+    Side        side_{Side::Buy};
+    OrderType   order_type_{OrderType::Market};
+    std::string price_;    // kept as string to preserve precision
+    std::string price2_;
+    std::string leverage_;
+    std::string order_;    // human readable description
+    std::string close_;
+
 public:
-    std::string              pair;
-    Side                     side{Side::Buy};
-    OrderType                order_type{OrderType::Market};
-    std::string              price;    // kept as string to preserve precision
-    std::string              price2;
-    std::string              leverage;
-    std::string              order;    // human readable description
-    std::string              close;
+    const std::string& pair()      const { return pair_; }
+    Side               side()      const { return side_; }
+    OrderType          order_type() const { return order_type_; }
+    const std::string& price()     const { return price_; }
+    const std::string& price2()    const { return price2_; }
+    const std::string& leverage()  const { return leverage_; }
+    const std::string& order()     const { return order_; }
+    const std::string& close()     const { return close_; }
 
     static OrderDescription from_json(const json& j) {
         OrderDescription d;
-        d.pair       = j.value("pair", "");
-        d.price      = j.value("price", "");
-        d.price2     = j.value("price2", "");
-        d.leverage   = j.value("leverage", "");
-        d.order      = j.value("order", "");
-        d.close      = j.value("close", "");
-        if (j.contains("type"))      d.side       = side_from_string(j["type"].get<std::string>());
-        if (j.contains("ordertype")) d.order_type = order_type_from_string(j["ordertype"].get<std::string>());
+        d.pair_       = j.value("pair", "");
+        d.price_      = j.value("price", "");
+        d.price2_     = j.value("price2", "");
+        d.leverage_   = j.value("leverage", "");
+        d.order_      = j.value("order", "");
+        d.close_      = j.value("close", "");
+        if (j.contains("type"))      d.side_       = side_from_string(j["type"].get<std::string>());
+        if (j.contains("ordertype")) d.order_type_ = order_type_from_string(j["ordertype"].get<std::string>());
         return d;
     }
 };
@@ -402,48 +412,69 @@ public:
 // ============================================================
 
 class OrderInfo {
+private:
+    std::string       txid_;           // set by caller from map key
+    OrderStatus       status_{OrderStatus::Unknown};
+    OrderDescription  descr_;
+    double            vol_{0.0};
+    double            vol_exec_{0.0};
+    double            cost_{0.0};
+    double            fee_{0.0};
+    double            price_{0.0};     // avg price
+    double            stopprice_{0.0};
+    double            limitprice_{0.0};
+    std::string       misc_;
+    std::string       oflags_;
+    std::optional<int64_t>     userref_;
+    std::optional<double>      opentm_;
+    std::optional<double>      closetm_;
+    std::optional<double>      starttm_;
+    std::optional<double>      expiretm_;
+    std::optional<std::string> reason_;
+    std::optional<std::vector<std::string>> trades_; // trade ids
+
 public:
-    std::string       txid;           // set by caller from map key
-    OrderStatus       status{OrderStatus::Unknown};
-    OrderDescription  descr;
-    double            vol{0.0};
-    double            vol_exec{0.0};
-    double            cost{0.0};
-    double            fee{0.0};
-    double            price{0.0};     // avg price
-    double            stopprice{0.0};
-    double            limitprice{0.0};
-    std::string       misc;
-    std::string       oflags;
-    std::optional<int64_t>     userref;
-    std::optional<double>      opentm;
-    std::optional<double>      closetm;
-    std::optional<double>      starttm;
-    std::optional<double>      expiretm;
-    std::optional<std::string> reason;
-    std::optional<std::vector<std::string>> trades; // trade ids
+    const std::string&      txid()       const { return txid_; }
+    OrderStatus             status()     const { return status_; }
+    const OrderDescription& descr()      const { return descr_; }
+    double                  vol()        const { return vol_; }
+    double                  vol_exec()   const { return vol_exec_; }
+    double                  cost()       const { return cost_; }
+    double                  fee()        const { return fee_; }
+    double                  price()      const { return price_; }
+    double                  stopprice()  const { return stopprice_; }
+    double                  limitprice() const { return limitprice_; }
+    const std::string&      misc()       const { return misc_; }
+    const std::string&      oflags()     const { return oflags_; }
+    std::optional<int64_t>  userref()    const { return userref_; }
+    std::optional<double>   opentm()     const { return opentm_; }
+    std::optional<double>   closetm()    const { return closetm_; }
+    std::optional<double>   starttm()    const { return starttm_; }
+    std::optional<double>   expiretm()   const { return expiretm_; }
+    std::optional<std::string> reason()  const { return reason_; }
+    std::optional<std::vector<std::string>> trades() const { return trades_; }
 
     static OrderInfo from_json(const json& j, const std::string& id = "") {
         OrderInfo o;
-        o.txid      = id;
-        o.vol       = std::stod(j.value("vol", "0"));
-        o.vol_exec  = std::stod(j.value("vol_exec", "0"));
-        o.cost      = std::stod(j.value("cost", "0"));
-        o.fee       = std::stod(j.value("fee", "0"));
-        o.price     = std::stod(j.value("price", "0"));
-        o.stopprice = std::stod(j.value("stopprice", "0"));
-        o.limitprice= std::stod(j.value("limitprice", "0"));
-        o.misc      = j.value("misc", "");
-        o.oflags    = j.value("oflags", "");
-        if (j.contains("status"))   o.status  = order_status_from_string(j["status"].get<std::string>());
-        if (j.contains("descr"))    o.descr   = OrderDescription::from_json(j["descr"]);
-        if (j.contains("userref"))  o.userref = j["userref"].get<int64_t>();
-        if (j.contains("opentm"))   o.opentm  = j["opentm"].get<double>();
-        if (j.contains("closetm"))  o.closetm = j["closetm"].get<double>();
-        if (j.contains("starttm"))  o.starttm = j["starttm"].get<double>();
-        if (j.contains("expiretm")) o.expiretm= j["expiretm"].get<double>();
-        if (j.contains("reason"))   o.reason  = j["reason"].get<std::string>();
-        if (j.contains("trades"))   o.trades  = j["trades"].get<std::vector<std::string>>();
+        o.txid_      = id;
+        o.vol_       = std::stod(j.value("vol", "0"));
+        o.vol_exec_  = std::stod(j.value("vol_exec", "0"));
+        o.cost_      = std::stod(j.value("cost", "0"));
+        o.fee_       = std::stod(j.value("fee", "0"));
+        o.price_     = std::stod(j.value("price", "0"));
+        o.stopprice_ = std::stod(j.value("stopprice", "0"));
+        o.limitprice_= std::stod(j.value("limitprice", "0"));
+        o.misc_      = j.value("misc", "");
+        o.oflags_    = j.value("oflags", "");
+        if (j.contains("status"))   o.status_  = order_status_from_string(j["status"].get<std::string>());
+        if (j.contains("descr"))    o.descr_   = OrderDescription::from_json(j["descr"]);
+        if (j.contains("userref"))  o.userref_ = j["userref"].get<int64_t>();
+        if (j.contains("opentm"))   o.opentm_  = j["opentm"].get<double>();
+        if (j.contains("closetm"))  o.closetm_ = j["closetm"].get<double>();
+        if (j.contains("starttm"))  o.starttm_ = j["starttm"].get<double>();
+        if (j.contains("expiretm")) o.expiretm_= j["expiretm"].get<double>();
+        if (j.contains("reason"))   o.reason_  = j["reason"].get<std::string>();
+        if (j.contains("trades"))   o.trades_  = j["trades"].get<std::vector<std::string>>();
         return o;
     }
 };
@@ -453,48 +484,69 @@ public:
 // ============================================================
 
 class TradeInfo {
+private:
+    std::string txid_;
+    std::string ordertxid_;
+    std::string pair_;
+    double      time_{0.0};
+    Side        type_{Side::Buy};
+    OrderType   ordertype_{OrderType::Market};
+    double      price_{0.0};
+    double      cost_{0.0};
+    double      fee_{0.0};
+    double      vol_{0.0};
+    double      margin_{0.0};
+    std::string misc_;
+    std::optional<std::string> posstatus_;
+    std::optional<double>      cprice_;
+    std::optional<double>      ccost_;
+    std::optional<double>      cfee_;
+    std::optional<double>      cvol_;
+    std::optional<double>      cmargin_;
+    std::optional<double>      net_;
+
 public:
-    std::string txid;
-    std::string ordertxid;
-    std::string pair;
-    double      time{0.0};
-    Side        type{Side::Buy};
-    OrderType   ordertype{OrderType::Market};
-    double      price{0.0};
-    double      cost{0.0};
-    double      fee{0.0};
-    double      vol{0.0};
-    double      margin{0.0};
-    std::string misc;
-    std::optional<std::string> posstatus;
-    std::optional<double>      cprice;
-    std::optional<double>      ccost;
-    std::optional<double>      cfee;
-    std::optional<double>      cvol;
-    std::optional<double>      cmargin;
-    std::optional<double>      net;
+    const std::string& txid()      const { return txid_; }
+    const std::string& ordertxid() const { return ordertxid_; }
+    const std::string& pair()      const { return pair_; }
+    double             time()      const { return time_; }
+    Side               type()      const { return type_; }
+    OrderType          ordertype() const { return ordertype_; }
+    double             price()     const { return price_; }
+    double             cost()      const { return cost_; }
+    double             fee()       const { return fee_; }
+    double             vol()       const { return vol_; }
+    double             margin()    const { return margin_; }
+    const std::string& misc()      const { return misc_; }
+    std::optional<std::string> posstatus() const { return posstatus_; }
+    std::optional<double>      cprice()    const { return cprice_; }
+    std::optional<double>      ccost()     const { return ccost_; }
+    std::optional<double>      cfee()      const { return cfee_; }
+    std::optional<double>      cvol()      const { return cvol_; }
+    std::optional<double>      cmargin()   const { return cmargin_; }
+    std::optional<double>      net()       const { return net_; }
 
     static TradeInfo from_json(const json& j, const std::string& id = "") {
         TradeInfo t;
-        t.txid     = id;
-        t.ordertxid= j.value("ordertxid", "");
-        t.pair     = j.value("pair", "");
-        t.time     = j.value("time", 0.0);
-        t.price    = std::stod(j.value("price", "0"));
-        t.cost     = std::stod(j.value("cost", "0"));
-        t.fee      = std::stod(j.value("fee", "0"));
-        t.vol      = std::stod(j.value("vol", "0"));
-        t.margin   = std::stod(j.value("margin", "0"));
-        t.misc     = j.value("misc", "");
-        if (j.contains("type"))      t.type      = side_from_string(j["type"].get<std::string>());
-        if (j.contains("ordertype")) t.ordertype = order_type_from_string(j["ordertype"].get<std::string>());
-        if (j.contains("posstatus")) t.posstatus = j["posstatus"].get<std::string>();
-        if (j.contains("cprice"))    t.cprice    = std::stod(j["cprice"].get<std::string>());
-        if (j.contains("ccost"))     t.ccost     = std::stod(j["ccost"].get<std::string>());
-        if (j.contains("cfee"))      t.cfee      = std::stod(j["cfee"].get<std::string>());
-        if (j.contains("cvol"))      t.cvol      = std::stod(j["cvol"].get<std::string>());
-        if (j.contains("cmargin"))   t.cmargin   = std::stod(j["cmargin"].get<std::string>());
-        if (j.contains("net"))       t.net       = std::stod(j["net"].get<std::string>());
+        t.txid_     = id;
+        t.ordertxid_= j.value("ordertxid", "");
+        t.pair_     = j.value("pair", "");
+        t.time_     = j.value("time", 0.0);
+        t.price_    = std::stod(j.value("price", "0"));
+        t.cost_     = std::stod(j.value("cost", "0"));
+        t.fee_      = std::stod(j.value("fee", "0"));
+        t.vol_      = std::stod(j.value("vol", "0"));
+        t.margin_   = std::stod(j.value("margin", "0"));
+        t.misc_     = j.value("misc", "");
+        if (j.contains("type"))      t.type_      = side_from_string(j["type"].get<std::string>());
+        if (j.contains("ordertype")) t.ordertype_ = order_type_from_string(j["ordertype"].get<std::string>());
+        if (j.contains("posstatus")) t.posstatus_ = j["posstatus"].get<std::string>();
+        if (j.contains("cprice"))    t.cprice_    = std::stod(j["cprice"].get<std::string>());
+        if (j.contains("ccost"))     t.ccost_     = std::stod(j["ccost"].get<std::string>());
+        if (j.contains("cfee"))      t.cfee_      = std::stod(j["cfee"].get<std::string>());
+        if (j.contains("cvol"))      t.cvol_      = std::stod(j["cvol"].get<std::string>());
+        if (j.contains("cmargin"))   t.cmargin_   = std::stod(j["cmargin"].get<std::string>());
+        if (j.contains("net"))       t.net_       = std::stod(j["net"].get<std::string>());
         return t;
     }
 };
@@ -504,30 +556,42 @@ public:
 // ============================================================
 
 class LedgerEntry {
+private:
+    std::string txid_;
+    std::string refid_;
+    double      time_{0.0};
+    std::string type_;
+    std::string subtype_;
+    std::string aclass_;
+    std::string asset_;
+    double      amount_{0.0};
+    double      fee_{0.0};
+    double      balance_{0.0};
+
 public:
-    std::string txid;
-    std::string refid;
-    double      time{0.0};
-    std::string type;
-    std::string subtype;
-    std::string aclass;
-    std::string asset;
-    double      amount{0.0};
-    double      fee{0.0};
-    double      balance{0.0};
+    const std::string& txid()    const { return txid_; }
+    const std::string& refid()   const { return refid_; }
+    double             time()    const { return time_; }
+    const std::string& type()    const { return type_; }
+    const std::string& subtype() const { return subtype_; }
+    const std::string& aclass()  const { return aclass_; }
+    const std::string& asset()   const { return asset_; }
+    double             amount()  const { return amount_; }
+    double             fee()     const { return fee_; }
+    double             balance() const { return balance_; }
 
     static LedgerEntry from_json(const json& j, const std::string& id = "") {
         LedgerEntry e;
-        e.txid    = id;
-        e.refid   = j.value("refid", "");
-        e.time    = j.value("time", 0.0);
-        e.type    = j.value("type", "");
-        e.subtype = j.value("subtype", "");
-        e.aclass  = j.value("aclass", "");
-        e.asset   = j.value("asset", "");
-        e.amount  = std::stod(j.value("amount", "0"));
-        e.fee     = std::stod(j.value("fee", "0"));
-        e.balance = std::stod(j.value("balance", "0"));
+        e.txid_    = id;
+        e.refid_   = j.value("refid", "");
+        e.time_    = j.value("time", 0.0);
+        e.type_    = j.value("type", "");
+        e.subtype_ = j.value("subtype", "");
+        e.aclass_  = j.value("aclass", "");
+        e.asset_   = j.value("asset", "");
+        e.amount_  = std::stod(j.value("amount", "0"));
+        e.fee_     = std::stod(j.value("fee", "0"));
+        e.balance_ = std::stod(j.value("balance", "0"));
         return e;
     }
 };
