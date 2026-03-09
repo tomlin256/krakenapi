@@ -32,13 +32,13 @@ void KrakenWsClient::init() {
 
     auto weak_self = std::weak_ptr<KrakenWsClient>(shared_from_this());
 
-    conn_->on_message([weak_self](const std::string& raw) {
+    conn_->set_on_message([weak_self](const std::string& raw) {
         if (auto self = weak_self.lock()) self->on_raw_message(raw);
     });
-    conn_->on_open([weak_self]() {
+    conn_->set_on_open([weak_self]() {
         if (auto self = weak_self.lock()) self->on_open_handler();
     });
-    conn_->on_close([weak_self]() {
+    conn_->set_on_close([weak_self]() {
         if (auto self = weak_self.lock()) self->connected_.store(false);
     });
 }

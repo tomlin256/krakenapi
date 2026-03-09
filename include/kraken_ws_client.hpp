@@ -97,9 +97,9 @@ public:
     virtual void send(const std::string& msg) = 0;
 
     // Register callbacks – must be called before connect().
-    virtual void on_message(MessageCb cb) = 0;
-    virtual void on_open(OpenCb cb)       = 0;
-    virtual void on_close(CloseCb cb)     = 0;
+    virtual void set_on_message(MessageCb cb) = 0;
+    virtual void set_on_open(OpenCb cb)       = 0;
+    virtual void set_on_close(CloseCb cb)     = 0;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
