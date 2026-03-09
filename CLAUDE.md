@@ -120,9 +120,26 @@ Tests do **not** require network access or credentials — all I/O is mocked.
 
 | Namespace | Location | Contains |
 |---|---|---|
-| `kraken::` | `kraken_types.hpp` | Shared enums (`OrderType`, `Side`, `TimeInForce`, …), shared structs (`OrderParams`, `OrderInfo`, `TradeInfo`, `LedgerEntry`), generic envelope `RestResponse<T>`, `parse_rest_response<T>()` |
-| `kraken::rest::` | `kraken_rest_api.hpp`, `kraken_rest_client.hpp` | All REST request/response types, `Credentials`, `HttpRequest`, `KrakenRestClient` |
-| `kraken::ws::` | `kraken_ws_api.hpp`, `kraken_ws_client.hpp`, `kraken_ix_ws_connection.hpp` | All WebSocket v2 request/response types, `KrakenWsClient`, `IWsConnection`, `IxWsConnection`, `SubscriptionHandle`, `WsResponse<T>` |
+| `kraken::` | `kraken_types.hpp` | Shared enums (`OrderType`, `Side`, `TimeInForce`, …), shared classes (`OrderParams`, `OrderInfo`, `TradeInfo`, `LedgerEntry`), response interfaces (`IApiResult`, `IRestResult`), generic envelope `RestResponse<T>`, `parse_rest_response<T>()` |
+| `kraken::rest::` | `kraken_rest_api.hpp`, `kraken_rest_client.hpp` | All REST request/response classes, `Credentials`, `HttpRequest`, `KrakenRestClient` |
+| `kraken::ws::` | `kraken_ws_api.hpp`, `kraken_ws_client.hpp`, `kraken_ix_ws_connection.hpp` | All WebSocket v2 request/response classes, WS interfaces (`IWsMessage`, `IWsMethodResponse`, `IWsPushMessage`), `KrakenWsClient`, `IWsConnection`, `IxWsConnection`, `SubscriptionHandle`, `WsResponse<T>` |
+
+---
+
+## Response interface hierarchy
+
+All response/result types are classes (not structs). The interface hierarchy is:
+
+```
+IApiResult                   (kraken_types.hpp, namespace kraken)
+├── IRestResult              (kraken_types.hpp) — all REST result types (T in RestResponse<T>)
+└── IWsMessage               (kraken_ws_api.hpp, namespace kraken::ws)
+    ├── IWsMethodResponse    — method-call responses (AddOrderResponse, PongMessage, …)
+    └── IWsPushMessage       — subscription push messages (TickerMessage, BookMessage, …)
+```
+
+These interfaces carry only a virtual destructor in Step 1. They are extension points for
+a future Step 2 that will add direct JSON access without copying fields.
 
 ---
 
@@ -143,7 +160,7 @@ All enums have free-function converters: `to_string(Enum)` and `foo_from_string(
 | `FeePreference` | `Base`, `Quote` |
 | `OrderStatus` | `PendingNew`, `New`, `PartiallyFilled`, `Filled`, `Canceled`, `Expired`, `Unknown` |
 
-### Core structs
+### Core classes
 
 | Struct | Key fields | Used for |
 |---|---|---|

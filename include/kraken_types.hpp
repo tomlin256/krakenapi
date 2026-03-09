@@ -36,6 +36,29 @@ namespace kraken {
 using json = nlohmann::json;
 
 // ============================================================
+// Response interfaces
+//
+// IApiResult  — base for all API result/response data types.
+// IRestResult — marker interface for top-level REST result types.
+//               Inherit this for every type that appears as T in
+//               RestResponse<T>.
+//
+// These interfaces carry no behaviour in Step 1. They exist to
+// establish the type hierarchy and to act as extension points for
+// Step 2, where direct JSON access will be added.
+// ============================================================
+
+class IApiResult {
+public:
+    virtual ~IApiResult() = default;
+};
+
+class IRestResult : public IApiResult {
+public:
+    virtual ~IRestResult() = default;
+};
+
+// ============================================================
 // Enumerations + string conversion helpers
 // ============================================================
 
@@ -187,7 +210,8 @@ inline OrderStatus order_status_from_string(const std::string& s) {
 // ============================================================
 
 // Trigger section for stop/trailing order types.
-struct Triggers {
+class Triggers {
+public:
     double price{0.0};
     std::optional<TriggerReference> reference;  // default: last
     std::optional<PriceType>        price_type; // default: static
@@ -209,7 +233,8 @@ struct Triggers {
 };
 
 // Conditional secondary (OTO) close order.
-struct Conditional {
+class Conditional {
+public:
     std::optional<OrderType> order_type;
     std::optional<double>    limit_price;
     std::optional<PriceType> limit_price_type;
@@ -243,7 +268,8 @@ struct Conditional {
 // protocol-specific request wrappers.
 // ============================================================
 
-struct OrderParams {
+class OrderParams {
+public:
     // Required
     OrderType   order_type{OrderType::Market};
     Side        side{Side::Buy};
@@ -346,7 +372,8 @@ struct OrderParams {
 // and by add-order responses (both REST and WS executions feed).
 // ============================================================
 
-struct OrderDescription {
+class OrderDescription {
+public:
     std::string              pair;
     Side                     side{Side::Buy};
     OrderType                order_type{OrderType::Market};
@@ -374,7 +401,8 @@ struct OrderDescription {
 // Full order info – used by GetOpenOrders, GetClosedOrders, QueryOrdersInfo
 // ============================================================
 
-struct OrderInfo {
+class OrderInfo {
+public:
     std::string       txid;           // set by caller from map key
     OrderStatus       status{OrderStatus::Unknown};
     OrderDescription  descr;
@@ -424,7 +452,8 @@ struct OrderInfo {
 // Trade info – used by GetTradesHistory, QueryTradesInfo
 // ============================================================
 
-struct TradeInfo {
+class TradeInfo {
+public:
     std::string txid;
     std::string ordertxid;
     std::string pair;
@@ -474,7 +503,8 @@ struct TradeInfo {
 // Ledger entry
 // ============================================================
 
-struct LedgerEntry {
+class LedgerEntry {
+public:
     std::string txid;
     std::string refid;
     double      time{0.0};

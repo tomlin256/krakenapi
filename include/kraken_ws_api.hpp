@@ -21,12 +21,40 @@ namespace kraken::ws {
 
 using json = nlohmann::json;
 
+// ============================================================
+// WebSocket response interfaces
+//
+// IWsMessage        — base for all WebSocket message types.
+// IWsMethodResponse — for method-call responses (one response per request,
+//                     e.g. AddOrderResponse, PongMessage).
+// IWsPushMessage    — for subscription push messages (continuous stream,
+//                     e.g. TickerMessage, BookMessage).
+//
+// All three are extension points for Step 2, where direct JSON access
+// will be added.  In Step 1 they serve as pure marker interfaces.
+// ============================================================
+
+class IWsMessage : public kraken::IApiResult {
+public:
+    virtual ~IWsMessage() = default;
+};
+
+class IWsMethodResponse : public IWsMessage {
+public:
+    virtual ~IWsMethodResponse() = default;
+};
+
+class IWsPushMessage : public IWsMessage {
+public:
+    virtual ~IWsPushMessage() = default;
+};
 
 // ============================================================
 // Authentication credentials
 // ============================================================
 
-struct WsCredentials {
+class WsCredentials {
+public:
     std::string token;
 
     json to_json() const {
@@ -40,7 +68,8 @@ struct WsCredentials {
 // Common sub-objects
 // ============================================================
 
-struct Triggers {
+class Triggers {
+public:
     double price{0.0};
     std::optional<TriggerReference> reference;   // default: last
     std::optional<PriceType>        price_type;  // default: static
@@ -62,7 +91,8 @@ struct Triggers {
     }
 };
 
-struct Conditional {
+class Conditional {
+public:
     std::optional<OrderType> order_type;
     std::optional<double>    limit_price;
     std::optional<PriceType> limit_price_type;
@@ -96,29 +126,31 @@ struct Conditional {
 
 // Method-call requests: declares the expected single response type.
 template<typename R>
-struct TypedWsRequest {
+class TypedWsRequest {
+public:
     using response_type = R;
 };
 
 // Forward declarations of all response types so that TypedWsRequest<Resp>
-// can be used as a base class before the response struct is fully defined.
+// can be used as a base class before the response class is fully defined.
 // (TypedWsRequest<R> only stores 'using response_type = R', so R need not
 // be complete – but the name must be visible in scope.)
-struct AddOrderResponse;
-struct AmendOrderResponse;
-struct CancelOrderResponse;
-struct CancelAllResponse;
-struct CancelOnDisconnectResponse;
-struct BatchAddResponse;
-struct BatchCancelResponse;
-struct EditOrderResponse;
-struct PongMessage;
+class AddOrderResponse;
+class AmendOrderResponse;
+class CancelOrderResponse;
+class CancelAllResponse;
+class CancelOnDisconnectResponse;
+class BatchAddResponse;
+class BatchCancelResponse;
+class EditOrderResponse;
+class PongMessage;
 
 // ============================================================
 // Response base
 // ============================================================
 
-struct BaseResponse {
+class BaseResponse : public IWsMethodResponse {
+public:
     std::string              method;
     bool                     success{false};
     std::optional<int64_t>   req_id;
@@ -140,7 +172,8 @@ struct BaseResponse {
 //  1. ADD ORDER
 // ============================================================
 
-struct AddOrderRequest : TypedWsRequest<AddOrderResponse> {
+class AddOrderRequest : public TypedWsRequest<AddOrderResponse> {
+public:
     // Required
     OrderType   order_type;
     Side        side;
@@ -212,7 +245,8 @@ struct AddOrderRequest : TypedWsRequest<AddOrderResponse> {
     }
 };
 
-struct AddOrderResponse : BaseResponse {
+class AddOrderResponse : public BaseResponse {
+public:
     std::optional<std::string> order_id;
     std::optional<std::string> cl_ord_id;
     std::optional<int64_t>     order_userref;
@@ -236,7 +270,8 @@ struct AddOrderResponse : BaseResponse {
 //  2. AMEND ORDER
 // ============================================================
 
-struct AmendOrderRequest : TypedWsRequest<AmendOrderResponse> {
+class AmendOrderRequest : public TypedWsRequest<AmendOrderResponse> {
+public:
     std::string token;
     // Must provide one of:
     std::optional<std::string> order_id;
@@ -272,7 +307,8 @@ struct AmendOrderRequest : TypedWsRequest<AmendOrderResponse> {
     }
 };
 
-struct AmendOrderResponse : BaseResponse {
+class AmendOrderResponse : public BaseResponse {
+public:
     std::optional<std::string> order_id;
     std::optional<std::string> cl_ord_id;
     std::optional<std::vector<std::string>> warnings;
@@ -294,7 +330,8 @@ struct AmendOrderResponse : BaseResponse {
 //  3. CANCEL ORDER
 // ============================================================
 
-struct CancelOrderRequest : TypedWsRequest<CancelOrderResponse> {
+class CancelOrderRequest : public TypedWsRequest<CancelOrderResponse> {
+public:
     std::string token;
     // Provide one or more order ids OR cl_ord_ids
     std::optional<std::vector<std::string>> order_ids;
@@ -315,13 +352,15 @@ struct CancelOrderRequest : TypedWsRequest<CancelOrderResponse> {
     }
 };
 
-struct CancelOrderResult {
+class CancelOrderResult {
+public:
     std::string order_id;
     bool        success{false};
     std::optional<std::string> error;
 };
 
-struct CancelOrderResponse : BaseResponse {
+class CancelOrderResponse : public BaseResponse {
+public:
     std::optional<std::vector<CancelOrderResult>> orders_cancelled;
 
     static CancelOrderResponse from_json(const json& j) {
@@ -349,7 +388,8 @@ struct CancelOrderResponse : BaseResponse {
 //  4. CANCEL ALL
 // ============================================================
 
-struct CancelAllRequest : TypedWsRequest<CancelAllResponse> {
+class CancelAllRequest : public TypedWsRequest<CancelAllResponse> {
+public:
     std::string token;
     std::optional<int64_t> req_id;
 
@@ -362,7 +402,8 @@ struct CancelAllRequest : TypedWsRequest<CancelAllResponse> {
     }
 };
 
-struct CancelAllResponse : BaseResponse {
+class CancelAllResponse : public BaseResponse {
+public:
     std::optional<int32_t> count;  // number of orders cancelled
 
     static CancelAllResponse from_json(const json& j) {
@@ -380,7 +421,8 @@ struct CancelAllResponse : BaseResponse {
 //  5. CANCEL ON DISCONNECT (cancel_after)
 // ============================================================
 
-struct CancelOnDisconnectRequest : TypedWsRequest<CancelOnDisconnectResponse> {
+class CancelOnDisconnectRequest : public TypedWsRequest<CancelOnDisconnectResponse> {
+public:
     std::string token;
     int32_t     timeout{60};  // seconds; 0 = disable
     std::optional<int64_t> req_id;
@@ -395,7 +437,8 @@ struct CancelOnDisconnectRequest : TypedWsRequest<CancelOnDisconnectResponse> {
     }
 };
 
-struct CancelOnDisconnectResponse : BaseResponse {
+class CancelOnDisconnectResponse : public BaseResponse {
+public:
     std::optional<std::string> current_time;
     std::optional<std::string> trigger_time;
 
@@ -415,7 +458,8 @@ struct CancelOnDisconnectResponse : BaseResponse {
 //  6. BATCH ADD
 // ============================================================
 
-struct BatchAddRequest : TypedWsRequest<BatchAddResponse> {
+class BatchAddRequest : public TypedWsRequest<BatchAddResponse> {
+public:
     std::string token;
     std::string symbol;
     std::optional<std::string> deadline;
@@ -443,7 +487,8 @@ struct BatchAddRequest : TypedWsRequest<BatchAddResponse> {
     }
 };
 
-struct BatchAddResult {
+class BatchAddResult {
+public:
     std::string              order_id;
     bool                     success{false};
     std::optional<std::string> cl_ord_id;
@@ -452,7 +497,8 @@ struct BatchAddResult {
     std::optional<std::vector<std::string>> warnings;
 };
 
-struct BatchAddResponse : BaseResponse {
+class BatchAddResponse : public BaseResponse {
+public:
     std::optional<std::vector<BatchAddResult>> orders;
 
     static BatchAddResponse from_json(const json& j) {
@@ -483,7 +529,8 @@ struct BatchAddResponse : BaseResponse {
 //  7. BATCH CANCEL
 // ============================================================
 
-struct BatchCancelRequest : TypedWsRequest<BatchCancelResponse> {
+class BatchCancelRequest : public TypedWsRequest<BatchCancelResponse> {
+public:
     std::string token;
     std::optional<std::vector<std::string>> order_ids;
     std::optional<std::vector<std::string>> cl_ord_ids;
@@ -503,7 +550,8 @@ struct BatchCancelRequest : TypedWsRequest<BatchCancelResponse> {
     }
 };
 
-struct BatchCancelResponse : BaseResponse {
+class BatchCancelResponse : public BaseResponse {
+public:
     std::optional<int32_t> orders_cancelled;
 
     static BatchCancelResponse from_json(const json& j) {
@@ -521,7 +569,8 @@ struct BatchCancelResponse : BaseResponse {
 //  8. EDIT ORDER
 // ============================================================
 
-struct EditOrderRequest : TypedWsRequest<EditOrderResponse> {
+class EditOrderRequest : public TypedWsRequest<EditOrderResponse> {
+public:
     std::string token;
     // Must provide one of:
     std::optional<std::string> order_id;
@@ -557,7 +606,8 @@ struct EditOrderRequest : TypedWsRequest<EditOrderResponse> {
     }
 };
 
-struct EditOrderResponse : BaseResponse {
+class EditOrderResponse : public BaseResponse {
+public:
     std::optional<std::string> order_id;
     std::optional<std::string> original_order_id;
     std::optional<std::string> cl_ord_id;
@@ -606,7 +656,8 @@ inline std::string to_string(SubscribeChannel ch) {
     throw std::invalid_argument("Unknown channel");
 }
 
-struct SubscribeRequest {
+class SubscribeRequest {
+public:
     SubscribeChannel channel;
     std::optional<std::vector<std::string>> symbols;  // for market data channels
     std::optional<std::string> token;   // required for authenticated channels
@@ -634,7 +685,8 @@ struct SubscribeRequest {
     }
 };
 
-struct UnsubscribeRequest {
+class UnsubscribeRequest {
+public:
     SubscribeChannel channel;
     std::optional<std::vector<std::string>> symbols;
     std::optional<std::string> token;
@@ -654,7 +706,8 @@ struct UnsubscribeRequest {
     }
 };
 
-struct SubscribeResponse : BaseResponse {
+class SubscribeResponse : public BaseResponse {
+public:
     std::optional<std::string> channel;
     std::optional<std::string> symbol;
 
@@ -682,7 +735,8 @@ struct SubscribeResponse : BaseResponse {
 // ============================================================
 
 template<typename PushMsg, SubscribeChannel Ch>
-struct TypedSubscribeRequest : SubscribeRequest {
+class TypedSubscribeRequest : public SubscribeRequest {
+public:
     using push_type     = PushMsg;
     using response_type = SubscribeResponse;
     static constexpr SubscribeChannel channel_value = Ch;
@@ -693,7 +747,8 @@ struct TypedSubscribeRequest : SubscribeRequest {
 //  10. MARKET DATA - Ticker (Level 1)
 // ============================================================
 
-struct TickerData {
+class TickerData {
+public:
     std::string symbol;
     double      bid{0.0};
     double      bid_qty{0.0};
@@ -725,7 +780,8 @@ struct TickerData {
     }
 };
 
-struct TickerMessage {
+class TickerMessage : public IWsPushMessage {
+public:
     std::string channel;
     std::string type;   // "snapshot" | "update"
     std::vector<TickerData> data;
@@ -746,12 +802,14 @@ struct TickerMessage {
 //  11. MARKET DATA - Book (Level 2)
 // ============================================================
 
-struct BookEntry {
+class BookEntry {
+public:
     double price{0.0};
     double qty{0.0};
 };
 
-struct BookData {
+class BookData {
+public:
     std::string             symbol;
     std::vector<BookEntry>  bids;
     std::vector<BookEntry>  asks;
@@ -773,7 +831,8 @@ struct BookData {
     }
 };
 
-struct BookMessage {
+class BookMessage : public IWsPushMessage {
+public:
     std::string channel;
     std::string type;   // "snapshot" | "update"
     std::vector<BookData> data;
@@ -794,7 +853,8 @@ struct BookMessage {
 //  12. MARKET DATA - Trades
 // ============================================================
 
-struct TradeData {
+class TradeData {
+public:
     std::string symbol;
     double      price{0.0};
     double      qty{0.0};
@@ -816,7 +876,8 @@ struct TradeData {
     }
 };
 
-struct TradeMessage {
+class TradeMessage : public IWsPushMessage {
+public:
     std::string channel;
     std::string type;
     std::vector<TradeData> data;
@@ -837,7 +898,8 @@ struct TradeMessage {
 //  13. MARKET DATA - OHLC / Candles
 // ============================================================
 
-struct OHLCData {
+class OHLCData {
+public:
     std::string symbol;
     std::string timestamp;  // candle open time
     double      open{0.0};
@@ -865,7 +927,8 @@ struct OHLCData {
     }
 };
 
-struct OHLCMessage {
+class OHLCMessage : public IWsPushMessage {
+public:
     std::string channel;
     std::string type;
     std::vector<OHLCData> data;
@@ -886,7 +949,8 @@ struct OHLCMessage {
 //  14. MARKET DATA - Instrument
 // ============================================================
 
-struct InstrumentInfo {
+class InstrumentInfo {
+public:
     std::string symbol;
     std::string base;
     std::string quote;
@@ -916,7 +980,8 @@ struct InstrumentInfo {
     }
 };
 
-struct InstrumentMessage {
+class InstrumentMessage : public IWsPushMessage {
+public:
     std::string channel;
     std::string type;
     std::vector<InstrumentInfo> data;
@@ -937,7 +1002,8 @@ struct InstrumentMessage {
 //  15. USER DATA - Executions
 // ============================================================
 
-struct ExecutionData {
+class ExecutionData {
+public:
     std::string exec_id;
     std::string exec_type;        // "filled", "canceled", "pending_new", etc.
     std::string order_id;
@@ -993,7 +1059,8 @@ struct ExecutionData {
     }
 };
 
-struct ExecutionsMessage {
+class ExecutionsMessage : public IWsPushMessage {
+public:
     std::string channel;
     std::string type;
     std::vector<ExecutionData> data;
@@ -1014,7 +1081,8 @@ struct ExecutionsMessage {
 //  16. USER DATA - Balances
 // ============================================================
 
-struct BalanceData {
+class BalanceData {
+public:
     std::string asset;
     double      balance{0.0};
     double      hold_trade{0.0};
@@ -1028,7 +1096,8 @@ struct BalanceData {
     }
 };
 
-struct BalancesMessage {
+class BalancesMessage : public IWsPushMessage {
+public:
     std::string channel;
     std::string type;
     std::vector<BalanceData> data;
@@ -1049,7 +1118,8 @@ struct BalancesMessage {
 //  17. ADMIN - Status / Heartbeat / Ping
 // ============================================================
 
-struct StatusMessage {
+class StatusMessage : public IWsPushMessage {
+public:
     std::string channel;
     std::string type;
     std::string system;    // "online" | "maintenance"
@@ -1068,7 +1138,8 @@ struct StatusMessage {
     }
 };
 
-struct PingRequest : TypedWsRequest<PongMessage> {
+class PingRequest : public TypedWsRequest<PongMessage> {
+public:
     std::optional<int64_t> req_id;
 
     json to_json() const {
@@ -1079,7 +1150,8 @@ struct PingRequest : TypedWsRequest<PongMessage> {
     }
 };
 
-struct PongMessage {
+class PongMessage : public IWsMethodResponse {
+public:
     std::string method;  // "pong"
     std::optional<int64_t> req_id;
 

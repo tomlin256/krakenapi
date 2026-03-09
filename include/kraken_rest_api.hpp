@@ -161,7 +161,8 @@ inline uint64_t make_nonce() {
 // Auth credential bundle
 // ============================================================
 
-struct Credentials {
+class Credentials {
+public:
     std::string api_key;     // public key  → API-Key header
     std::string api_secret;  // base64-encoded private key → used for signing
 
@@ -213,7 +214,8 @@ struct Credentials {
 // ============================================================
 
 // A prepared HTTP request ready for the transport layer.
-struct HttpRequest {
+class HttpRequest {
+public:
     enum class Method { GET, POST };
     Method      method{Method::GET};
     std::string path;       // e.g. "/0/public/Ticker"
@@ -222,14 +224,16 @@ struct HttpRequest {
     std::map<std::string, std::string> headers;
 };
 
-struct PublicRequest {
+class PublicRequest {
+public:
     virtual ~PublicRequest() = default;
 
     // Build an HttpRequest (GET with query string).
     virtual HttpRequest build() const = 0;
 };
 
-struct PrivateRequest {
+class PrivateRequest {
+public:
     virtual ~PrivateRequest() = default;
 
     // Build a signed HttpRequest.
@@ -259,52 +263,54 @@ protected:
 
 // Typed bases — link each request type to its response type at compile time.
 template<typename R>
-struct TypedPublicRequest : PublicRequest {
+class TypedPublicRequest : public PublicRequest {
+public:
     using response_type = R;
 };
 
 template<typename R>
-struct TypedPrivateRequest : PrivateRequest {
+class TypedPrivateRequest : public PrivateRequest {
+public:
     using response_type = R;
 };
 
 // Forward declarations of all response types so that TypedPublicRequest<R> /
 // TypedPrivateRequest<R> base class instantiations compile before the response
-// structs are fully defined further down in this file.
-struct ServerTime;
-struct SystemStatus;
-struct AssetInfoResult;
-struct AssetPairsResult;
-struct TickerResult;
-struct OHLCResult;
-struct OrderBookResult;
-struct RecentTradesResult;
-struct AccountBalanceResult;
-struct ExtendedBalanceResult;
-struct TradeBalance;
-struct OpenOrdersResult;
-struct ClosedOrdersResult;
-struct QueryOrdersResultWrapper;
-struct TradesHistoryResult;
-struct QueryTradesResultWrapper;
-struct OpenPositionsResult;
-struct LedgersResult;
-struct QueryLedgersResultWrapper;
-struct AddOrderResult;
-struct AddOrderBatchResult;
-struct EditOrderResult;
-struct AmendOrderResult;
-struct CancelOrderResult;
-struct CancelAllResult;
-struct CancelAllAfterResult;
-struct CancelOrderBatchResult;
-struct WebSocketsTokenResult;
-struct DepositMethodsResult;
-struct DepositAddressesResult;
-struct WithdrawResult;
-struct CancelWithdrawalResult;
-struct CreateSubaccountResult;
-struct EarnBoolResult;
+// classes are fully defined further down in this file.
+class ServerTime;
+class SystemStatus;
+class AssetInfoResult;
+class AssetPairsResult;
+class TickerResult;
+class OHLCResult;
+class OrderBookResult;
+class RecentTradesResult;
+class AccountBalanceResult;
+class ExtendedBalanceResult;
+class TradeBalance;
+class OpenOrdersResult;
+class ClosedOrdersResult;
+class QueryOrdersResultWrapper;
+class TradesHistoryResult;
+class QueryTradesResultWrapper;
+class OpenPositionsResult;
+class LedgersResult;
+class QueryLedgersResultWrapper;
+class AddOrderResult;
+class AddOrderBatchResult;
+class EditOrderResult;
+class AmendOrderResult;
+class CancelOrderResult;
+class CancelAllResult;
+class CancelAllAfterResult;
+class CancelOrderBatchResult;
+class WebSocketsTokenResult;
+class DepositMethodsResult;
+class DepositAddressesResult;
+class WithdrawResult;
+class CancelWithdrawalResult;
+class CreateSubaccountResult;
+class EarnBoolResult;
 
 // ============================================================
 // ============================================================
@@ -314,7 +320,8 @@ struct EarnBoolResult;
 
 // --- GET /0/public/Time -------------------------------------------
 
-struct GetServerTimeRequest : TypedPublicRequest<ServerTime> {
+class GetServerTimeRequest : public TypedPublicRequest<ServerTime> {
+public:
     HttpRequest build() const override {
         HttpRequest r;
         r.method = HttpRequest::Method::GET;
@@ -323,7 +330,8 @@ struct GetServerTimeRequest : TypedPublicRequest<ServerTime> {
     }
 };
 
-struct ServerTime {
+class ServerTime : public kraken::IRestResult {
+public:
     int64_t     unixtime{0};
     std::string rfc1123;
     static ServerTime from_json(const json& j) {
@@ -336,7 +344,8 @@ struct ServerTime {
 
 // --- GET /0/public/SystemStatus -----------------------------------
 
-struct GetSystemStatusRequest : TypedPublicRequest<SystemStatus> {
+class GetSystemStatusRequest : public TypedPublicRequest<SystemStatus> {
+public:
     HttpRequest build() const override {
         HttpRequest r;
         r.method = HttpRequest::Method::GET;
@@ -345,7 +354,8 @@ struct GetSystemStatusRequest : TypedPublicRequest<SystemStatus> {
     }
 };
 
-struct SystemStatus {
+class SystemStatus : public kraken::IRestResult {
+public:
     std::string status;    // "online" | "cancel_only" | "post_only" | "limit_only" | "maintenance"
     std::string timestamp; // RFC3339
     static SystemStatus from_json(const json& j) {
@@ -358,7 +368,8 @@ struct SystemStatus {
 
 // --- GET /0/public/Assets -----------------------------------------
 
-struct GetAssetInfoRequest : TypedPublicRequest<AssetInfoResult> {
+class GetAssetInfoRequest : public TypedPublicRequest<AssetInfoResult> {
+public:
     std::optional<std::vector<std::string>> assets;  // omit = all
     std::optional<std::string>              aclass;  // default "currency"
 
@@ -380,7 +391,8 @@ struct GetAssetInfoRequest : TypedPublicRequest<AssetInfoResult> {
     }
 };
 
-struct AssetInfo {
+class AssetInfo {
+public:
     std::string aclass;
     std::string altname;
     int         decimals{0};
@@ -395,7 +407,8 @@ struct AssetInfo {
     }
 };
 
-struct AssetInfoResult {
+class AssetInfoResult : public kraken::IRestResult {
+public:
     std::map<std::string, AssetInfo> assets; // keyed by Kraken asset name
     static AssetInfoResult from_json(const json& j) {
         AssetInfoResult r;
@@ -407,7 +420,8 @@ struct AssetInfoResult {
 
 // --- GET /0/public/AssetPairs -------------------------------------
 
-struct GetAssetPairsRequest : TypedPublicRequest<AssetPairsResult> {
+class GetAssetPairsRequest : public TypedPublicRequest<AssetPairsResult> {
+public:
     std::optional<std::vector<std::string>> pairs;
     std::optional<std::string>              info;  // "info"|"leverage"|"fees"|"margin"
 
@@ -426,7 +440,8 @@ struct GetAssetPairsRequest : TypedPublicRequest<AssetPairsResult> {
     }
 };
 
-struct AssetPairInfo {
+class AssetPairInfo {
+public:
     std::string altname;
     std::string wsname;
     std::string base;
@@ -452,7 +467,8 @@ struct AssetPairInfo {
     }
 };
 
-struct AssetPairsResult {
+class AssetPairsResult : public kraken::IRestResult {
+public:
     std::map<std::string, AssetPairInfo> pairs;
     static AssetPairsResult from_json(const json& j) {
         AssetPairsResult r;
@@ -464,7 +480,8 @@ struct AssetPairsResult {
 
 // --- GET /0/public/Ticker -----------------------------------------
 
-struct GetTickerRequest : TypedPublicRequest<TickerResult> {
+class GetTickerRequest : public TypedPublicRequest<TickerResult> {
+public:
     std::optional<std::vector<std::string>> pairs;
 
     HttpRequest build() const override {
@@ -480,7 +497,8 @@ struct GetTickerRequest : TypedPublicRequest<TickerResult> {
 };
 
 // Ticker fields are arrays: [value, 24h-value] or [price, wholeLot, lot]
-struct TickerInfo {
+class TickerInfo {
+public:
     double ask{0.0};
     double bid{0.0};
     double last{0.0};
@@ -512,7 +530,8 @@ struct TickerInfo {
     }
 };
 
-struct TickerResult {
+class TickerResult : public kraken::IRestResult {
+public:
     std::map<std::string, TickerInfo> tickers;
     static TickerResult from_json(const json& j) {
         TickerResult r;
@@ -524,7 +543,8 @@ struct TickerResult {
 
 // --- GET /0/public/OHLC -------------------------------------------
 
-struct GetOHLCRequest : TypedPublicRequest<OHLCResult> {
+class GetOHLCRequest : public TypedPublicRequest<OHLCResult> {
+public:
     std::string pair;
     std::optional<int32_t>  interval; // minutes: 1,5,15,30,60,240,1440,10080,21600
     std::optional<int64_t>  since;    // unix timestamp
@@ -540,7 +560,8 @@ struct GetOHLCRequest : TypedPublicRequest<OHLCResult> {
     }
 };
 
-struct OHLCCandle {
+class OHLCCandle {
+public:
     int64_t time{0};
     double  open{0.0};
     double  high{0.0};
@@ -551,7 +572,8 @@ struct OHLCCandle {
     int64_t count{0};
 };
 
-struct OHLCResult {
+class OHLCResult : public kraken::IRestResult {
+public:
     std::string              pair;
     std::vector<OHLCCandle>  candles;
     int64_t                  last{0};
@@ -580,7 +602,8 @@ struct OHLCResult {
 
 // --- GET /0/public/Depth ------------------------------------------
 
-struct GetOrderBookRequest : TypedPublicRequest<OrderBookResult> {
+class GetOrderBookRequest : public TypedPublicRequest<OrderBookResult> {
+public:
     std::string pair;
     std::optional<int32_t> count; // max 500
 
@@ -594,9 +617,10 @@ struct GetOrderBookRequest : TypedPublicRequest<OrderBookResult> {
     }
 };
 
-struct RestBookEntry { double price{0.0}; double volume{0.0}; int64_t timestamp{0}; };
+class RestBookEntry { public: double price{0.0}; double volume{0.0}; int64_t timestamp{0}; };
 
-struct OrderBookResult {
+class OrderBookResult : public kraken::IRestResult {
+public:
     std::string                 pair;
     std::vector<RestBookEntry>  asks;
     std::vector<RestBookEntry>  bids;
@@ -622,7 +646,8 @@ struct OrderBookResult {
 
 // --- GET /0/public/Trades -----------------------------------------
 
-struct GetRecentTradesRequest : TypedPublicRequest<RecentTradesResult> {
+class GetRecentTradesRequest : public TypedPublicRequest<RecentTradesResult> {
+public:
     std::string pair;
     std::optional<int64_t>  since;
     std::optional<int32_t>  count;
@@ -638,7 +663,8 @@ struct GetRecentTradesRequest : TypedPublicRequest<RecentTradesResult> {
     }
 };
 
-struct PublicTrade {
+class PublicTrade {
+public:
     double      price{0.0};
     double      volume{0.0};
     double      time{0.0};
@@ -647,7 +673,8 @@ struct PublicTrade {
     std::string misc;
 };
 
-struct RecentTradesResult {
+class RecentTradesResult : public kraken::IRestResult {
+public:
     std::string              pair;
     std::vector<PublicTrade> trades;
     std::string              last;  // id for pagination
@@ -680,13 +707,15 @@ struct RecentTradesResult {
 
 // --- POST /0/private/Balance --------------------------------------
 
-struct GetAccountBalanceRequest : TypedPrivateRequest<AccountBalanceResult> {
+class GetAccountBalanceRequest : public TypedPrivateRequest<AccountBalanceResult> {
+public:
     HttpRequest build(const Credentials& creds) const override {
         return make_private_request("/0/private/Balance", {}, creds);
     }
 };
 
-struct AccountBalanceResult {
+class AccountBalanceResult : public kraken::IRestResult {
+public:
     std::map<std::string, double> balances; // asset -> balance
     static AccountBalanceResult from_json(const json& j) {
         AccountBalanceResult r;
@@ -698,20 +727,23 @@ struct AccountBalanceResult {
 
 // --- POST /0/private/BalanceEx ------------------------------------
 
-struct GetExtendedBalanceRequest : TypedPrivateRequest<ExtendedBalanceResult> {
+class GetExtendedBalanceRequest : public TypedPrivateRequest<ExtendedBalanceResult> {
+public:
     HttpRequest build(const Credentials& creds) const override {
         return make_private_request("/0/private/BalanceEx", {}, creds);
     }
 };
 
-struct ExtendedBalance {
+class ExtendedBalance {
+public:
     double balance{0.0};
     double hold_trade{0.0};
     double credit{0.0};
     double credit_used{0.0};
 };
 
-struct ExtendedBalanceResult {
+class ExtendedBalanceResult : public kraken::IRestResult {
+public:
     std::map<std::string, ExtendedBalance> balances;
     static ExtendedBalanceResult from_json(const json& j) {
         ExtendedBalanceResult r;
@@ -729,7 +761,8 @@ struct ExtendedBalanceResult {
 
 // --- POST /0/private/TradeBalance ---------------------------------
 
-struct GetTradeBalanceRequest : TypedPrivateRequest<TradeBalance> {
+class GetTradeBalanceRequest : public TypedPrivateRequest<TradeBalance> {
+public:
     std::optional<std::string> asset; // base asset (default "ZUSD")
 
     HttpRequest build(const Credentials& creds) const override {
@@ -739,7 +772,8 @@ struct GetTradeBalanceRequest : TypedPrivateRequest<TradeBalance> {
     }
 };
 
-struct TradeBalance {
+class TradeBalance : public kraken::IRestResult {
+public:
     double eb{0.0};  // equivalent balance
     double tb{0.0};  // trade balance
     double m{0.0};   // margin amount of open positions
@@ -762,7 +796,8 @@ struct TradeBalance {
 
 // --- POST /0/private/OpenOrders -----------------------------------
 
-struct GetOpenOrdersRequest : TypedPrivateRequest<OpenOrdersResult> {
+class GetOpenOrdersRequest : public TypedPrivateRequest<OpenOrdersResult> {
+public:
     std::optional<bool>    trades;   // include trades in output
     std::optional<int64_t> userref;  // filter by userref
 
@@ -774,7 +809,8 @@ struct GetOpenOrdersRequest : TypedPrivateRequest<OpenOrdersResult> {
     }
 };
 
-struct OpenOrdersResult {
+class OpenOrdersResult : public kraken::IRestResult {
+public:
     std::map<std::string, kraken::OrderInfo> open;
     static OpenOrdersResult from_json(const json& j) {
         OpenOrdersResult r;
@@ -787,7 +823,8 @@ struct OpenOrdersResult {
 
 // --- POST /0/private/ClosedOrders ---------------------------------
 
-struct GetClosedOrdersRequest : TypedPrivateRequest<ClosedOrdersResult> {
+class GetClosedOrdersRequest : public TypedPrivateRequest<ClosedOrdersResult> {
+public:
     std::optional<bool>    trades;
     std::optional<int64_t> userref;
     std::optional<double>  start;
@@ -807,7 +844,8 @@ struct GetClosedOrdersRequest : TypedPrivateRequest<ClosedOrdersResult> {
     }
 };
 
-struct ClosedOrdersResult {
+class ClosedOrdersResult : public kraken::IRestResult {
+public:
     std::map<std::string, kraken::OrderInfo> closed;
     int32_t count{0};
     static ClosedOrdersResult from_json(const json& j) {
@@ -822,7 +860,8 @@ struct ClosedOrdersResult {
 
 // --- POST /0/private/QueryOrders ----------------------------------
 
-struct QueryOrdersRequest : TypedPrivateRequest<QueryOrdersResultWrapper> {
+class QueryOrdersRequest : public TypedPrivateRequest<QueryOrdersResultWrapper> {
+public:
     std::vector<std::string> txids;  // up to 50
     std::optional<bool>      trades;
 
@@ -838,7 +877,8 @@ struct QueryOrdersRequest : TypedPrivateRequest<QueryOrdersResultWrapper> {
 
 using QueryOrdersResult = std::map<std::string, kraken::OrderInfo>;
 
-struct QueryOrdersResultWrapper {
+class QueryOrdersResultWrapper : public kraken::IRestResult {
+public:
     std::map<std::string, kraken::OrderInfo> orders;
     static QueryOrdersResultWrapper from_json(const json& j) {
         QueryOrdersResultWrapper r;
@@ -850,7 +890,8 @@ struct QueryOrdersResultWrapper {
 
 // --- POST /0/private/TradesHistory --------------------------------
 
-struct GetTradesHistoryRequest : TypedPrivateRequest<TradesHistoryResult> {
+class GetTradesHistoryRequest : public TypedPrivateRequest<TradesHistoryResult> {
+public:
     std::optional<std::string> type;    // "all"|"any position"|"closed position"|"closing position"|"no position"
     std::optional<bool>        trades;
     std::optional<double>      start;
@@ -868,7 +909,8 @@ struct GetTradesHistoryRequest : TypedPrivateRequest<TradesHistoryResult> {
     }
 };
 
-struct TradesHistoryResult {
+class TradesHistoryResult : public kraken::IRestResult {
+public:
     std::map<std::string, kraken::TradeInfo> trades;
     int32_t count{0};
     static TradesHistoryResult from_json(const json& j) {
@@ -883,7 +925,8 @@ struct TradesHistoryResult {
 
 // --- POST /0/private/QueryTrades ----------------------------------
 
-struct QueryTradesRequest : TypedPrivateRequest<QueryTradesResultWrapper> {
+class QueryTradesRequest : public TypedPrivateRequest<QueryTradesResultWrapper> {
+public:
     std::vector<std::string> txids;
     std::optional<bool>      trades;
 
@@ -897,7 +940,8 @@ struct QueryTradesRequest : TypedPrivateRequest<QueryTradesResultWrapper> {
     }
 };
 
-struct QueryTradesResultWrapper {
+class QueryTradesResultWrapper : public kraken::IRestResult {
+public:
     std::map<std::string, kraken::TradeInfo> trades;
     static QueryTradesResultWrapper from_json(const json& j) {
         QueryTradesResultWrapper r;
@@ -909,7 +953,8 @@ struct QueryTradesResultWrapper {
 
 // --- POST /0/private/OpenPositions --------------------------------
 
-struct GetOpenPositionsRequest : TypedPrivateRequest<OpenPositionsResult> {
+class GetOpenPositionsRequest : public TypedPrivateRequest<OpenPositionsResult> {
+public:
     std::optional<std::vector<std::string>> txids;
     std::optional<bool> docalcs;
     std::optional<bool> consolidation;
@@ -927,7 +972,8 @@ struct GetOpenPositionsRequest : TypedPrivateRequest<OpenPositionsResult> {
     }
 };
 
-struct PositionInfo {
+class PositionInfo {
+public:
     std::string ordertxid;
     std::string pair;
     double      time{0.0};
@@ -967,7 +1013,8 @@ struct PositionInfo {
     }
 };
 
-struct OpenPositionsResult {
+class OpenPositionsResult : public kraken::IRestResult {
+public:
     std::map<std::string, PositionInfo> positions;
     static OpenPositionsResult from_json(const json& j) {
         OpenPositionsResult r;
@@ -979,7 +1026,8 @@ struct OpenPositionsResult {
 
 // --- POST /0/private/Ledgers / QueryLedgers -----------------------
 
-struct GetLedgersRequest : TypedPrivateRequest<LedgersResult> {
+class GetLedgersRequest : public TypedPrivateRequest<LedgersResult> {
+public:
     std::optional<std::vector<std::string>> assets;
     std::optional<std::string> aclass;
     std::optional<std::string> type;    // "all"|"trade"|"deposit"|"withdrawal"|...
@@ -1003,7 +1051,8 @@ struct GetLedgersRequest : TypedPrivateRequest<LedgersResult> {
     }
 };
 
-struct LedgersResult {
+class LedgersResult : public kraken::IRestResult {
+public:
     std::map<std::string, kraken::LedgerEntry> ledger;
     int32_t count{0};
     static LedgersResult from_json(const json& j) {
@@ -1016,7 +1065,8 @@ struct LedgersResult {
     }
 };
 
-struct QueryLedgersRequest : TypedPrivateRequest<QueryLedgersResultWrapper> {
+class QueryLedgersRequest : public TypedPrivateRequest<QueryLedgersResultWrapper> {
+public:
     std::vector<std::string> ids;
     std::optional<bool>      trades;
 
@@ -1030,7 +1080,8 @@ struct QueryLedgersRequest : TypedPrivateRequest<QueryLedgersResultWrapper> {
     }
 };
 
-struct QueryLedgersResultWrapper {
+class QueryLedgersResultWrapper : public kraken::IRestResult {
+public:
     std::map<std::string, kraken::LedgerEntry> ledger;
     static QueryLedgersResultWrapper from_json(const json& j) {
         QueryLedgersResultWrapper r;
@@ -1079,7 +1130,8 @@ inline void apply_order_params_to_rest(std::map<std::string, std::string>& p,
 
 // --- POST /0/private/AddOrder -------------------------------------
 
-struct AddOrderRequest : TypedPrivateRequest<AddOrderResult> {
+class AddOrderRequest : public TypedPrivateRequest<AddOrderResult> {
+public:
     kraken::OrderParams params;
 
     HttpRequest build(const Credentials& creds) const override {
@@ -1089,7 +1141,8 @@ struct AddOrderRequest : TypedPrivateRequest<AddOrderResult> {
     }
 };
 
-struct AddOrderResult {
+class AddOrderResult : public kraken::IRestResult {
+public:
     std::string              descr_order;  // human-readable description
     std::optional<std::string> descr_close;
     std::vector<std::string> txids;
@@ -1108,7 +1161,8 @@ struct AddOrderResult {
 
 // --- POST /0/private/AddOrderBatch --------------------------------
 
-struct AddOrderBatchRequest : TypedPrivateRequest<AddOrderBatchResult> {
+class AddOrderBatchRequest : public TypedPrivateRequest<AddOrderBatchResult> {
+public:
     std::string pair;
     std::vector<kraken::OrderParams> orders;
     std::optional<bool>   validate;
@@ -1151,13 +1205,15 @@ struct AddOrderBatchRequest : TypedPrivateRequest<AddOrderBatchResult> {
     }
 };
 
-struct BatchOrderResult {
+class BatchOrderResult {
+public:
     std::string              descr_order;
     std::vector<std::string> txids;
     std::optional<std::string> error;
 };
 
-struct AddOrderBatchResult {
+class AddOrderBatchResult : public kraken::IRestResult {
+public:
     std::vector<BatchOrderResult> orders;
     static AddOrderBatchResult from_json(const json& j) {
         AddOrderBatchResult r;
@@ -1176,7 +1232,8 @@ struct AddOrderBatchResult {
 
 // --- POST /0/private/EditOrder ------------------------------------
 
-struct EditOrderRequest : TypedPrivateRequest<EditOrderResult> {
+class EditOrderRequest : public TypedPrivateRequest<EditOrderResult> {
+public:
     std::string txid;     // original order txid
     std::string pair;
     std::optional<double>      volume;
@@ -1206,7 +1263,8 @@ struct EditOrderRequest : TypedPrivateRequest<EditOrderResult> {
     }
 };
 
-struct EditOrderResult {
+class EditOrderResult : public kraken::IRestResult {
+public:
     std::string              descr_order;
     std::vector<std::string> txids;
     std::optional<std::string> orig_txid;
@@ -1222,7 +1280,8 @@ struct EditOrderResult {
 
 // --- POST /0/private/AmendOrder -----------------------------------
 
-struct AmendOrderRequest : TypedPrivateRequest<AmendOrderResult> {
+class AmendOrderRequest : public TypedPrivateRequest<AmendOrderResult> {
+public:
     // Must provide one of:
     std::optional<std::string> txid;
     std::optional<std::string> cl_ord_id;
@@ -1246,16 +1305,20 @@ struct AmendOrderRequest : TypedPrivateRequest<AmendOrderResult> {
     }
 };
 
-struct AmendOrderResult {
+class AmendOrderResult : public kraken::IRestResult {
+public:
     std::string amend_id;
     static AmendOrderResult from_json(const json& j) {
-        return { j.value("amend_id", "") };
+        AmendOrderResult r;
+        r.amend_id = j.value("amend_id", "");
+        return r;
     }
 };
 
 // --- POST /0/private/CancelOrder ----------------------------------
 
-struct CancelOrderRequest : TypedPrivateRequest<CancelOrderResult> {
+class CancelOrderRequest : public TypedPrivateRequest<CancelOrderResult> {
+public:
     std::string txid;  // txid or cl_ord_id
 
     HttpRequest build(const Credentials& creds) const override {
@@ -1263,32 +1326,41 @@ struct CancelOrderRequest : TypedPrivateRequest<CancelOrderResult> {
     }
 };
 
-struct CancelOrderResult {
+class CancelOrderResult : public kraken::IRestResult {
+public:
     int32_t count{0};   // number of orders cancelled
     bool    pending{false};
     static CancelOrderResult from_json(const json& j) {
-        return { j.value("count", 0), j.value("pending", false) };
+        CancelOrderResult r;
+        r.count   = j.value("count", 0);
+        r.pending = j.value("pending", false);
+        return r;
     }
 };
 
 // --- POST /0/private/CancelAll ------------------------------------
 
-struct CancelAllOrdersRequest : TypedPrivateRequest<CancelAllResult> {
+class CancelAllOrdersRequest : public TypedPrivateRequest<CancelAllResult> {
+public:
     HttpRequest build(const Credentials& creds) const override {
         return make_private_request("/0/private/CancelAll", {}, creds);
     }
 };
 
-struct CancelAllResult {
+class CancelAllResult : public kraken::IRestResult {
+public:
     int32_t count{0};
     static CancelAllResult from_json(const json& j) {
-        return { j.value("count", 0) };
+        CancelAllResult r;
+        r.count = j.value("count", 0);
+        return r;
     }
 };
 
 // --- POST /0/private/CancelAllOrdersAfter -------------------------
 
-struct CancelAllOrdersAfterRequest : TypedPrivateRequest<CancelAllAfterResult> {
+class CancelAllOrdersAfterRequest : public TypedPrivateRequest<CancelAllAfterResult> {
+public:
     int32_t timeout{0}; // seconds; 0 = disable
 
     HttpRequest build(const Credentials& creds) const override {
@@ -1297,17 +1369,22 @@ struct CancelAllOrdersAfterRequest : TypedPrivateRequest<CancelAllAfterResult> {
     }
 };
 
-struct CancelAllAfterResult {
+class CancelAllAfterResult : public kraken::IRestResult {
+public:
     std::string current_time;
     std::string trigger_time;
     static CancelAllAfterResult from_json(const json& j) {
-        return { j.value("currentTime", ""), j.value("triggerTime", "") };
+        CancelAllAfterResult r;
+        r.current_time = j.value("currentTime", "");
+        r.trigger_time = j.value("triggerTime", "");
+        return r;
     }
 };
 
 // --- POST /0/private/CancelOrderBatch -----------------------------
 
-struct CancelOrderBatchRequest : TypedPrivateRequest<CancelOrderBatchResult> {
+class CancelOrderBatchRequest : public TypedPrivateRequest<CancelOrderBatchResult> {
+public:
     std::vector<std::string> orders;  // txids or cl_ord_ids
 
     HttpRequest build(const Credentials& creds) const override {
@@ -1331,26 +1408,34 @@ struct CancelOrderBatchRequest : TypedPrivateRequest<CancelOrderBatchResult> {
     }
 };
 
-struct CancelOrderBatchResult {
+class CancelOrderBatchResult : public kraken::IRestResult {
+public:
     int32_t count{0};
     static CancelOrderBatchResult from_json(const json& j) {
-        return { j.value("count", 0) };
+        CancelOrderBatchResult r;
+        r.count = j.value("count", 0);
+        return r;
     }
 };
 
 // --- POST /0/private/GetWebSocketsToken ---------------------------
 
-struct GetWebSocketsTokenRequest : TypedPrivateRequest<WebSocketsTokenResult> {
+class GetWebSocketsTokenRequest : public TypedPrivateRequest<WebSocketsTokenResult> {
+public:
     HttpRequest build(const Credentials& creds) const override {
         return make_private_request("/0/private/GetWebSocketsToken", {}, creds);
     }
 };
 
-struct WebSocketsTokenResult {
+class WebSocketsTokenResult : public kraken::IRestResult {
+public:
     std::string token;
     int64_t     expires{0};
     static WebSocketsTokenResult from_json(const json& j) {
-        return { j.value("token", ""), j.value("expires", int64_t{0}) };
+        WebSocketsTokenResult r;
+        r.token   = j.value("token", "");
+        r.expires = j.value("expires", int64_t{0});
+        return r;
     }
 };
 
@@ -1358,24 +1443,32 @@ struct WebSocketsTokenResult {
 // FUNDING  (private)
 // ============================================================
 
-struct GetDepositMethodsRequest : TypedPrivateRequest<DepositMethodsResult> {
+class GetDepositMethodsRequest : public TypedPrivateRequest<DepositMethodsResult> {
+public:
     std::string asset;
     HttpRequest build(const Credentials& creds) const override {
         return make_private_request("/0/private/DepositMethods", {{"asset", asset}}, creds);
     }
 };
 
-struct DepositMethod {
+class DepositMethod {
+public:
     std::string method;
     std::string limit;
     std::string fee;
     bool        gen_address{false};
     static DepositMethod from_json(const json& j) {
-        return { j.value("method",""), j.value("limit",""), j.value("fee",""), j.value("gen-address", false) };
+        DepositMethod r;
+        r.method      = j.value("method", "");
+        r.limit       = j.value("limit", "");
+        r.fee         = j.value("fee", "");
+        r.gen_address = j.value("gen-address", false);
+        return r;
     }
 };
 
-struct DepositMethodsResult {
+class DepositMethodsResult : public kraken::IRestResult {
+public:
     std::vector<DepositMethod> methods;
     static DepositMethodsResult from_json(const json& j) {
         DepositMethodsResult r;
@@ -1384,7 +1477,8 @@ struct DepositMethodsResult {
     }
 };
 
-struct GetDepositAddressesRequest : TypedPrivateRequest<DepositAddressesResult> {
+class GetDepositAddressesRequest : public TypedPrivateRequest<DepositAddressesResult> {
+public:
     std::string asset;
     std::string method;
     std::optional<bool> new_address;
@@ -1395,16 +1489,22 @@ struct GetDepositAddressesRequest : TypedPrivateRequest<DepositAddressesResult> 
     }
 };
 
-struct DepositAddress {
+class DepositAddress {
+public:
     std::string address;
     std::string expiretm;
     bool        new_addr{false};
     static DepositAddress from_json(const json& j) {
-        return { j.value("address",""), j.value("expiretm",""), j.value("new", false) };
+        DepositAddress r;
+        r.address  = j.value("address", "");
+        r.expiretm = j.value("expiretm", "");
+        r.new_addr = j.value("new", false);
+        return r;
     }
 };
 
-struct DepositAddressesResult {
+class DepositAddressesResult : public kraken::IRestResult {
+public:
     std::vector<DepositAddress> addresses;
     static DepositAddressesResult from_json(const json& j) {
         DepositAddressesResult r;
@@ -1413,7 +1513,8 @@ struct DepositAddressesResult {
     }
 };
 
-struct WithdrawRequest : TypedPrivateRequest<WithdrawResult> {
+class WithdrawRequest : public TypedPrivateRequest<WithdrawResult> {
+public:
     std::string asset;
     std::string key;       // withdrawal key name from account settings
     std::string amount;    // string to preserve precision
@@ -1428,12 +1529,18 @@ struct WithdrawRequest : TypedPrivateRequest<WithdrawResult> {
     }
 };
 
-struct WithdrawResult {
+class WithdrawResult : public kraken::IRestResult {
+public:
     std::string refid;
-    static WithdrawResult from_json(const json& j) { return { j.value("refid", "") }; }
+    static WithdrawResult from_json(const json& j) {
+        WithdrawResult r;
+        r.refid = j.value("refid", "");
+        return r;
+    }
 };
 
-struct CancelWithdrawalRequest : TypedPrivateRequest<CancelWithdrawalResult> {
+class CancelWithdrawalRequest : public TypedPrivateRequest<CancelWithdrawalResult> {
+public:
     std::string asset;
     std::string refid;
     HttpRequest build(const Credentials& creds) const override {
@@ -1442,16 +1549,22 @@ struct CancelWithdrawalRequest : TypedPrivateRequest<CancelWithdrawalResult> {
     }
 };
 
-struct CancelWithdrawalResult {
+class CancelWithdrawalResult : public kraken::IRestResult {
+public:
     bool result{false};
-    static CancelWithdrawalResult from_json(const json& j) { return { j.get<bool>() }; }
+    static CancelWithdrawalResult from_json(const json& j) {
+        CancelWithdrawalResult r;
+        r.result = j.get<bool>();
+        return r;
+    }
 };
 
 // ============================================================
 // SUBACCOUNTS  (private)
 // ============================================================
 
-struct CreateSubaccountRequest : TypedPrivateRequest<CreateSubaccountResult> {
+class CreateSubaccountRequest : public TypedPrivateRequest<CreateSubaccountResult> {
+public:
     std::string username;
     std::string email;
     HttpRequest build(const Credentials& creds) const override {
@@ -1460,16 +1573,22 @@ struct CreateSubaccountRequest : TypedPrivateRequest<CreateSubaccountResult> {
     }
 };
 
-struct CreateSubaccountResult {
+class CreateSubaccountResult : public kraken::IRestResult {
+public:
     bool result{false};
-    static CreateSubaccountResult from_json(const json& j) { return { j.get<bool>() }; }
+    static CreateSubaccountResult from_json(const json& j) {
+        CreateSubaccountResult r;
+        r.result = j.get<bool>();
+        return r;
+    }
 };
 
 // ============================================================
 // EARN  (private)
 // ============================================================
 
-struct AllocateEarnRequest : TypedPrivateRequest<EarnBoolResult> {
+class AllocateEarnRequest : public TypedPrivateRequest<EarnBoolResult> {
+public:
     std::string strategy_id;
     std::string amount;
     HttpRequest build(const Credentials& creds) const override {
@@ -1478,7 +1597,8 @@ struct AllocateEarnRequest : TypedPrivateRequest<EarnBoolResult> {
     }
 };
 
-struct DeallocateEarnRequest : TypedPrivateRequest<EarnBoolResult> {
+class DeallocateEarnRequest : public TypedPrivateRequest<EarnBoolResult> {
+public:
     std::string strategy_id;
     std::string amount;
     HttpRequest build(const Credentials& creds) const override {
@@ -1487,9 +1607,14 @@ struct DeallocateEarnRequest : TypedPrivateRequest<EarnBoolResult> {
     }
 };
 
-struct EarnBoolResult {
+class EarnBoolResult : public kraken::IRestResult {
+public:
     bool result{false};
-    static EarnBoolResult from_json(const json& j) { return { j.get<bool>() }; }
+    static EarnBoolResult from_json(const json& j) {
+        EarnBoolResult r;
+        r.result = j.get<bool>();
+        return r;
+    }
 };
 
 } // namespace kraken::rest
