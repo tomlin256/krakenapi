@@ -45,9 +45,9 @@ public:
         sent_messages.push_back(msg);
     }
 
-    void on_message(MessageCb cb) override { msg_cb_  = std::move(cb); }
-    void on_open(OpenCb cb)       override { open_cb_ = std::move(cb); }
-    void on_close(CloseCb cb)     override { close_cb_= std::move(cb); }
+    void set_on_message(MessageCb cb) override { msg_cb_  = std::move(cb); }
+    void set_on_open(OpenCb cb)       override { open_cb_ = std::move(cb); }
+    void set_on_close(CloseCb cb)     override { close_cb_= std::move(cb); }
 
     // Test helpers
     void inject_message(const std::string& raw) { if (msg_cb_)   msg_cb_(raw);  }
