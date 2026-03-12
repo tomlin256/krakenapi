@@ -28,7 +28,7 @@ krakenapi/
     │   ├── private_rest.cpp         # Get WS token from ~/.kraken/default
     │   ├── public_ws.cpp            # Subscribe to ticker over WS (low-level)
     │   ├── private_ws.cpp           # Subscribe to balances over authenticated WS
-    │   ├── ws_client_example.cpp    # KrakenWsClient ticker subscription + connection reuse demo
+    │   ├── ws_client_example.cpp    # KrakenWsClient all public channels (Ticker/Book/Trade/OHLC/Instrument) + connection reuse demo
     │   ├── kraken_example.cpp       # REST + WebSocket combined demo
     │   └── kapi.hpp / kapi.cpp      # Legacy KAPI reference wrapper (not installed)
     └── unit/
@@ -84,7 +84,7 @@ cmake --build build
 | `build/bin/private_rest` | Private REST demo |
 | `build/bin/public_ws` | Public WebSocket demo (low-level) |
 | `build/bin/private_ws` | Private WebSocket demo |
-| `build/bin/ws_client_example` | `KrakenWsClient` subscription + connection reuse demo |
+| `build/bin/ws_client_example` | `KrakenWsClient` — all 5 public channels + connection reuse demo |
 | `build/bin/kraken_example` | Combined REST + WebSocket demo |
 
 ---
@@ -303,7 +303,7 @@ These use `execute()` / `execute_async()` (single request → single response):
 | `PingRequest` | `PongMessage` | Heartbeat / latency check |
 | `AddOrderRequest` | `AddOrderResponse` | Place a new order |
 | `AmendOrderRequest` | `AmendOrderResponse` | Amend an existing order's price/qty |
-| `EditOrderRequest` | `EditOrderResponse` | Edit an existing order |
+| `EditOrderRequest` | `EditOrderResponse` | Edit an existing order (replace price/qty) |
 | `CancelOrderRequest` | `CancelOrderResponse` | Cancel one or more orders |
 | `CancelAllRequest` | `CancelAllResponse` | Cancel all open orders |
 | `CancelOnDisconnectRequest` | `CancelOnDisconnectResponse` | Set cancel-on-disconnect mode |
@@ -311,6 +311,15 @@ These use `execute()` / `execute_async()` (single request → single response):
 | `BatchCancelRequest` | `BatchCancelResponse` | Cancel multiple orders atomically |
 
 `AddOrderRequest`, `BatchAddRequest`, `EditOrderRequest`, and `AmendOrderRequest` accept a `WsCredentials` token for private channels.
+
+**`PingRequest`** structure — note that `req_id` is optional (unlike other requests where it is auto-assigned):
+
+```cpp
+struct PingRequest {
+    std::optional<int64_t> req_id;
+    // to_json() emits {"method":"ping"} + optional req_id
+};
+```
 
 ### Subscription channels
 
@@ -356,7 +365,9 @@ struct BaseResponse {
 | `CancelOnDisconnectResponse` | `"method": "cancel_on_disconnect"` |
 | `BatchAddResponse` | `"method": "batch_add"` |
 | `BatchCancelResponse` | `"method": "batch_cancel"` |
-| `PongMessage` | `"method": "pong"` |
+| `Pong` | `"method": "pong"` |
+| `SubscribeResponse` | `"method": "subscribe"` |
+| `UnsubscribeResponse` | `"method": "unsubscribe"` |
 | `Ticker` | `"channel": "ticker"` |
 | `Book` | `"channel": "book"` |
 | `Level3` | `"channel": "level3"` |
@@ -365,8 +376,8 @@ struct BaseResponse {
 | `Instrument` | `"channel": "instrument"` |
 | `Executions` | `"channel": "executions"` |
 | `Balances` | `"channel": "balances"` |
-| `SubscribeResponse` | `"method": "subscribe"` |
-| `StatusMessage` | `"channel": "status"` |
+| `Status` | `"channel": "status"` |
+| `Heartbeat` | `"channel": "heartbeat"` |
 | `Unknown` | No match |
 
 ### WsResponse<T>
@@ -485,13 +496,13 @@ All mutable state is protected by `std::mutex` with RAII lock guards:
 ```cpp
 class IWsConnection {
 public:
-    virtual void connect()                    = 0;
-    virtual void disconnect()                 = 0;
-    virtual bool is_connected() const         = 0;
-    virtual void send(const std::string& msg) = 0;
-    virtual void on_message(MessageCb cb)     = 0;
-    virtual void on_open(OpenCb cb)           = 0;
-    virtual void on_close(CloseCb cb)         = 0;
+    virtual void connect()                        = 0;
+    virtual void disconnect()                     = 0;
+    virtual bool is_connected() const             = 0;
+    virtual void send(const std::string& msg)     = 0;
+    virtual void set_on_message(MessageCb cb)     = 0;
+    virtual void set_on_open(OpenCb cb)           = 0;
+    virtual void set_on_close(CloseCb cb)         = 0;
 };
 ```
 
@@ -593,16 +604,28 @@ switch (kind) {
 
 ## Adding a new WebSocket subscription
 
-1. Add a subscribe request struct in `kraken_ws_api.hpp`:
-   - `using response_type = SubscribeResponse;`
-   - `using push_type = YourPushMessage;`
-   - `SubscribeChannel channel;` field.
-   - Optional: `std::vector<std::string> symbols` and `std::optional<std::string> token`.
-   - `json to_json() const` method.
-2. Add `YourPushMessage` with `static YourPushMessage from_json(const json&)`.
-3. Add the channel string mapping in `to_string(SubscribeChannel)`.
-4. Add the `MessageKind` enum value and handle it in `identify_message()`.
-5. Add a convenience type alias (e.g., `using YourSubscribeRequest = TypedSubscribeRequest<YourPushMessage>;`).
+`TypedSubscribeRequest` binds the push message type and the channel **at compile time** via two template parameters:
+
+```cpp
+template<typename PushMsg, SubscribeChannel Ch>
+struct TypedSubscribeRequest : SubscribeRequest {
+    using push_type     = PushMsg;
+    using response_type = SubscribeResponse;
+    static constexpr SubscribeChannel channel_value = Ch;
+    TypedSubscribeRequest() { this->channel = Ch; }  // channel set automatically
+};
+```
+
+To add a new subscription channel:
+
+1. Add the `SubscribeChannel` enum value in `kraken_ws_api.hpp`.
+2. Add the channel → string mapping in `to_string(SubscribeChannel)`.
+3. Add `YourPushMessage` with `static YourPushMessage from_json(const json&)`.
+4. Add the `MessageKind` enum value and handle the `"channel"` string in `identify_message()`.
+5. Add a convenience type alias:
+   ```cpp
+   using YourSubscribeRequest = TypedSubscribeRequest<YourPushMessage, SubscribeChannel::YourChannel>;
+   ```
 6. Add unit tests in `test_ws_client.cpp`.
 
 ---
