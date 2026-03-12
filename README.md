@@ -1,184 +1,369 @@
 # krakenapi
 
-A type-safe C++ library for the [Kraken](https://kraken.com) REST and WebSocket v2 APIs.
+A type-safe C++ library for the [Kraken](https://kraken.com) Spot REST and WebSocket v2 APIs.
 
-## Features
+The compiler links each request type to its exact response type — no casts, no stringly-typed keys.
 
-- Type-safe REST request/response pairs — compiler links each request to its result type
-- Full public and private REST API coverage (market data, account, trading, funding)
-- WebSocket v2 support — typed subscription messages and order management
-- HMAC-SHA512 signing for authenticated endpoints
-- File-based credential loading from `~/.kraken/<name>`
-- Unit-tested with Google Test
+---
 
-## Dependencies
-
-### System (must be installed)
-
-- **OpenSSL** — HMAC-SHA512 signing
-- **libcurl** — HTTP transport
-
-On Debian/Ubuntu:
+## Quick start
 
 ```bash
+# 1. Install system dependencies (Debian/Ubuntu)
 sudo apt install libssl-dev libcurl4-openssl-dev
+
+# 2. Clone and build
+git clone https://github.com/tomlin256/krakenapi.git
+cd krakenapi
+cmake -B build && cmake --build build
+
+# 3. Run an example
+./build/bin/public_rest
+./build/bin/ws_client_example ticker BTC/USD
 ```
 
-### Fetched automatically by CMake
+All other dependencies (IXWebSocket, nlohmann/json, spdlog, Google Test) are fetched automatically by CMake.
 
-| Library | Version | Purpose |
-|---|---|---|
-| [IXWebSocket](https://github.com/machinezone/IXWebSocket) | v11.4.6 | WebSocket client (TLS) |
-| [nlohmann/json](https://github.com/nlohmann/json) | v3.12.0 | JSON parsing |
-| [spdlog](https://github.com/gabime/spdlog) | v1.17.0 | Logging (examples/tests) |
-| [Google Test](https://github.com/google/googletest) | v1.16.0 | Unit testing |
+---
 
-## Building
+## Examples
 
-Requires CMake 3.15+ and a C++17 compiler.
+The fastest way to understand the library is to read and run the examples in [`tests/examples/`](tests/examples/). Each one is a complete, buildable program.
+
+### `public_rest` — fetch recent trades (no credentials)
 
 ```bash
-cmake -B build
-cmake --build build
+./build/bin/public_rest
 ```
 
-For a release build:
-
-```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-```
-
-Build outputs:
-
-- `build/src/libkrakenapi.a` — static library
-- `build/bin/public_rest` — public REST example
-- `build/bin/private_rest` — private REST example
-- `build/bin/public_ws` — public WebSocket example
-- `build/bin/private_ws` — private WebSocket example
-- `build/bin/kraken_example` — comprehensive REST + WebSocket example
-
-To skip building tests and examples:
-
-```bash
-cmake -B build -DKRAKENAPI_BUILD_TESTS=OFF
-```
-
-## Project Structure
-
-```
-krakenapi/
-├── CMakeLists.txt
-├── include/
-│   ├── kraken_types.hpp         # Shared enums and structs (OrderParams, Side, OrderType, …)
-│   ├── kraken_rest_api.hpp      # All REST request/response types + signing
-│   ├── kraken_rest_client.hpp   # KrakenRestClient — typed HTTP executor
-│   └── kraken_ws_api.hpp        # WebSocket v2 request/response types
-├── src/
-│   ├── CMakeLists.txt
-│   └── kraken_rest_client.cpp
-└── tests/
-    ├── CMakeLists.txt
-    ├── examples/
-    │   ├── public_rest.cpp
-    │   ├── private_rest.cpp
-    │   ├── public_ws.cpp
-    │   ├── private_ws.cpp
-    │   ├── kraken_example.cpp   # REST + WebSocket in one program
-    │   ├── kapi.hpp             # Legacy KAPI wrapper (kept for reference)
-    │   └── kapi.cpp
-    └── unit/
-        ├── test_signature.cpp
-        ├── test_rest_requests.cpp
-        ├── test_rest_responses.cpp
-        └── test_client.cpp
-```
-
-## API Overview
-
-All library types live in the `kraken::` namespace. REST-specific types are in `kraken::rest::`, WebSocket types in `kraken::ws::`.
-
-### Headers
+Calls `GET /0/public/Trades` and prints each trade's price, volume, and side.
+Source: [tests/examples/public_rest.cpp](tests/examples/public_rest.cpp)
 
 ```cpp
-#include "kraken_rest_client.hpp"  // pulls in kraken_rest_api.hpp
-#include "kraken_ws_api.hpp"       // WebSocket types
-#include "kraken_types.hpp"        // shared types (included by both)
+#include "kraken_rest_client.hpp"
+
+curl_global_init(CURL_GLOBAL_ALL);
+kraken::rest::KrakenRestClient client;
+
+kraken::rest::GetRecentTradesRequest req;
+req.pair = "XXBTZEUR";
+
+auto resp = client.execute(req);  // RestResponse<RecentTradesResult>
+if (resp.ok && resp.result) {
+    for (const auto& t : resp.result->trades)
+        spdlog::info("price={} volume={} side={}", t.price, t.volume,
+                     t.side == kraken::Side::Buy ? "buy" : "sell");
+}
+curl_global_cleanup();
 ```
+
+---
+
+### `private_rest` — authenticated REST call
+
+```bash
+./build/bin/private_rest   # requires ~/.kraken/default
+```
+
+Loads credentials from `~/.kraken/default` and calls `POST /0/private/GetWebSocketsToken`.
+Source: [tests/examples/private_rest.cpp](tests/examples/private_rest.cpp)
+
+```cpp
+#include "kraken_rest_client.hpp"
+
+kraken::rest::KrakenRestClient client;
+auto creds = kraken::rest::Credentials::from_file("default");
+
+auto resp = client.execute(kraken::rest::GetWebSocketsTokenRequest{}, creds);
+if (resp.ok && resp.result)
+    spdlog::info("token={} expires={}", resp.result->token, resp.result->expires);
+```
+
+---
+
+### `ws_client_example` — typed WebSocket subscriptions via `KrakenWsClient`
+
+```bash
+./build/bin/ws_client_example ticker     BTC/USD
+./build/bin/ws_client_example book       BTC/USD --depth 10
+./build/bin/ws_client_example trade      ETH/USD
+./build/bin/ws_client_example ohlc       BTC/USD --interval 5
+./build/bin/ws_client_example instrument
+```
+
+Uses `KrakenWsClient` — the high-level WebSocket wrapper — to subscribe to any public channel. Demonstrates typed subscribe/unsubscribe and connection reuse.
+Source: [tests/examples/ws_client_example.cpp](tests/examples/ws_client_example.cpp)
+
+```cpp
+#include "kraken_ix_ws_connection.hpp"  // real ixwebsocket transport
+
+auto client = kraken::ws::make_ws_client(kraken::ws::PUBLIC_WS_URL);
+
+kraken::ws::TickerSubscribeRequest req;
+req.symbols = {"BTC/USD"};
+
+auto [ack, handle] = client->subscribe(
+    req,
+    [](kraken::ws::TickerMessage msg) {
+        spdlog::info("{} last={}", msg.data[0].symbol, msg.data[0].last);
+    }
+);
+
+if (!ack.ok)
+    spdlog::error("subscribe failed: {}", ack.error.value_or("unknown"));
+
+std::this_thread::sleep_for(std::chrono::seconds(10));
+handle.cancel();  // unsubscribe; safe to call from any thread
+```
+
+---
+
+### `public_ws` — low-level WebSocket (raw ixwebsocket)
+
+```bash
+./build/bin/public_ws BTC/EUR
+```
+
+Builds and sends a `SubscribeRequest` manually using raw ixwebsocket callbacks, then dispatches inbound frames with `identify_message()`. Useful if you already have a WebSocket transport layer.
+Source: [tests/examples/public_ws.cpp](tests/examples/public_ws.cpp)
+
+```cpp
+#include "kraken_ws_api.hpp"
+
+// On WebSocket open:
+kraken::ws::SubscribeRequest req;
+req.channel = kraken::ws::SubscribeChannel::Ticker;
+req.symbols = {"BTC/USD"};
+webSocket.send(req.to_json().dump());
+
+// On each inbound message:
+auto j = nlohmann::json::parse(msg->str);
+switch (kraken::ws::identify_message(j)) {
+    case kraken::ws::MessageKind::Ticker: {
+        auto m = kraken::ws::TickerMessage::from_json(j);
+        spdlog::info("{} last={}", m.data[0].symbol, m.data[0].last);
+        break;
+    }
+    default: break;
+}
+```
+
+---
+
+### `private_ws` — authenticated WebSocket (balances stream)
+
+```bash
+./build/bin/private_ws   # requires ~/.kraken/default
+```
+
+Fetches a WebSocket token via REST, connects to the private endpoint, and subscribes to the `Balances` channel.
+Source: [tests/examples/private_ws.cpp](tests/examples/private_ws.cpp)
+
+```cpp
+// 1. Get token via REST
+auto resp = client.execute(kraken::rest::GetWebSocketsTokenRequest{}, creds);
+std::string token = resp.result->token;
+
+// 2. Subscribe to private channel
+kraken::ws::SubscribeRequest req;
+req.channel = kraken::ws::SubscribeChannel::Balances;
+req.token   = token;
+webSocket.send(req.to_json().dump());
+
+// 3. Dispatch inbound messages
+case kraken::ws::MessageKind::Balances: {
+    auto m = kraken::ws::BalancesMessage::from_json(j);
+    // m.data contains balance updates per asset
+    break;
+}
+```
+
+---
+
+### `kraken_example` — REST + WebSocket combined demo
+
+Source: [tests/examples/kraken_example.cpp](tests/examples/kraken_example.cpp)
+
+Shows how the REST and WebSocket layers share types from `kraken_types.hpp` — the same `OrderParams`, `Side`, and `OrderType` enums are used for placing orders on both transports.
+
+---
+
+## Building your own project
+
+### CMake (FetchContent)
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(krakenapi
+    GIT_REPOSITORY https://github.com/tomlin256/krakenapi.git
+    GIT_TAG        main
+)
+FetchContent_MakeAvailable(krakenapi)
+
+target_link_libraries(my_app PRIVATE krakenapi::krakenapi)
+```
+
+### Linker flags (manual)
+
+```
+-L/path/to/krakenapi/build/src -lkrakenapi -lcurl -lssl -lcrypto
+```
+
+For WebSocket support, also link against ixwebsocket:
+
+```
+-lixwebsocket -lz
+```
+
+---
+
+## Usage patterns
 
 ### Credentials
 
 ```cpp
+// From ~/.kraken/default (line 1: api key, line 2: base64 secret)
+auto creds = kraken::rest::Credentials::from_file("default");
+
 // Inline
 kraken::rest::Credentials creds{ .api_key = "...", .api_secret = "..." };
-
-// From ~/.kraken/<name>
-auto creds = kraken::rest::Credentials::from_file("default");
 ```
 
-The credentials file must contain the API key on the first line and the base64-encoded private key on the second line.
-
-### REST client
+### REST — public endpoint
 
 ```cpp
 curl_global_init(CURL_GLOBAL_ALL);
-
 kraken::rest::KrakenRestClient client;
 
-// Public request
-kraken::rest::GetRecentTradesRequest req;
-req.pair = "XXBTZEUR";
-auto resp = client.execute(req);
+kraken::rest::GetTickerRequest req;
+req.pair = "XXBTZUSD";
 
-// Private request
-auto resp2 = client.execute(kraken::rest::GetAccountBalanceRequest{}, creds);
-
+auto resp = client.execute(req);   // RestResponse<TickerResult>
+if (resp.ok && resp.result) {
+    // use resp.result->...
+}
 curl_global_cleanup();
 ```
 
-Every `execute()` call returns a `kraken::RestResponse<T>`:
+### REST — private endpoint
+
+```cpp
+auto resp = client.execute(kraken::rest::GetAccountBalanceRequest{}, creds);
+// resp is RestResponse<AccountBalanceResult>
+```
+
+Always check `resp.ok` before dereferencing `resp.result`:
 
 ```cpp
 if (resp.ok && resp.result) {
-    // use resp.result->...
+    // safe to use resp.result->...
 } else {
     for (const auto& e : resp.errors)
         spdlog::error("{}", e);
 }
 ```
 
-### Public REST endpoints
+### REST — placing an order
 
-| Request | Result type |
-|---|---|
-| `GetServerTimeRequest` | `ServerTime` |
-| `GetSystemStatusRequest` | `SystemStatus` |
-| `GetAssetInfoRequest` | `AssetInfoResult` |
-| `GetAssetPairsRequest` | `AssetPairsResult` |
-| `GetTickerRequest` | `TickerResult` |
-| `GetOHLCRequest` | `OHLCResult` |
-| `GetOrderBookRequest` | `OrderBookResult` |
-| `GetRecentTradesRequest` | `RecentTradesResult` |
+```cpp
+kraken::rest::AddOrderRequest req;
+req.params.order_type  = kraken::OrderType::Limit;
+req.params.side        = kraken::Side::Buy;
+req.params.symbol      = "XBTUSD";
+req.params.limit_price = 26500.0;
+req.params.qty         = 0.001;
 
-### Private REST endpoints
+auto resp = client.execute(req, creds);  // RestResponse<AddOrderResult>
+if (resp.ok && resp.result)
+    spdlog::info("txid: {}", resp.result->txids[0]);
+```
 
-**Account data**
+### WebSocket — `KrakenWsClient` (recommended)
 
-| Request | Result type |
+`KrakenWsClient` is the high-level wrapper. It handles connection lifecycle, auto-assigns request IDs, matches responses to pending handlers, and exposes typed callbacks.
+
+```cpp
+#include "kraken_ix_ws_connection.hpp"
+
+// Connect
+auto client = kraken::ws::make_ws_client(kraken::ws::PUBLIC_WS_URL);
+
+// Ping (single request → single response)
+auto pong = client->execute(kraken::ws::PingRequest{});  // WsResponse<PongMessage>
+
+// Subscribe (request → ack + continuous push)
+kraken::ws::BookSubscribeRequest sub;
+sub.symbols = {"BTC/USD"};
+sub.depth   = 10;
+
+auto [ack, handle] = client->subscribe(
+    sub,
+    [](kraken::ws::BookMessage msg) {
+        // called for every book update
+    }
+);
+
+handle.cancel();  // stop receiving updates
+```
+
+### WebSocket — async variants
+
+```cpp
+// Fire and forget; returns std::future
+auto fut = client->execute_async(kraken::ws::PingRequest{});
+
+auto [ack_fut, handle] = client->subscribe_async(sub, callback);
+auto ack = ack_fut.get();
+```
+
+### WebSocket — subscription channels
+
+| Channel | Request type | Push message | Auth required |
+|---|---|---|---|
+| `Ticker` | `TickerSubscribeRequest` | `TickerMessage` | No |
+| `Book` | `BookSubscribeRequest` | `BookMessage` | No |
+| `Trade` | `TradeSubscribeRequest` | `TradeMessage` | No |
+| `OHLC` | `OHLCSubscribeRequest` | `OHLCMessage` | No |
+| `Instrument` | `InstrumentSubscribeRequest` | `InstrumentMessage` | No |
+| `Level3` | `Level3SubscribeRequest` | `Level3Message` | No |
+| `Executions` | `ExecutionsSubscribeRequest` | `ExecutionsMessage` | Yes |
+| `Balances` | `BalancesSubscribeRequest` | `BalancesMessage` | Yes |
+
+Private channels need a token obtained via `GetWebSocketsTokenRequest` over REST. Pass it in the subscribe request's `token` field.
+
+---
+
+## REST endpoint reference
+
+### Public
+
+| Request | Path | Response |
+|---|---|---|
+| `GetServerTimeRequest` | `/0/public/Time` | `ServerTime` |
+| `GetSystemStatusRequest` | `/0/public/SystemStatus` | `SystemStatus` |
+| `GetAssetInfoRequest` | `/0/public/Assets` | `AssetInfoResult` |
+| `GetAssetPairsRequest` | `/0/public/AssetPairs` | `AssetPairsResult` |
+| `GetTickerRequest` | `/0/public/Ticker` | `TickerResult` |
+| `GetOHLCRequest` | `/0/public/OHLC` | `OHLCResult` |
+| `GetOrderBookRequest` | `/0/public/Depth` | `OrderBookResult` |
+| `GetRecentTradesRequest` | `/0/public/Trades` | `RecentTradesResult` |
+
+### Private — account
+
+| Request | Response |
 |---|---|
 | `GetAccountBalanceRequest` | `AccountBalanceResult` |
 | `GetExtendedBalanceRequest` | `ExtendedBalanceResult` |
 | `GetTradeBalanceRequest` | `TradeBalance` |
 | `GetOpenOrdersRequest` | `OpenOrdersResult` |
 | `GetClosedOrdersRequest` | `ClosedOrdersResult` |
-| `QueryOrdersRequest` | `QueryOrdersResultWrapper` |
 | `GetTradesHistoryRequest` | `TradesHistoryResult` |
 | `GetOpenPositionsRequest` | `OpenPositionsResult` |
 | `GetLedgersRequest` | `LedgersResult` |
 
-**Trading**
+### Private — trading
 
-| Request | Result type |
+| Request | Response |
 |---|---|
 | `AddOrderRequest` | `AddOrderResult` |
 | `AddOrderBatchRequest` | `AddOrderBatchResult` |
@@ -189,124 +374,47 @@ if (resp.ok && resp.result) {
 | `CancelAllOrdersAfterRequest` | `CancelAllAfterResult` |
 | `CancelOrderBatchRequest` | `CancelOrderBatchResult` |
 
-**Other**
+### Private — other
 
-| Request | Result type |
+| Request | Response |
 |---|---|
 | `GetWebSocketsTokenRequest` | `WebSocketsTokenResult` |
 | `GetDepositMethodsRequest` | `DepositMethodsResult` |
 | `GetDepositAddressesRequest` | `DepositAddressesResult` |
 | `WithdrawRequest` | `WithdrawResult` |
 | `CancelWithdrawalRequest` | `CancelWithdrawalResult` |
-| `CreateSubaccountRequest` | `CreateSubaccountResult` |
+| `AllocateEarnRequest` | `EarnBoolResult` |
+| `DeallocateEarnRequest` | `EarnBoolResult` |
 
-### Placing an order
+---
 
-`OrderParams` is the shared order description used by both the REST and WebSocket layers:
-
-```cpp
-kraken::OrderParams op;
-op.order_type  = kraken::OrderType::Limit;
-op.side        = kraken::Side::Buy;
-op.symbol      = "XBTUSD";
-op.order_qty   = 1.2;
-op.limit_price = 26500.0;
-
-// REST
-kraken::rest::AddOrderRequest req;
-req.params = op;
-auto resp = client.execute(req, creds);
-if (resp.ok)
-    std::cout << resp.result->txids[0] << "\n";
-
-// WebSocket (change symbol to WS format first)
-op.symbol = "BTC/USD";
-kraken::ws::AddOrderRequest ws_req;
-ws_req.order_type = op.order_type;
-// send ws_req.to_json() over the authenticated WebSocket
-```
-
-### WebSocket v2
-
-The public endpoint is `wss://ws.kraken.com/v2`. The private (authenticated) endpoint is `wss://ws-auth.kraken.com/v2` and requires a token obtained from `GetWebSocketsTokenRequest`.
-
-**Subscriptions**
-
-```cpp
-// Ticker
-kraken::ws::SubscribeRequest sub;
-sub.channel = kraken::ws::SubscribeChannel::Ticker;
-sub.symbols = {"BTC/USD", "ETH/USD"};
-webSocket.send(sub.to_json().dump());
-
-// Order book (depth 10)
-sub.channel = kraken::ws::SubscribeChannel::Book;
-sub.symbols = {"BTC/USD"};
-sub.depth   = 10;
-
-// OHLC (60-second candles)
-sub.channel  = kraken::ws::SubscribeChannel::OHLC;
-sub.interval = 60;
-
-// Private: executions (with snapshot)
-sub.channel         = kraken::ws::SubscribeChannel::Executions;
-sub.snapshot        = true;
-sub.snapshot_trades = true;
-
-// Private: balances
-sub.channel = kraken::ws::SubscribeChannel::Balances;
-```
-
-**Parsing incoming messages**
-
-```cpp
-auto json = nlohmann::json::parse(msg->str);
-switch (kraken::ws::identify_message(json)) {
-    case kraken::ws::MessageKind::Ticker: {
-        auto m = kraken::ws::TickerMessage::from_json(json);
-        std::cout << m.data[0].symbol << " last=" << m.data[0].last << "\n";
-        break;
-    }
-    case kraken::ws::MessageKind::Executions: {
-        auto m = kraken::ws::ExecutionsMessage::from_json(json);
-        std::cout << "order=" << m.data[0].order_id << "\n";
-        break;
-    }
-    default: break;
-}
-```
-
-## Examples
-
-See [tests/examples/](tests/examples/) for complete, buildable programs.
-
-| Binary | Source | What it does |
-|---|---|---|
-| `public_rest` | [public_rest.cpp](tests/examples/public_rest.cpp) | Fetch recent trades for XXBTZEUR |
-| `private_rest` | [private_rest.cpp](tests/examples/private_rest.cpp) | Get a WebSocket token using credentials |
-| `public_ws` | [public_ws.cpp](tests/examples/public_ws.cpp) | Subscribe to ticker channel for 10 s |
-| `private_ws` | [private_ws.cpp](tests/examples/private_ws.cpp) | Subscribe to balances channel for 10 s |
-| `kraken_example` | [kraken_example.cpp](tests/examples/kraken_example.cpp) | REST + WebSocket all in one |
-
-```bash
-./build/bin/public_rest
-./build/bin/private_rest          # requires ~/.kraken/default
-./build/bin/public_ws BTC/EUR
-./build/bin/private_ws            # requires ~/.kraken/default
-```
-
-## Unit Tests
+## Running the tests
 
 ```bash
 cd build && ctest --output-on-failure
 ```
 
-Tests cover:
+Tests require no network access or credentials — all I/O is mocked.
 
-- **test_signature** — HMAC-SHA512 signing output
-- **test_rest_requests** — HTTP request building (paths, query strings, headers)
-- **test_rest_responses** — JSON deserialization for all response types
-- **test_client** — full request → response cycle with a mock HTTP performer
+| Binary | What it covers |
+|---|---|
+| `kraken_unit_tests` | HMAC signing, REST request building, JSON deserialization, HTTP mock round-trip |
+| `test_ws_client` | `KrakenWsClient` lifecycle, subscription handle, pre-connection queue |
+
+---
+
+## Dependencies
+
+| Library | Version | Fetched by CMake |
+|---|---|---|
+| [IXWebSocket](https://github.com/machinezone/IXWebSocket) | v11.4.6 | Yes |
+| [nlohmann/json](https://github.com/nlohmann/json) | v3.12.0 | Yes |
+| [spdlog](https://github.com/gabime/spdlog) | v1.17.0 | Yes |
+| [Google Test](https://github.com/google/googletest) | v1.16.0 | Yes |
+| OpenSSL | system | No — `sudo apt install libssl-dev` |
+| libcurl | system | No — `sudo apt install libcurl4-openssl-dev` |
+
+---
 
 ## License
 
