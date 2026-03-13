@@ -11,6 +11,7 @@
 #include "kraken_ws_api.hpp"
 
 #include <ixwebsocket/IXWebSocket.h>
+#include <CLI/CLI.hpp>
 #include <spdlog/spdlog.h>
 
 #include <stdexcept>
@@ -19,11 +20,20 @@ using namespace kraken::rest;
 
 int main(int argc, char* argv[])
 {
+   CLI::App app{"Kraken private WebSocket example — subscribe to balances channel"};
+
+   std::string creds_name = "default";
+   app.add_option("-c,--credentials", creds_name,
+                  "Credentials profile name (file at ~/.kraken/<name>)")
+       ->capture_default_str();
+
+   CLI11_PARSE(app, argc, argv);
+
    curl_global_init(CURL_GLOBAL_ALL);
 
    // we need a token to subscribe to private channels, so we need to call a private method first
    KrakenRestClient client;
-   auto creds = Credentials::from_file("default");
+   auto creds = Credentials::from_file(creds_name);
    auto resp = client.execute(GetWebSocketsTokenRequest{}, creds);
    if (!resp.ok || !resp.result) {
       for (const auto& e : resp.errors)
@@ -66,9 +76,9 @@ int main(int argc, char* argv[])
                case kraken::ws::MessageKind::SubscribeResponse:
                {
                   auto r = kraken::ws::SubscribeResponse::from_json(j);
-                  spdlog::info("subscribe {}({}): {}", 
-                     r.method, 
-                     r.req_id.value_or(-1), 
+                  spdlog::info("subscribe {}({}): {}",
+                     r.method,
+                     r.req_id.value_or(-1),
                      r.success ? "success" : "failure");
                   break;
                }

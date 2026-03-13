@@ -9,21 +9,30 @@
 
 #include <stdexcept>
 
+#include <CLI/CLI.hpp>
 #include <spdlog/spdlog.h>
 
 #include "kraken_rest_client.hpp"
 
 using namespace kraken::rest;
 
-int main()
+int main(int argc, char* argv[])
 {
+    CLI::App app{"Kraken public REST example — fetch recent trades"};
+
+    std::string pair = "XXBTZEUR";
+    app.add_option("-p,--pair", pair, "Trading pair to fetch recent trades for")
+        ->capture_default_str();
+
+    CLI11_PARSE(app, argc, argv);
+
     curl_global_init(CURL_GLOBAL_ALL);
 
     try {
         KrakenRestClient client;
 
         GetRecentTradesRequest req;
-        req.pair = "XXBTZEUR";
+        req.pair = pair;
 
         auto resp = client.execute(req);
         if (resp.ok && resp.result) {

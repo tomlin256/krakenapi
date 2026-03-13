@@ -25,52 +25,14 @@
 
 #include "kraken_ix_ws_connection.hpp"  // IxWsConnection + make_ws_client(url)
 
+#include <CLI/CLI.hpp>
 #include <spdlog/spdlog.h>
 
 #include <chrono>
 #include <cstdlib>
-#include <iostream>
 #include <optional>
 #include <string>
 #include <thread>
-#include <vector>
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-static std::optional<std::string> flag_value(const std::vector<std::string>& args,
-                                              const std::string& flag) {
-    for (std::size_t i = 0; i + 1 < args.size(); ++i)
-        if (args[i] == flag)
-            return args[i + 1];
-    return std::nullopt;
-}
-
-static void print_usage(const char* prog) {
-    std::cerr
-        << "Usage:\n"
-        << "  " << prog << " ticker     <symbol>\n"
-        << "  " << prog << " book       <symbol> [--depth <N>]\n"
-        << "  " << prog << " trade      <symbol>\n"
-        << "  " << prog << " ohlc       <symbol> [--interval <N>]\n"
-        << "  " << prog << " instrument\n"
-        << "\n"
-        << "Channels:\n"
-        << "  ticker      Level 1 best bid/ask, last price, 24h stats\n"
-        << "  book        Level 2 order book; depth = 10 | 25 | 100 | 500 | 1000 (default 10)\n"
-        << "  trade       Public trades feed\n"
-        << "  ohlc        OHLC candles; interval in minutes: 1 | 5 | 15 | 30 | 60 |\n"
-        << "              240 | 1440 | 10080 | 21600 (default 1)\n"
-        << "  instrument  Static instrument/market info (no symbol required)\n"
-        << "\n"
-        << "Examples:\n"
-        << "  " << prog << " ticker     BTC/USD\n"
-        << "  " << prog << " book       BTC/USD --depth 10\n"
-        << "  " << prog << " trade      ETH/USD\n"
-        << "  " << prog << " ohlc       BTC/USD --interval 5\n"
-        << "  " << prog << " instrument\n";
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ticker
@@ -295,69 +257,59 @@ static void run_instrument() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        print_usage(argv[0]);
-        return 1;
-    }
+    CLI::App app{"KrakenWsClient subscription demo — all public WebSocket channels"};
+    app.require_subcommand(1);
 
-    const std::string channel = argv[1];
+    // ── ticker ────────────────────────────────────────────────────────────────
+    auto* ticker_cmd = app.add_subcommand("ticker",
+        "Level 1 best bid/ask, last price, 24h stats");
+    std::string ticker_symbol;
+    ticker_cmd->add_option("symbol", ticker_symbol, "Trading symbol (e.g. BTC/USD)")
+        ->required();
 
-    // Collect remaining arguments for option parsing.
-    std::vector<std::string> rest_args;
-    for (int i = 2; i < argc; ++i)
-        rest_args.emplace_back(argv[i]);
+    // ── book ──────────────────────────────────────────────────────────────────
+    auto* book_cmd = app.add_subcommand("book",
+        "Level 2 order book; depth = 10|25|100|500|1000 (default 10)");
+    std::string book_symbol;
+    std::optional<int> book_depth;
+    book_cmd->add_option("symbol", book_symbol, "Trading symbol (e.g. BTC/USD)")
+        ->required();
+    book_cmd->add_option("--depth", book_depth,
+        "Order book depth: 10|25|100|500|1000");
 
-    // First positional extra arg (if not starting with "--") is the symbol.
-    std::string symbol;
-    if (!rest_args.empty() && rest_args[0].rfind("--", 0) != 0)
-        symbol = rest_args[0];
+    // ── trade ─────────────────────────────────────────────────────────────────
+    auto* trade_cmd = app.add_subcommand("trade", "Public trades feed");
+    std::string trade_symbol;
+    trade_cmd->add_option("symbol", trade_symbol, "Trading symbol (e.g. ETH/USD)")
+        ->required();
+
+    // ── ohlc ──────────────────────────────────────────────────────────────────
+    auto* ohlc_cmd = app.add_subcommand("ohlc",
+        "OHLC candles; interval in minutes: 1|5|15|30|60|240|1440|10080|21600 (default 1)");
+    std::string ohlc_symbol;
+    std::optional<int> ohlc_interval;
+    ohlc_cmd->add_option("symbol", ohlc_symbol, "Trading symbol (e.g. BTC/USD)")
+        ->required();
+    ohlc_cmd->add_option("--interval", ohlc_interval,
+        "Candle interval in minutes: 1|5|15|30|60|240|1440|10080|21600");
+
+    // ── instrument ────────────────────────────────────────────────────────────
+    app.add_subcommand("instrument",
+        "Static instrument/market info (no symbol required)");
+
+    CLI11_PARSE(app, argc, argv);
 
     try {
-        if (channel == "ticker") {
-            if (symbol.empty()) {
-                std::cerr << "Error: 'ticker' requires a <symbol> argument.\n\n";
-                print_usage(argv[0]);
-                return 1;
-            }
-            run_ticker(symbol);
-
-        } else if (channel == "book") {
-            if (symbol.empty()) {
-                std::cerr << "Error: 'book' requires a <symbol> argument.\n\n";
-                print_usage(argv[0]);
-                return 1;
-            }
-            std::optional<int> depth;
-            if (auto v = flag_value(rest_args, "--depth"))
-                depth = std::stoi(*v);
-            run_book(symbol, depth);
-
-        } else if (channel == "trade") {
-            if (symbol.empty()) {
-                std::cerr << "Error: 'trade' requires a <symbol> argument.\n\n";
-                print_usage(argv[0]);
-                return 1;
-            }
-            run_trade(symbol);
-
-        } else if (channel == "ohlc") {
-            if (symbol.empty()) {
-                std::cerr << "Error: 'ohlc' requires a <symbol> argument.\n\n";
-                print_usage(argv[0]);
-                return 1;
-            }
-            std::optional<int> interval;
-            if (auto v = flag_value(rest_args, "--interval"))
-                interval = std::stoi(*v);
-            run_ohlc(symbol, interval);
-
-        } else if (channel == "instrument") {
-            run_instrument();
-
+        if (ticker_cmd->parsed()) {
+            run_ticker(ticker_symbol);
+        } else if (book_cmd->parsed()) {
+            run_book(book_symbol, book_depth);
+        } else if (trade_cmd->parsed()) {
+            run_trade(trade_symbol);
+        } else if (ohlc_cmd->parsed()) {
+            run_ohlc(ohlc_symbol, ohlc_interval);
         } else {
-            std::cerr << "Error: unknown channel '" << channel << "'.\n\n";
-            print_usage(argv[0]);
-            return 1;
+            run_instrument();
         }
     } catch (const std::exception& e) {
         spdlog::error("Fatal: {}", e.what());

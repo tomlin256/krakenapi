@@ -9,6 +9,7 @@
 
 #include <ixwebsocket/IXWebSocket.h>
 
+#include <CLI/CLI.hpp>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
@@ -18,17 +19,15 @@
 
 int main(int argc, char* argv[])
 {
-   ix::WebSocket webSocket;
+   CLI::App app{"Kraken public WebSocket example — subscribe to ticker"};
 
    std::string symbol;
-   if (argc > 1)
-   {
-      symbol = argv[1];
-   }
-   else
-   {
-      throw std::runtime_error("Usage: public_ws <symbol>");
-   }
+   app.add_option("symbol", symbol, "Trading symbol to subscribe to (e.g. BTC/EUR)")
+       ->required();
+
+   CLI11_PARSE(app, argc, argv);
+
+   ix::WebSocket webSocket;
 
    webSocket.setUrl("wss://ws.kraken.com/v2");
 
