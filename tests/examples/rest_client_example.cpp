@@ -288,10 +288,10 @@ int main(int argc, char* argv[]) {
     app.require_subcommand(1);
 
     // ── time ──────────────────────────────────────────────────────────────────
-    app.add_subcommand("time", "Server time (GET /0/public/Time)");
+    auto* time_cmd = app.add_subcommand("time", "Server time (GET /0/public/Time)");
 
     // ── status ────────────────────────────────────────────────────────────────
-    app.add_subcommand("status", "System status (GET /0/public/SystemStatus)");
+    auto* status_cmd = app.add_subcommand("status", "System status (GET /0/public/SystemStatus)");
 
     // ── assets ────────────────────────────────────────────────────────────────
     auto* assets_cmd = app.add_subcommand("assets",
@@ -357,36 +357,34 @@ int main(int argc, char* argv[]) {
     KrakenRestClient client;
 
     try {
-        auto* sub = app.get_subcommands()[0];
-
-        if (sub->get_name() == "time") {
+        if (time_cmd->parsed()) {
             run_time(client);
 
-        } else if (sub->get_name() == "status") {
+        } else if (status_cmd->parsed()) {
             run_status(client);
 
-        } else if (sub->get_name() == "assets") {
+        } else if (assets_cmd->parsed()) {
             std::optional<std::vector<std::string>> filter =
                 assets_filter.empty() ? std::nullopt : std::make_optional(assets_filter);
             run_assets(client, filter);
 
-        } else if (sub->get_name() == "pairs") {
+        } else if (pairs_cmd->parsed()) {
             std::optional<std::vector<std::string>> filter =
                 pairs_filter.empty() ? std::nullopt : std::make_optional(pairs_filter);
             run_pairs(client, filter);
 
-        } else if (sub->get_name() == "ticker") {
+        } else if (ticker_cmd->parsed()) {
             std::optional<std::vector<std::string>> filter =
                 ticker_pairs.empty() ? std::nullopt : std::make_optional(ticker_pairs);
             run_ticker(client, filter);
 
-        } else if (sub->get_name() == "ohlc") {
+        } else if (ohlc_cmd->parsed()) {
             run_ohlc(client, ohlc_pair, ohlc_interval, ohlc_since);
 
-        } else if (sub->get_name() == "depth") {
+        } else if (depth_cmd->parsed()) {
             run_depth(client, depth_pair, depth_count);
 
-        } else if (sub->get_name() == "trades") {
+        } else if (trades_cmd->parsed()) {
             run_trades(client, trades_pair, trades_since, trades_count);
         }
     } catch (const std::exception& e) {
