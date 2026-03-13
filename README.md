@@ -18,7 +18,8 @@ cd krakenapi
 cmake -B build && cmake --build build
 
 # 3. Run an example
-./build/bin/public_rest
+./build/bin/rest_client_example time
+./build/bin/rest_client_example ticker --pairs XXBTZUSD
 ./build/bin/ws_client_example ticker BTC/USD
 ```
 
@@ -29,6 +30,62 @@ All other dependencies (IXWebSocket, nlohmann/json, spdlog, Google Test) are fet
 ## Examples
 
 The fastest way to understand the library is to read and run the examples in [`tests/examples/`](tests/examples/). Each one is a complete, buildable program.
+
+### `rest_client_example` — all public REST endpoints
+
+```bash
+./build/bin/rest_client_example time
+./build/bin/rest_client_example status
+./build/bin/rest_client_example assets   --assets XBT,ETH
+./build/bin/rest_client_example pairs    --pairs XBTUSD,ETHUSD
+./build/bin/rest_client_example ticker   --pairs XXBTZUSD,XETHZUSD
+./build/bin/rest_client_example ohlc     XXBTZUSD --interval 60
+./build/bin/rest_client_example depth    XXBTZUSD --count 10
+./build/bin/rest_client_example trades   XXBTZUSD --count 5
+```
+
+Covers every public REST endpoint in a single binary. Each subcommand maps to one typed request/response pair — no raw JSON, no casts.
+Source: [tests/examples/rest_client_example.cpp](tests/examples/rest_client_example.cpp)
+
+```cpp
+#include "kraken_rest_client.hpp"
+
+curl_global_init(CURL_GLOBAL_ALL);
+kraken::rest::KrakenRestClient client;
+
+// Server time
+auto time_resp = client.execute(kraken::rest::GetServerTimeRequest{});
+// time_resp is RestResponse<ServerTime>
+if (time_resp.ok && time_resp.result)
+    spdlog::info("unixtime={} rfc1123={}", time_resp.result->unixtime,
+                 time_resp.result->rfc1123);
+
+// OHLC candles
+kraken::rest::GetOHLCRequest ohlc_req;
+ohlc_req.pair     = "XXBTZUSD";
+ohlc_req.interval = 60;  // 1-hour candles
+
+auto ohlc_resp = client.execute(ohlc_req);  // RestResponse<OHLCResult>
+if (ohlc_resp.ok && ohlc_resp.result)
+    for (const auto& c : ohlc_resp.result->candles)
+        spdlog::info("ts={} O={:.4f} H={:.4f} L={:.4f} C={:.4f}",
+                     c.time, c.open, c.high, c.low, c.close);
+
+// Order book
+kraken::rest::GetOrderBookRequest depth_req;
+depth_req.pair  = "XXBTZUSD";
+depth_req.count = 10;
+
+auto depth_resp = client.execute(depth_req);  // RestResponse<OrderBookResult>
+if (depth_resp.ok && depth_resp.result) {
+    for (const auto& ask : depth_resp.result->asks)
+        spdlog::info("ask price={:.4f} vol={:.6f}", ask.price, ask.volume);
+}
+
+curl_global_cleanup();
+```
+
+---
 
 ### `public_rest` — fetch recent trades (no credentials)
 
