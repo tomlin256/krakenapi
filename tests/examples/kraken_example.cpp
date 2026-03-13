@@ -14,6 +14,7 @@
 #include "kraken_rest_api.hpp"
 #include "kraken_ws_api.hpp"
 
+#include <CLI/CLI.hpp>
 #include <nlohmann/json.hpp>
 
 #include <iostream>
@@ -36,7 +37,10 @@ void ws_send(const json& msg, kraken::ws::WsCredentials& creds) {
     std::cout << "[WS SEND] " << msg << "\n";
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    CLI::App app{"Kraken API usage demonstration — REST and WebSocket"};
+    CLI11_PARSE(app, argc, argv);
+
     using namespace kraken;
 
     // --------------------------------------------------------
