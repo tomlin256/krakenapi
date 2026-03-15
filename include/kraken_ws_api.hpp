@@ -888,6 +888,30 @@ struct OHLCMessage {
 //  14. MARKET DATA - Instrument
 // ============================================================
 
+// Asset entry within the instrument channel "assets" array.
+struct AssetInfo {
+    std::string id;
+    std::string status;
+    std::optional<int32_t> precision;
+    std::optional<int32_t> precision_display;
+    std::optional<bool>    borrowable;
+    std::optional<double>  collateral_value;
+    std::optional<double>  margin_rate;
+
+    static AssetInfo from_json(const json& j) {
+        AssetInfo a;
+        a.id     = j.value("id", "");
+        a.status = j.value("status", "");
+        if (j.contains("precision"))         a.precision         = j["precision"].get<int32_t>();
+        if (j.contains("precision_display")) a.precision_display = j["precision_display"].get<int32_t>();
+        if (j.contains("borrowable"))        a.borrowable        = j["borrowable"].get<bool>();
+        if (j.contains("collateral_value"))  a.collateral_value  = j["collateral_value"].get<double>();
+        if (j.contains("margin_rate"))       a.margin_rate       = j["margin_rate"].get<double>();
+        return a;
+    }
+};
+
+// Pair entry within the instrument channel "pairs" array.
 struct InstrumentInfo {
     std::string symbol;
     std::string base;
@@ -900,6 +924,9 @@ struct InstrumentInfo {
     int32_t     margin_initial{0};
     std::optional<int32_t> position_limit_long;
     std::optional<int32_t> position_limit_short;
+    std::optional<bool>    has_index;
+    std::optional<int32_t> cost_precision;
+    std::optional<int32_t> qty_precision;
 
     static InstrumentInfo from_json(const json& j) {
         InstrumentInfo i;
@@ -914,22 +941,32 @@ struct InstrumentInfo {
         i.margin_initial  = j.value("margin_initial", 0);
         if (j.contains("position_limit_long"))  i.position_limit_long  = j["position_limit_long"].get<int32_t>();
         if (j.contains("position_limit_short")) i.position_limit_short = j["position_limit_short"].get<int32_t>();
+        if (j.contains("has_index"))            i.has_index            = j["has_index"].get<bool>();
+        if (j.contains("cost_precision"))       i.cost_precision       = j["cost_precision"].get<int32_t>();
+        if (j.contains("qty_precision"))        i.qty_precision        = j["qty_precision"].get<int32_t>();
         return i;
     }
 };
 
+// The instrument channel delivers data as an object {"assets":[…], "pairs":[…]}.
 struct InstrumentMessage {
     std::string channel;
     std::string type;
-    std::vector<InstrumentInfo> data;
+    std::vector<AssetInfo>      assets;
+    std::vector<InstrumentInfo> pairs;
 
     static InstrumentMessage from_json(const json& j) {
         InstrumentMessage m;
         m.channel = j.value("channel", "");
         m.type    = j.value("type", "");
-        if (j.contains("data")) {
-            for (const auto& item : j["data"])
-                m.data.push_back(InstrumentInfo::from_json(item));
+        if (j.contains("data") && j["data"].is_object()) {
+            const auto& d = j["data"];
+            if (d.contains("assets") && d["assets"].is_array())
+                for (const auto& item : d["assets"])
+                    m.assets.push_back(AssetInfo::from_json(item));
+            if (d.contains("pairs") && d["pairs"].is_array())
+                for (const auto& item : d["pairs"])
+                    m.pairs.push_back(InstrumentInfo::from_json(item));
         }
         return m;
     }

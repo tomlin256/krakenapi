@@ -239,28 +239,52 @@ TEST(ParseOHLCMessage, FieldsFromSampleJson) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// InstrumentMessage (synthetic example — see comment in ws_client_example_json.hpp)
+// InstrumentMessage — data is {"assets":[…], "pairs":[…]}
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParseInstrumentMessage, FieldsFromSampleJson) {
     auto m = kraken::ws::InstrumentMessage::from_json(json::parse(kInstrumentSnapshotJson));
     EXPECT_EQ(m.channel, "instrument");
     EXPECT_EQ(m.type, "snapshot");
-    ASSERT_EQ(m.data.size(), 1u);
-    const auto& d = m.data[0];
-    EXPECT_EQ(d.symbol, "BTC/USD");
-    EXPECT_EQ(d.base, "BTC");
-    EXPECT_EQ(d.quote, "USD");
-    EXPECT_EQ(d.status, "online");
-    EXPECT_DOUBLE_EQ(d.qty_increment, 0.00000001);
-    EXPECT_DOUBLE_EQ(d.qty_min, 0.0001);
-    EXPECT_DOUBLE_EQ(d.price_increment, 0.1);
-    EXPECT_DOUBLE_EQ(d.cost_min, 0.5);
-    EXPECT_EQ(d.margin_initial, 20);
-    ASSERT_TRUE(d.position_limit_long.has_value());
-    EXPECT_EQ(d.position_limit_long.value(), 250);
-    ASSERT_TRUE(d.position_limit_short.has_value());
-    EXPECT_EQ(d.position_limit_short.value(), 250);
+
+    // assets
+    ASSERT_EQ(m.assets.size(), 1u);
+    const auto& a = m.assets[0];
+    EXPECT_EQ(a.id, "BTC");
+    EXPECT_EQ(a.status, "enabled");
+    ASSERT_TRUE(a.precision.has_value());
+    EXPECT_EQ(a.precision.value(), 10);
+    ASSERT_TRUE(a.precision_display.has_value());
+    EXPECT_EQ(a.precision_display.value(), 5);
+    ASSERT_TRUE(a.borrowable.has_value());
+    EXPECT_TRUE(a.borrowable.value());
+    ASSERT_TRUE(a.collateral_value.has_value());
+    EXPECT_DOUBLE_EQ(a.collateral_value.value(), 1.0);
+    ASSERT_TRUE(a.margin_rate.has_value());
+    EXPECT_DOUBLE_EQ(a.margin_rate.value(), 0.02);
+
+    // pairs
+    ASSERT_EQ(m.pairs.size(), 1u);
+    const auto& p = m.pairs[0];
+    EXPECT_EQ(p.symbol, "BTC/USD");
+    EXPECT_EQ(p.base, "BTC");
+    EXPECT_EQ(p.quote, "USD");
+    EXPECT_EQ(p.status, "online");
+    EXPECT_DOUBLE_EQ(p.qty_increment, 0.00000001);
+    EXPECT_DOUBLE_EQ(p.qty_min, 0.0001);
+    EXPECT_DOUBLE_EQ(p.price_increment, 0.1);
+    EXPECT_DOUBLE_EQ(p.cost_min, 0.5);
+    EXPECT_EQ(p.margin_initial, 20);
+    ASSERT_TRUE(p.position_limit_long.has_value());
+    EXPECT_EQ(p.position_limit_long.value(), 250);
+    ASSERT_TRUE(p.position_limit_short.has_value());
+    EXPECT_EQ(p.position_limit_short.value(), 250);
+    ASSERT_TRUE(p.has_index.has_value());
+    EXPECT_TRUE(p.has_index.value());
+    ASSERT_TRUE(p.cost_precision.has_value());
+    EXPECT_EQ(p.cost_precision.value(), 5);
+    ASSERT_TRUE(p.qty_precision.has_value());
+    EXPECT_EQ(p.qty_precision.value(), 10);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

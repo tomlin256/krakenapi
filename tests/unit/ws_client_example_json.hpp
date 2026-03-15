@@ -70,12 +70,9 @@ inline constexpr const char* kOhlcUpdateJson = R"({"channel":"ohlc","data":[{"cl
 // Instrument
 // ─────────────────────────────────────────────────────────────────────────────
 
-// NOTE: the real instrument channel returns data as an object
-// {"assets":[…], "pairs":[…]}, which does not match the current
-// InstrumentMessage::from_json() array-iteration implementation.
-// This synthetic example uses the array format that the parser expects;
-// instrument parsing will be revisited separately.
-inline constexpr const char* kInstrumentSnapshotJson = R"({"channel":"instrument","data":[{"symbol":"BTC/USD","base":"BTC","quote":"USD","status":"online","qty_increment":0.00000001,"qty_min":0.0001,"price_increment":0.1,"cost_min":0.5,"margin_initial":20,"position_limit_long":250,"position_limit_short":250}],"type":"snapshot"})";
+// Synthetic snapshot matching the real instrument channel structure:
+// data is an object with "assets" and "pairs" arrays.
+inline constexpr const char* kInstrumentSnapshotJson = R"({"channel":"instrument","data":{"assets":[{"borrowable":true,"collateral_value":1.0,"id":"BTC","margin_rate":0.02,"precision":10,"precision_display":5,"status":"enabled"}],"pairs":[{"base":"BTC","cost_min":0.5,"cost_precision":5,"has_index":true,"margin_initial":20,"position_limit_long":250,"position_limit_short":250,"price_increment":0.1,"qty_increment":0.00000001,"qty_min":0.0001,"qty_precision":10,"quote":"USD","status":"online","symbol":"BTC/USD"}]},"type":"snapshot"})";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Executions / Balances (private channels — synthetic examples)

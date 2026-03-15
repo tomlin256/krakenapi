@@ -107,18 +107,19 @@ static void handle_message(const json& j, bool dump_json)
         case kraken::ws::MessageKind::Instrument:
         {
             auto m = kraken::ws::InstrumentMessage::from_json(j);
-            spdlog::info("[instrument/{}] {} instrument(s)", m.type, m.data.size());
-            std::size_t n = std::min<std::size_t>(5, m.data.size());
+            spdlog::info("[instrument/{}] {} asset(s), {} pair(s)",
+                         m.type, m.assets.size(), m.pairs.size());
+            std::size_t n = std::min<std::size_t>(5, m.pairs.size());
             for (std::size_t i = 0; i < n; ++i)
             {
-                const auto& d = m.data[i];
+                const auto& p = m.pairs[i];
                 spdlog::info("  {} ({}/{}) status={} qty_min={:.8f} "
                              "price_inc={:.8f}",
-                             d.symbol, d.base, d.quote,
-                             d.status, d.qty_min, d.price_increment);
+                             p.symbol, p.base, p.quote,
+                             p.status, p.qty_min, p.price_increment);
             }
-            if (m.data.size() > n)
-                spdlog::info("  … and {} more", m.data.size() - n);
+            if (m.pairs.size() > n)
+                spdlog::info("  … and {} more pairs", m.pairs.size() - n);
             break;
         }
         case kraken::ws::MessageKind::Status:

@@ -227,17 +227,18 @@ static void run_instrument() {
     auto [ack, handle] = client->subscribe(
         sub_req,
         [](const kraken::ws::InstrumentMessage& msg) {
-            spdlog::info("[instrument/{}] {} instrument(s)", msg.type, msg.data.size());
-            // Print the first few to avoid flooding the terminal.
-            std::size_t n = std::min<std::size_t>(5, msg.data.size());
+            spdlog::info("[instrument/{}] {} asset(s), {} pair(s)",
+                         msg.type, msg.assets.size(), msg.pairs.size());
+            // Print the first few pairs to avoid flooding the terminal.
+            std::size_t n = std::min<std::size_t>(5, msg.pairs.size());
             for (std::size_t i = 0; i < n; ++i) {
-                const auto& d = msg.data[i];
+                const auto& p = msg.pairs[i];
                 spdlog::info("  {} ({}/{}) status={} qty_min={:.8f} price_inc={:.8f}",
-                             d.symbol, d.base, d.quote,
-                             d.status, d.qty_min, d.price_increment);
+                             p.symbol, p.base, p.quote,
+                             p.status, p.qty_min, p.price_increment);
             }
-            if (msg.data.size() > n)
-                spdlog::info("  … and {} more", msg.data.size() - n);
+            if (msg.pairs.size() > n)
+                spdlog::info("  … and {} more pairs", msg.pairs.size() - n);
         },
         std::chrono::milliseconds{10000}
     );
