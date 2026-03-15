@@ -1,5 +1,9 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.15...4.2)
 project(KRAKENAPI)
+
+# Allow fetched dependencies that declare cmake_minimum_required < 3.5
+# (CMake 4.x removed compatibility below 3.5)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 include(FetchContent)
 

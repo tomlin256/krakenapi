@@ -9,7 +9,7 @@
             "type": "lldb",
             "request": "launch",
             "program": "${command:cmake.launchTargetPath}",
-            "args": ["BTC/USD"],
+            "args": ["book", "BTC/USD" ],
             "cwd": "${workspaceRoot}"
         }
     ]
