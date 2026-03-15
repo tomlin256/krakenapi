@@ -76,19 +76,70 @@ std::string dir = location.empty() ? std::string(home) + "/.kraken" : location;
 - **File:** `src/kraken_ws_client.cpp:77`
 - **Status:** [ ] TODO
 
-Bare `catch(...)` with a silent `return` makes malformed-frame bugs invisible in production.
+Bare `catch(...)` with a silent `return` makes malformed-frame bugs invisible in production. Fix by introducing an `IWsErrorHandler` abstraction so the error-handling strategy is injectable and testable, with a rate-limited default.
+
+#### New interface (`include/kraken_ws_client.hpp`)
 
 ```cpp
-// Current:
-try { j = json::parse(raw); } catch (...) { return; }
+class IWsErrorHandler {
+public:
+    virtual ~IWsErrorHandler() = default;
+    virtual void on_malformed_frame(const std::string& raw,
+                                    const std::exception& e) = 0;
+};
+```
 
-// Fix: log at warn level before returning
+#### Default implementation (`include/kraken_ws_client.hpp` + `src/kraken_ws_client.cpp`)
+
+```cpp
+class RateLimitedWsErrorHandler : public IWsErrorHandler {
+public:
+    explicit RateLimitedWsErrorHandler(
+        std::chrono::milliseconds interval = std::chrono::seconds{60});
+
+    void on_malformed_frame(const std::string& raw,
+                            const std::exception& e) override;
+private:
+    std::chrono::milliseconds interval_;
+    std::atomic<uint64_t>     count_{0};
+    std::atomic<int64_t>      last_logged_us_{0};
+};
+```
+
+Logs immediately on the first bad frame, then at most once per `interval_` with a running count — no log flood, but you know immediately when something breaks and whether it is ongoing.
+
+#### Factory function signatures (`include/kraken_ws_client.hpp`, `include/kraken_ix_ws_connection.hpp`)
+
+```cpp
+std::shared_ptr<KrakenWsClient> make_ws_client(
+    std::shared_ptr<IWsConnection>   conn,
+    std::shared_ptr<IWsErrorHandler> error_handler = nullptr);
+
+std::shared_ptr<KrakenWsClient> make_ws_client(
+    const std::string&               url,
+    std::shared_ptr<IWsErrorHandler> error_handler = nullptr);
+```
+
+`nullptr` → factory substitutes `RateLimitedWsErrorHandler` with the 60 s default.
+
+#### `on_raw_message` (`src/kraken_ws_client.cpp`)
+
+```cpp
 try { j = json::parse(raw); }
 catch (const std::exception& e) {
-    spdlog::warn("KrakenWsClient: failed to parse message: {} | raw: {}", e.what(), raw);
+    error_handler_->on_malformed_frame(raw, e);
     return;
 }
 ```
+
+#### File changes
+
+| File | Change |
+|---|---|
+| `include/kraken_ws_client.hpp` | Add `IWsErrorHandler`, `RateLimitedWsErrorHandler` (declaration), `error_handler_` field, update `make_ws_client` signature |
+| `src/kraken_ws_client.cpp` | Implement `RateLimitedWsErrorHandler::on_malformed_frame`, update `on_raw_message`, update factory bodies |
+| `include/kraken_ix_ws_connection.hpp` | Add optional `error_handler` parameter to its `make_ws_client` overload |
+| `tests/unit/test_ws_client.cpp` | Add test with a custom `IWsErrorHandler` that records calls; assert invoked on bad frame, not on valid frame |
 
 ---
 
