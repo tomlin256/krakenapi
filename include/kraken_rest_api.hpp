@@ -166,9 +166,14 @@ struct Credentials {
     std::string api_secret;  // base64-encoded private key → used for signing
 
     static Credentials from_file(const std::string& name, const std::string& location="") {
-        std::string dir = location.empty()
-            ? std::string(getenv("HOME")) + "/.kraken"
-            : location;
+        std::string dir;
+        if (location.empty()) {
+            const char* home = getenv("HOME");
+            if (!home) throw std::runtime_error("HOME environment variable not set");
+            dir = std::string(home) + "/.kraken";
+        } else {
+            dir = location;
+        }
 
         std::string filepath = dir + "/" + name;
 

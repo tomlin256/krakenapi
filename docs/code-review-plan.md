@@ -52,7 +52,7 @@ p.fee_preference = (j["fee_preference"].get<std::string>() == "base")
 
 ### 3. Null dereference on `getenv("HOME")`
 - **File:** `include/kraken_rest_api.hpp:170`
-- **Status:** [ ] TODO
+- **Status:** [x] DONE
 
 Crashes in containers or CI environments where `HOME` is unset.
 
@@ -251,7 +251,7 @@ Several tests only verify that parsing does not crash. Update them to assert act
 
 1. [x] Fix `stp_type` parsing — data corruption on live orders
 2. [x] Add `fee_preference_from_string` — data corruption on live orders
-3. [ ] Guard `getenv("HOME")` against null — crash in CI/containers
+3. [x] Guard `getenv("HOME")` against null — crash in CI/containers
 4. [ ] Log on JSON parse failure — production observability
 5. [ ] Wrap `curl_slist` in RAII — resource safety
 6. [ ] Fix `url_encode` sign-extension — correctness / UB

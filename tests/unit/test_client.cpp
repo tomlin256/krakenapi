@@ -146,3 +146,21 @@ TEST(KrakenRestClient, PrivateExecute_PropagatesErrors) {
     ASSERT_EQ(resp.errors.size(), 1u);
     EXPECT_EQ(resp.errors[0], "EOrder:Insufficient funds");
 }
+
+// ---------------------------------------------------------------------------
+// Credentials::from_file error paths
+// ---------------------------------------------------------------------------
+
+TEST(CredentialsFromFile, ThrowsWhenFileNotFound) {
+    EXPECT_THROW(
+        Credentials::from_file("nonexistent", "/tmp/no_such_dir"),
+        std::runtime_error
+    );
+}
+
+TEST(CredentialsFromFile, ThrowsWhenHomeUnset) {
+    const char* saved = getenv("HOME");
+    unsetenv("HOME");
+    EXPECT_THROW(Credentials::from_file("default"), std::runtime_error);
+    if (saved) setenv("HOME", saved, 1);
+}
