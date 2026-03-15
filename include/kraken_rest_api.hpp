@@ -125,7 +125,8 @@ inline std::string url_encode(const std::string& s) {
         if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~')
             oss << c;
         else
-            oss << '%' << std::uppercase << std::hex << std::setw(2) << std::setfill('0') << (int)c;
+            oss << '%' << std::uppercase << std::hex << std::setw(2) << std::setfill('0')
+                << static_cast<unsigned int>(static_cast<unsigned char>(c));
     }
     return oss.str();
 }

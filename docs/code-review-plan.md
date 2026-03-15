@@ -153,7 +153,7 @@ Both structs are defined twice. The copy in `kraken_ws_api.hpp` is a legacy arte
 
 ### 6. No RAII for `curl_slist`
 - **File:** `src/kraken_rest_client.cpp:64-86`
-- **Status:** [ ] TODO
+- **Status:** [x] DONE
 
 `curl_slist_free_all` is not called if an exception is thrown between allocation and cleanup. Wrap with a custom deleter:
 
@@ -166,7 +166,7 @@ std::unique_ptr<curl_slist, decltype(chunk_deleter)> chunk(nullptr, chunk_delete
 
 ### 7. Sign-extension bug in `url_encode`
 - **File:** `include/kraken_rest_api.hpp:128`
-- **Status:** [ ] TODO
+- **Status:** [x] DONE
 
 C-style cast from `char` to `int` causes undefined behaviour on platforms where `char` is signed.
 

@@ -61,11 +61,12 @@ std::string KrakenRestClient::curl_perform(const HttpRequest& http) {
     curl_easy_setopt(curl_, CURLOPT_URL, url.c_str());
 
     // Build header list from HttpRequest::headers.
-    curl_slist* chunk = nullptr;
+    auto chunk_deleter = [](curl_slist* p) { if (p) curl_slist_free_all(p); };
+    std::unique_ptr<curl_slist, decltype(chunk_deleter)> chunk(nullptr, chunk_deleter);
     for (const auto& [key, val] : http.headers)
-        chunk = curl_slist_append(chunk, (key + ": " + val).c_str());
+        chunk.reset(curl_slist_append(chunk.release(), (key + ": " + val).c_str()));
     if (chunk)
-        curl_easy_setopt(curl_, CURLOPT_HTTPHEADER, chunk);
+        curl_easy_setopt(curl_, CURLOPT_HTTPHEADER, chunk.get());
 
     // Method-specific options.
     if (http.method == HttpRequest::Method::GET) {
@@ -82,8 +83,6 @@ std::string KrakenRestClient::curl_perform(const HttpRequest& http) {
     curl_easy_setopt(curl_, CURLOPT_WRITEDATA, static_cast<void*>(&response));
 
     CURLcode rc = curl_easy_perform(curl_);
-    if (chunk)
-        curl_slist_free_all(chunk);
 
     if (rc != CURLE_OK)
         throw std::runtime_error(std::string("curl_easy_perform failed: ") + curl_easy_strerror(rc));
