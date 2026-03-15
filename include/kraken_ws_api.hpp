@@ -37,60 +37,6 @@ struct WsCredentials {
 };
 
 // ============================================================
-// Common sub-objects
-// ============================================================
-
-struct Triggers {
-    double price{0.0};
-    std::optional<TriggerReference> reference;   // default: last
-    std::optional<PriceType>        price_type;  // default: static
-
-    json to_json() const {
-        json j;
-        j["price"] = price;
-        if (reference)  j["reference"]  = to_string(*reference);
-        if (price_type) j["price_type"] = to_string(*price_type);
-        return j;
-    }
-
-    static Triggers from_json(const json& j) {
-        Triggers t;
-        t.price = j.at("price").get<double>();
-        if (j.contains("reference"))  t.reference  = trigger_ref_from_string(j["reference"].get<std::string>());
-        if (j.contains("price_type")) t.price_type = price_type_from_string(j["price_type"].get<std::string>());
-        return t;
-    }
-};
-
-struct Conditional {
-    std::optional<OrderType> order_type;
-    std::optional<double>    limit_price;
-    std::optional<PriceType> limit_price_type;
-    std::optional<double>    trigger_price;
-    std::optional<PriceType> trigger_price_type;
-
-    json to_json() const {
-        json j;
-        if (order_type)         j["order_type"]         = to_string(*order_type);
-        if (limit_price)        j["limit_price"]        = *limit_price;
-        if (limit_price_type)   j["limit_price_type"]   = to_string(*limit_price_type);
-        if (trigger_price)      j["trigger_price"]      = *trigger_price;
-        if (trigger_price_type) j["trigger_price_type"] = to_string(*trigger_price_type);
-        return j;
-    }
-
-    static Conditional from_json(const json& j) {
-        Conditional c;
-        if (j.contains("order_type"))         c.order_type         = order_type_from_string(j["order_type"].get<std::string>());
-        if (j.contains("limit_price"))        c.limit_price        = j["limit_price"].get<double>();
-        if (j.contains("limit_price_type"))   c.limit_price_type   = price_type_from_string(j["limit_price_type"].get<std::string>());
-        if (j.contains("trigger_price"))      c.trigger_price      = j["trigger_price"].get<double>();
-        if (j.contains("trigger_price_type")) c.trigger_price_type = price_type_from_string(j["trigger_price_type"].get<std::string>());
-        return c;
-    }
-};
-
-// ============================================================
 // Typed request bases  (mirror TypedPublicRequest/TypedPrivateRequest from REST)
 // ============================================================
 

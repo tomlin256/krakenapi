@@ -145,7 +145,7 @@ catch (const std::exception& e) {
 
 ### 5. Duplicate `Triggers` / `Conditional` struct definitions
 - **Files:** `include/kraken_types.hpp` and `include/kraken_ws_api.hpp:43-63`
-- **Status:** [ ] TODO
+- **Status:** [x] DONE
 
 Both structs are defined twice. The copy in `kraken_ws_api.hpp` is a legacy artefact and should be removed so only the `kraken::` namespace versions are used.
 
