@@ -800,7 +800,7 @@ struct TradeData {
     double      qty{0.0};
     std::string side;        // "buy" | "sell"
     std::string ord_type;    // "limit" | "market"
-    std::string trade_id;
+    int64_t     trade_id{0}; // numeric trade ID as returned by the API
     std::string timestamp;
 
     static TradeData from_json(const json& j) {
@@ -810,7 +810,7 @@ struct TradeData {
         t.qty       = j.value("qty", 0.0);
         t.side      = j.value("side", "");
         t.ord_type  = j.value("ord_type", "");
-        t.trade_id  = j.value("trade_id", "");
+        t.trade_id  = j.value("trade_id", int64_t{0});
         t.timestamp = j.value("timestamp", "");
         return t;
     }
@@ -847,7 +847,8 @@ struct OHLCData {
     double      vwap{0.0};
     double      volume{0.0};
     int64_t     trades{0};
-    int32_t     interval_begin{0};
+    std::string interval_begin;  // ISO 8601 start time of the candle interval
+    std::optional<int32_t> interval; // interval length in minutes
 
     static OHLCData from_json(const json& j) {
         OHLCData o;
@@ -860,7 +861,8 @@ struct OHLCData {
         o.vwap           = j.value("vwap", 0.0);
         o.volume         = j.value("volume", 0.0);
         o.trades         = j.value("trades", int64_t{0});
-        o.interval_begin = j.value("interval_begin", 0);
+        o.interval_begin = j.value("interval_begin", "");
+        if (j.contains("interval")) o.interval = j["interval"].get<int32_t>();
         return o;
     }
 };

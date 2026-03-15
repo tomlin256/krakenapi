@@ -21,3 +21,11 @@ gtest_discover_tests(kraken_unit_tests)
 add_executable(test_ws_client test_ws_client.cpp)
 target_link_libraries(test_ws_client krakenapi GTest::gtest_main)
 gtest_discover_tests(test_ws_client)
+
+#-------------------------------------------------------------------------------
+# WebSocket response parsing unit tests (sample JSON → from_json verification)
+#-------------------------------------------------------------------------------
+
+add_executable(test_ws_responses test_ws_responses.cpp)
+target_link_libraries(test_ws_responses krakenapi GTest::gtest_main)
+gtest_discover_tests(test_ws_responses)
