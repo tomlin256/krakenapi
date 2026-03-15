@@ -74,7 +74,7 @@ std::string dir = location.empty() ? std::string(home) + "/.kraken" : location;
 
 ### 4. Silent discard of malformed WebSocket frames
 - **File:** `src/kraken_ws_client.cpp:77`
-- **Status:** [ ] TODO
+- **Status:** [x] DONE
 
 Bare `catch(...)` with a silent `return` makes malformed-frame bugs invisible in production. Fix by introducing an `IWsErrorHandler` abstraction so the error-handling strategy is injectable and testable, with a rate-limited default.
 
@@ -303,7 +303,7 @@ Several tests only verify that parsing does not crash. Update them to assert act
 1. [x] Fix `stp_type` parsing — data corruption on live orders
 2. [x] Add `fee_preference_from_string` — data corruption on live orders
 3. [x] Guard `getenv("HOME")` against null — crash in CI/containers
-4. [ ] Log on JSON parse failure — production observability
+4. [x] Log on JSON parse failure — production observability
 5. [ ] Wrap `curl_slist` in RAII — resource safety
 6. [ ] Fix `url_encode` sign-extension — correctness / UB
 7. [ ] Add tests for untested enum paths and error paths

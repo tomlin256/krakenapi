@@ -1,9 +1,36 @@
-// kraken_ws_client.inl — template method implementations for KrakenWsClient.
-// Included at the bottom of kraken_ws_client.hpp; do not include directly.
+// kraken_ws_client.inl — non-template inline implementations and template method
+// implementations for KrakenWsClient. Included at the bottom of
+// kraken_ws_client.hpp; do not include directly.
 
 #pragma once
 
 namespace kraken::ws {
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RateLimitedWsErrorHandler
+// ─────────────────────────────────────────────────────────────────────────────
+
+inline RateLimitedWsErrorHandler::RateLimitedWsErrorHandler(
+    std::chrono::milliseconds interval)
+    : interval_us_(std::chrono::duration_cast<std::chrono::microseconds>(interval).count())
+{}
+
+inline void RateLimitedWsErrorHandler::on_malformed_frame(
+    const std::string& /*raw*/, const std::exception& e)
+{
+    const auto count  = ++count_;
+    const auto now_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                            std::chrono::steady_clock::now().time_since_epoch()).count();
+    const auto last   = last_logged_us_.load(std::memory_order_relaxed);
+
+    if (count == 1 || now_us - last >= interval_us_) {
+        last_logged_us_.store(now_us, std::memory_order_relaxed);
+        std::fprintf(stderr,
+            "KrakenWsClient: failed to parse WebSocket frame"
+            " (total malformed: %llu) — %s\n",
+            static_cast<unsigned long long>(count), e.what());
+    }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // detail::make_ws_response<T>
@@ -152,8 +179,9 @@ KrakenWsClient::subscribe(Req req,
 // ─────────────────────────────────────────────────────────────────────────────
 
 inline std::shared_ptr<KrakenWsClient>
-make_ws_client(std::shared_ptr<IWsConnection> conn) {
-    auto client = std::make_shared<KrakenWsClient>(conn);
+make_ws_client(std::shared_ptr<IWsConnection>   conn,
+               std::shared_ptr<IWsErrorHandler>  error_handler = nullptr) {
+    auto client = std::make_shared<KrakenWsClient>(std::move(conn), std::move(error_handler));
     client->init();
     return client;
 }

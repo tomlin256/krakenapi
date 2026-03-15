@@ -660,3 +660,105 @@ TEST(TypedSubscribeRequest, ToJsonContainsCorrectChannel) {
     auto j = req.to_json();
     EXPECT_EQ(j["params"]["channel"].get<std::string>(), "ticker");
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Group: IWsErrorHandler — malformed frame handling
+// ─────────────────────────────────────────────────────────────────────────────
+
+// A recording error handler that captures every call for inspection.
+class RecordingErrorHandler : public kraken::ws::IWsErrorHandler {
+public:
+    struct Call { std::string raw; std::string what; };
+    std::vector<Call> calls;
+
+    void on_malformed_frame(const std::string& raw,
+                            const std::exception& e) override {
+        calls.push_back({raw, e.what()});
+    }
+};
+
+// Helper: create a client with a RecordingErrorHandler already open.
+static std::pair<std::shared_ptr<kraken::ws::KrakenWsClient>,
+                 std::shared_ptr<MockWsConnection>>
+make_client_with_handler(std::shared_ptr<kraken::ws::IWsErrorHandler> handler) {
+    auto conn   = std::make_shared<MockWsConnection>();
+    auto client = kraken::ws::make_ws_client(
+        std::static_pointer_cast<kraken::ws::IWsConnection>(conn),
+        std::move(handler));
+    conn->fire_open();
+    return {client, conn};
+}
+
+TEST(WsErrorHandler, InvokedOnMalformedFrame) {
+    auto handler = std::make_shared<RecordingErrorHandler>();
+    auto [client, conn] = make_client_with_handler(handler);
+
+    conn->inject_message("not valid json {{{");
+
+    ASSERT_EQ(handler->calls.size(), 1u);
+    EXPECT_EQ(handler->calls[0].raw, "not valid json {{{");
+    EXPECT_FALSE(handler->calls[0].what.empty());
+}
+
+TEST(WsErrorHandler, NotInvokedOnValidFrame) {
+    auto handler = std::make_shared<RecordingErrorHandler>();
+    auto [client, conn] = make_client_with_handler(handler);
+
+    conn->inject_message(R"({"channel":"heartbeat"})");
+
+    EXPECT_TRUE(handler->calls.empty());
+}
+
+TEST(WsErrorHandler, InvokedForEachMalformedFrame) {
+    auto handler = std::make_shared<RecordingErrorHandler>();
+    auto [client, conn] = make_client_with_handler(handler);
+
+    conn->inject_message("bad1");
+    conn->inject_message("bad2");
+    conn->inject_message("bad3");
+
+    EXPECT_EQ(handler->calls.size(), 3u);
+    EXPECT_EQ(handler->calls[0].raw, "bad1");
+    EXPECT_EQ(handler->calls[1].raw, "bad2");
+    EXPECT_EQ(handler->calls[2].raw, "bad3");
+}
+
+TEST(WsErrorHandler, NotInvokedOnValidPushFrame) {
+    auto handler = std::make_shared<RecordingErrorHandler>();
+    auto [client, conn] = make_client_with_handler(handler);
+
+    // Subscribe so the push callback is installed.
+    kraken::ws::TickerSubscribeRequest sub_req;
+    sub_req.symbols = std::vector<std::string>{"BTC/USD"};
+    auto fut = client->subscribe_async(sub_req, [](const kraken::ws::TickerMessage&) {});
+    int64_t id = json::parse(conn->sent_messages[0])["req_id"].get<int64_t>();
+    conn->inject_message(make_subscribe_ack(id));
+    fut.get();
+
+    conn->inject_message(make_ticker_push());
+
+    EXPECT_TRUE(handler->calls.empty());
+}
+
+TEST(WsErrorHandler, RateLimitedHandlerCanBeConstructedWithCustomInterval) {
+    // Verify custom interval compiles and runs without crashing.
+    auto handler = std::make_shared<kraken::ws::RateLimitedWsErrorHandler>(
+        std::chrono::milliseconds{100});
+    auto [client, conn] = make_client_with_handler(handler);
+
+    for (int i = 0; i < 5; ++i)
+        conn->inject_message("not json");
+    // No crash, no throw.
+    SUCCEED();
+}
+
+TEST(WsErrorHandler, DefaultHandlerUsedWhenNoneProvided) {
+    // When no handler is passed, make_ws_client must not crash on bad input.
+    auto conn   = std::make_shared<MockWsConnection>();
+    auto client = kraken::ws::make_ws_client(
+        std::static_pointer_cast<kraken::ws::IWsConnection>(conn));
+    conn->fire_open();
+
+    // Should not throw or crash — default RateLimitedWsErrorHandler handles it.
+    EXPECT_NO_THROW(conn->inject_message("{bad json"));
+}

@@ -27,6 +27,9 @@ void SubscriptionHandle::cancel() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void KrakenWsClient::init() {
+    if (!error_handler_)
+        error_handler_ = std::make_shared<RateLimitedWsErrorHandler>();
+
     if (conn_->is_connected())
         connected_.store(true);
 
@@ -74,7 +77,8 @@ void KrakenWsClient::on_open_handler() {
 
 void KrakenWsClient::on_raw_message(const std::string& raw) {
     json j;
-    try { j = json::parse(raw); } catch (...) { return; }
+    try { j = json::parse(raw); }
+    catch (const std::exception& e) { error_handler_->on_malformed_frame(raw, e); return; }
 
     // Method responses and subscribe/unsubscribe acks carry req_id.
     if (j.contains("req_id") && j["req_id"].is_number_integer()) {

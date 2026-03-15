@@ -82,9 +82,10 @@ private:
 // ─────────────────────────────────────────────────────────────────────────────
 
 inline std::shared_ptr<KrakenWsClient>
-make_ws_client(const std::string& url) {
+make_ws_client(const std::string&               url,
+               std::shared_ptr<IWsErrorHandler>  error_handler = nullptr) {
     auto conn   = std::make_shared<IxWsConnection>(url);
-    auto client = std::make_shared<KrakenWsClient>(conn);
+    auto client = std::make_shared<KrakenWsClient>(conn, std::move(error_handler));
     client->init();
     conn->connect();
     return client;

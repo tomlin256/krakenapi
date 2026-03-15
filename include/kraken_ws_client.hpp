@@ -54,6 +54,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdio>
 #include <functional>
 #include <future>
 #include <map>
@@ -75,6 +76,45 @@ struct WsResponse {
     bool ok{false};
     std::optional<std::string> error;
     std::optional<T>           result;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IWsErrorHandler  –  strategy interface for WebSocket error events
+// ─────────────────────────────────────────────────────────────────────────────
+
+class IWsErrorHandler {
+public:
+    virtual ~IWsErrorHandler() = default;
+
+    // Called when a raw WebSocket frame cannot be JSON-parsed.
+    // Implementations decide whether/how to log, count, or rethrow.
+    virtual void on_malformed_frame(const std::string& raw,
+                                    const std::exception& e) = 0;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RateLimitedWsErrorHandler  –  default IWsErrorHandler implementation
+//
+// Logs the first malformed frame immediately, then at most once per `interval`.
+// Each log line includes a running total count, so you know immediately when
+// something breaks and whether the problem is sustained.
+//
+// Uses std::fprintf(stderr, ...) — no external logging dependency required.
+// Method implementations live in kraken_ws_client.inl.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class RateLimitedWsErrorHandler : public IWsErrorHandler {
+public:
+    explicit RateLimitedWsErrorHandler(
+        std::chrono::milliseconds interval = std::chrono::seconds{60});
+
+    void on_malformed_frame(const std::string& raw,
+                            const std::exception& e) override;
+
+private:
+    int64_t               interval_us_;
+    std::atomic<uint64_t> count_{0};
+    std::atomic<int64_t>  last_logged_us_{0};
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -161,8 +201,10 @@ WsResponse<T> make_ws_response(T r);
 
 class KrakenWsClient : public std::enable_shared_from_this<KrakenWsClient> {
 public:
-    explicit KrakenWsClient(std::shared_ptr<IWsConnection> conn)
+    KrakenWsClient(std::shared_ptr<IWsConnection>   conn,
+                   std::shared_ptr<IWsErrorHandler>  error_handler = nullptr)
         : conn_(std::move(conn))
+        , error_handler_(std::move(error_handler))
     {}
 
     // Must be called once after the shared_ptr<KrakenWsClient> is created
@@ -205,9 +247,10 @@ public:
     void cancel_subscription(const std::string& channel, const std::string& unsub_json);
 
 private:
-    std::shared_ptr<IWsConnection> conn_;
-    std::atomic<int64_t>           next_req_id_{1};
-    std::atomic<bool>              connected_{false};
+    std::shared_ptr<IWsConnection>  conn_;
+    std::shared_ptr<IWsErrorHandler> error_handler_;  // set to default in init() if null
+    std::atomic<int64_t>            next_req_id_{1};
+    std::atomic<bool>               connected_{false};
 
     // Outbound queue: messages sent before on_open are queued and flushed on connect.
     std::mutex               queue_mu_;
@@ -246,15 +289,6 @@ private:
 
 inline constexpr std::string_view PUBLIC_WS_URL  = "wss://ws.kraken.com/v2";
 inline constexpr std::string_view PRIVATE_WS_URL = "wss://ws-auth.kraken.com/v2";
-
-// Wrap an already-managed connection (avoids a new TCP handshake, or useful
-// when injecting a mock connection for tests).
-// If the connection is already open, subsequent execute/subscribe calls will
-// send immediately rather than queuing.
-// See kraken_ix_ws_connection.hpp for the overload that creates a fresh
-// IxWsConnection from a URL string.
-std::shared_ptr<KrakenWsClient>
-make_ws_client(std::shared_ptr<IWsConnection> conn);
 
 } // namespace kraken::ws
 
