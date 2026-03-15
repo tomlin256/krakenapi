@@ -20,7 +20,7 @@ Generated: 2026-03-13
 
 ### 1. Broken `stp_type` parsing
 - **File:** `include/kraken_types.hpp:336`
-- **Status:** [ ] TODO
+- **Status:** [x] DONE
 
 `stp_type` is hardcoded to `StpType::CancelNewest` regardless of the actual JSON value. Every order with any `stp_type` silently gets the wrong value.
 
@@ -249,7 +249,7 @@ Several tests only verify that parsing does not crash. Update them to assert act
 
 ## Recommended Priority Order
 
-1. [ ] Fix `stp_type` parsing — data corruption on live orders
+1. [x] Fix `stp_type` parsing — data corruption on live orders
 2. [ ] Add `fee_preference_from_string` — data corruption on live orders
 3. [ ] Guard `getenv("HOME")` against null — crash in CI/containers
 4. [ ] Log on JSON parse failure — production observability

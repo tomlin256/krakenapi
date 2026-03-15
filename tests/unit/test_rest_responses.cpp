@@ -179,3 +179,39 @@ TEST(CancelOrderResult, ParsesCount) {
     auto r = CancelOrderResult::from_json(j);
     EXPECT_EQ(r.count, 1);
 }
+
+// ---------------------------------------------------------------------------
+// stp_type parsing
+// ---------------------------------------------------------------------------
+
+TEST(StpTypeParsing, CancelNewest) {
+    auto j = json::parse(R"({"order_type":"limit","side":"buy","symbol":"BTC/USD","stp_type":"cancel_newest"})");
+    auto p = kraken::OrderParams::from_json(j);
+    ASSERT_TRUE(p.stp_type.has_value());
+    EXPECT_EQ(*p.stp_type, kraken::StpType::CancelNewest);
+}
+
+TEST(StpTypeParsing, CancelOldest) {
+    auto j = json::parse(R"({"order_type":"limit","side":"buy","symbol":"BTC/USD","stp_type":"cancel_oldest"})");
+    auto p = kraken::OrderParams::from_json(j);
+    ASSERT_TRUE(p.stp_type.has_value());
+    EXPECT_EQ(*p.stp_type, kraken::StpType::CancelOldest);
+}
+
+TEST(StpTypeParsing, CancelBoth) {
+    auto j = json::parse(R"({"order_type":"limit","side":"buy","symbol":"BTC/USD","stp_type":"cancel_both"})");
+    auto p = kraken::OrderParams::from_json(j);
+    ASSERT_TRUE(p.stp_type.has_value());
+    EXPECT_EQ(*p.stp_type, kraken::StpType::CancelBoth);
+}
+
+TEST(StpTypeParsing, AbsentFieldLeavesOptionalEmpty) {
+    auto j = json::parse(R"({"order_type":"limit","side":"buy","symbol":"BTC/USD"})");
+    auto p = kraken::OrderParams::from_json(j);
+    EXPECT_FALSE(p.stp_type.has_value());
+}
+
+TEST(StpTypeParsing, InvalidValueThrows) {
+    auto j = json::parse(R"({"order_type":"limit","side":"buy","symbol":"BTC/USD","stp_type":"bogus"})");
+    EXPECT_THROW(kraken::OrderParams::from_json(j), std::invalid_argument);
+}

@@ -157,6 +157,12 @@ inline std::string to_string(StpType v) {
     }
     throw std::invalid_argument("Unknown StpType");
 }
+inline StpType stp_type_from_string(const std::string& s) {
+    if (s == "cancel_newest") return StpType::CancelNewest;
+    if (s == "cancel_oldest") return StpType::CancelOldest;
+    if (s == "cancel_both")   return StpType::CancelBoth;
+    throw std::invalid_argument("Unknown StpType: " + s);
+}
 
 inline std::string to_string(FeePreference v) { return v == FeePreference::Base ? "base" : "quote"; }
 
@@ -333,7 +339,7 @@ struct OrderParams {
         if (j.contains("order_userref"))    p.order_userref    = j["order_userref"].get<int64_t>();
         if (j.contains("display_qty"))      p.display_qty      = j["display_qty"].get<double>();
         if (j.contains("fee_preference"))   p.fee_preference   = (j["fee_preference"].get<std::string>() == "base") ? FeePreference::Base : FeePreference::Quote;
-        if (j.contains("stp_type"))         p.stp_type         = StpType::CancelNewest; // parse if needed
+        if (j.contains("stp_type"))         p.stp_type         = stp_type_from_string(j["stp_type"].get<std::string>());
         if (j.contains("cash_order_qty"))   p.cash_order_qty   = j["cash_order_qty"].get<double>();
         if (j.contains("validate"))         p.validate         = j["validate"].get<bool>();
         if (j.contains("sender_sub_id"))    p.sender_sub_id    = j["sender_sub_id"].get<std::string>();
