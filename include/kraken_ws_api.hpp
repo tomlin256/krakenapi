@@ -755,20 +755,20 @@ struct BookData {
     std::string             symbol;
     std::vector<BookEntry>  bids;
     std::vector<BookEntry>  asks;
-    std::optional<std::string> checksum;
+    std::optional<unsigned int> checksum;
 
     static BookData from_json(const json& j) {
         BookData b;
         b.symbol = j.value("symbol", "");
         if (j.contains("bids")) {
             for (const auto& item : j["bids"])
-                b.bids.push_back({item[0].get<double>(), item[1].get<double>()});
+                b.bids.push_back({item["price"].get<double>(), item["qty"].get<double>()});
         }
         if (j.contains("asks")) {
             for (const auto& item : j["asks"])
-                b.asks.push_back({item[0].get<double>(), item[1].get<double>()});
+                b.asks.push_back({item["price"].get<double>(), item["qty"].get<double>()});
         }
-        if (j.contains("checksum")) b.checksum = j["checksum"].get<std::string>();
+        if (j.contains("checksum")) b.checksum = j["checksum"].get<unsigned int>();
         return b;
     }
 };
