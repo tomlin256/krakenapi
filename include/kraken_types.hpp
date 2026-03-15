@@ -165,6 +165,11 @@ inline StpType stp_type_from_string(const std::string& s) {
 }
 
 inline std::string to_string(FeePreference v) { return v == FeePreference::Base ? "base" : "quote"; }
+inline FeePreference fee_preference_from_string(const std::string& s) {
+    if (s == "base")  return FeePreference::Base;
+    if (s == "quote") return FeePreference::Quote;
+    throw std::invalid_argument("Unknown FeePreference: " + s);
+}
 
 inline std::string to_string(OrderStatus v) {
     switch (v) {
@@ -338,7 +343,7 @@ struct OrderParams {
         if (j.contains("cl_ord_id"))        p.cl_ord_id        = j["cl_ord_id"].get<std::string>();
         if (j.contains("order_userref"))    p.order_userref    = j["order_userref"].get<int64_t>();
         if (j.contains("display_qty"))      p.display_qty      = j["display_qty"].get<double>();
-        if (j.contains("fee_preference"))   p.fee_preference   = (j["fee_preference"].get<std::string>() == "base") ? FeePreference::Base : FeePreference::Quote;
+        if (j.contains("fee_preference"))   p.fee_preference   = fee_preference_from_string(j["fee_preference"].get<std::string>());
         if (j.contains("stp_type"))         p.stp_type         = stp_type_from_string(j["stp_type"].get<std::string>());
         if (j.contains("cash_order_qty"))   p.cash_order_qty   = j["cash_order_qty"].get<double>();
         if (j.contains("validate"))         p.validate         = j["validate"].get<bool>();

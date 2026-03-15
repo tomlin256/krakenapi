@@ -36,7 +36,7 @@ if (j.contains("stp_type")) p.stp_type = stp_type_from_string(j["stp_type"].get<
 
 ### 2. Missing `fee_preference_from_string` / fragile deserialisation
 - **File:** `include/kraken_types.hpp:335`
-- **Status:** [ ] TODO
+- **Status:** [x] DONE
 
 Only `"base"` is handled; any other value silently becomes `Quote`. The `fee_preference_from_string()` free function (consistent with every other enum converter) is missing entirely.
 
@@ -250,7 +250,7 @@ Several tests only verify that parsing does not crash. Update them to assert act
 ## Recommended Priority Order
 
 1. [x] Fix `stp_type` parsing — data corruption on live orders
-2. [ ] Add `fee_preference_from_string` — data corruption on live orders
+2. [x] Add `fee_preference_from_string` — data corruption on live orders
 3. [ ] Guard `getenv("HOME")` against null — crash in CI/containers
 4. [ ] Log on JSON parse failure — production observability
 5. [ ] Wrap `curl_slist` in RAII — resource safety

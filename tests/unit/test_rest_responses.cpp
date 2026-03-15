@@ -184,6 +184,39 @@ TEST(CancelOrderResult, ParsesCount) {
 // stp_type parsing
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// fee_preference parsing
+// ---------------------------------------------------------------------------
+
+TEST(FeePreferenceParsing, Base) {
+    auto j = json::parse(R"({"fee_preference":"base"})");
+    auto p = kraken::OrderParams::from_json(j);
+    ASSERT_TRUE(p.fee_preference.has_value());
+    EXPECT_EQ(*p.fee_preference, kraken::FeePreference::Base);
+}
+
+TEST(FeePreferenceParsing, Quote) {
+    auto j = json::parse(R"({"fee_preference":"quote"})");
+    auto p = kraken::OrderParams::from_json(j);
+    ASSERT_TRUE(p.fee_preference.has_value());
+    EXPECT_EQ(*p.fee_preference, kraken::FeePreference::Quote);
+}
+
+TEST(FeePreferenceParsing, AbsentFieldLeavesOptionalEmpty) {
+    auto j = json::parse(R"({})");
+    auto p = kraken::OrderParams::from_json(j);
+    EXPECT_FALSE(p.fee_preference.has_value());
+}
+
+TEST(FeePreferenceParsing, InvalidValueThrows) {
+    auto j = json::parse(R"({"fee_preference":"bogus"})");
+    EXPECT_THROW(kraken::OrderParams::from_json(j), std::invalid_argument);
+}
+
+// ---------------------------------------------------------------------------
+// stp_type parsing
+// ---------------------------------------------------------------------------
+
 TEST(StpTypeParsing, CancelNewest) {
     auto j = json::parse(R"({"order_type":"limit","side":"buy","symbol":"BTC/USD","stp_type":"cancel_newest"})");
     auto p = kraken::OrderParams::from_json(j);
