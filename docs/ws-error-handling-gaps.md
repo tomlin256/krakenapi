@@ -1,6 +1,7 @@
 # WebSocket Error Handling Gaps
 
 Generated: 2026-03-23
+Implemented: 2026-03-24 (Gaps 1 and 2)
 
 ---
 
@@ -12,7 +13,7 @@ WebSocket errors and disconnects can occur without any notification reaching the
 
 ---
 
-## Gap 1 — `IxWsConnection` drops `ix::WebSocketMessageType::Error` frames
+## Gap 1 — `IxWsConnection` drops `ix::WebSocketMessageType::Error` frames ✓ Fixed
 
 **File:** `include/kraken_ix_ws_connection.hpp`
 
@@ -56,9 +57,20 @@ and DNS resolution failures. All of these are invisible to the caller.
 4. In `KrakenWsClient::init()`, register a default error handler that logs via
    `error_handler_` (or a fallback `RateLimitedWsErrorHandler`).
 
+### Implemented
+
+- `IWsConnection` gained `ErrorCb` type alias and pure virtual `set_on_error(ErrorCb)`.
+- `IWsErrorHandler` gained pure virtual `on_connection_error(const std::string& reason)`.
+- `RateLimitedWsErrorHandler::on_connection_error` logs to `stderr` (same approach as
+  `on_malformed_frame` — no external dep in `libkrakenapi.a`).
+- `IxWsConnection` handles `ix::WebSocketMessageType::Error`, stores `error_cb_`, and
+  implements `set_on_error`.
+- `KrakenWsClient::init()` registers the error callback, routing through `error_handler_`.
+- 4 new tests in `tests/unit/test_ws_client.cpp` (`ConnectionError.*`).
+
 ---
 
-## Gap 2 — `KrakenWsClient` close notification never reaches callers
+## Gap 2 — `KrakenWsClient` close notification never reaches callers ✓ Fixed
 
 **File:** `src/kraken_ws_client.cpp`
 
@@ -102,6 +114,13 @@ But `onDisconnected()` does not exist in the class.
    });
    ```
 
+### Implemented
+
+- `KrakenWsClient` gained public `set_on_disconnect(std::function<void()> cb)`.
+- `disconnect_cb_` field added; invoked from the close handler in `init()` after
+  `connected_` is set to false.
+- 5 new tests in `tests/unit/test_ws_client.cpp` (`Disconnect.*`).
+
 ---
 
 ## Gap 3 — Malformed frame errors log to `stderr`, not `spdlog`
@@ -133,6 +152,10 @@ public:
                             const std::exception& e) override {
         spdlog::warn("[ws] malformed frame ({}): {:.120}", e.what(), raw);
     }
+
+    void on_connection_error(const std::string& reason) override {
+        spdlog::error("[ws] connection error: {}", reason);
+    }
 };
 ```
 
@@ -152,8 +175,8 @@ injectable sink.
 
 ## Summary
 
-| Gap | File | Severity | Change required |
-|-----|------|----------|-----------------|
-| `Error` frame dropped | `kraken_ix_ws_connection.hpp` | High | Add `ErrorCb` to `IWsConnection`; handle in `IxWsConnection` |
-| No disconnect callback | `kraken_ws_client.cpp` / `.hpp` | High | Add `set_on_disconnect()` to `KrakenWsClient` |
-| Malformed frames → stderr | Consumer (Flywheel) | Medium | Pass spdlog-backed `IWsErrorHandler` to `make_ws_client` |
+| Gap | File | Severity | Status |
+|-----|------|----------|--------|
+| `Error` frame dropped | `kraken_ix_ws_connection.hpp` | High | ✓ Fixed 2026-03-24 |
+| No disconnect callback | `kraken_ws_client.cpp` / `.hpp` | High | ✓ Fixed 2026-03-24 |
+| Malformed frames → stderr | Consumer (Flywheel) | Medium | Open — fix in Flywheel repo |

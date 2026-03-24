@@ -42,8 +42,19 @@ void KrakenWsClient::init() {
         if (auto self = weak_self.lock()) self->on_open_handler();
     });
     conn_->set_on_close([weak_self]() {
-        if (auto self = weak_self.lock()) self->connected_.store(false);
+        if (auto self = weak_self.lock()) {
+            self->connected_.store(false);
+            if (self->disconnect_cb_) self->disconnect_cb_();
+        }
     });
+    conn_->set_on_error([weak_self](const std::string& reason) {
+        if (auto self = weak_self.lock())
+            self->error_handler_->on_connection_error(reason);
+    });
+}
+
+void KrakenWsClient::set_on_disconnect(std::function<void()> cb) {
+    disconnect_cb_ = std::move(cb);
 }
 
 void KrakenWsClient::cancel_subscription(const std::string& channel,

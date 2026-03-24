@@ -1,3 +1,12 @@
+// =============================================================================
+// krakenapi — A type-safe C++ library for the Kraken Spot REST and WebSocket v2 APIs
+//
+// Copyright (c) 2026 Rob Tomlin
+//
+// Licensed under the MIT License. See LICENSE file in the project root for
+// full license information.
+// =============================================================================
+
 // kraken_ws_client.inl — non-template inline implementations and template method
 // implementations for KrakenWsClient. Included at the bottom of
 // kraken_ws_client.hpp; do not include directly.
@@ -30,6 +39,13 @@ inline void RateLimitedWsErrorHandler::on_malformed_frame(
             " (total malformed: %llu) — %s\n",
             static_cast<unsigned long long>(count), e.what());
     }
+}
+
+inline void RateLimitedWsErrorHandler::on_connection_error(const std::string& reason)
+{
+    std::fprintf(stderr,
+        "KrakenWsClient: WebSocket connection error — %s\n",
+        reason.c_str());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

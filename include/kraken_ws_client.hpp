@@ -90,6 +90,10 @@ public:
     // Implementations decide whether/how to log, count, or rethrow.
     virtual void on_malformed_frame(const std::string& raw,
                                     const std::exception& e) = 0;
+
+    // Called when the underlying transport reports a connection-level error
+    // (TLS failure, DNS failure, protocol violation, etc.).
+    virtual void on_connection_error(const std::string& reason) = 0;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -110,6 +114,7 @@ public:
 
     void on_malformed_frame(const std::string& raw,
                             const std::exception& e) override;
+    void on_connection_error(const std::string& reason) override;
 
 private:
     int64_t               interval_us_;
@@ -126,6 +131,7 @@ public:
     using MessageCb = std::function<void(const std::string&)>;
     using OpenCb    = std::function<void()>;
     using CloseCb   = std::function<void()>;
+    using ErrorCb   = std::function<void(const std::string& reason)>;
 
     virtual ~IWsConnection() = default;
 
@@ -140,6 +146,7 @@ public:
     virtual void set_on_message(MessageCb cb) = 0;
     virtual void set_on_open(OpenCb cb)       = 0;
     virtual void set_on_close(CloseCb cb)     = 0;
+    virtual void set_on_error(ErrorCb cb)     = 0;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -242,6 +249,11 @@ public:
               std::function<void(typename Req::push_type)> callback,
               std::chrono::milliseconds timeout = std::chrono::milliseconds{5000});
 
+    // Register a callback invoked whenever the WebSocket connection closes.
+    // Called from the ixwebsocket thread; must be set before the connection
+    // opens (or at least before any disconnect can fire).
+    void set_on_disconnect(std::function<void()> cb);
+
     // Called by SubscriptionHandle::cancel() to remove the push callback
     // and transmit an UnsubscribeRequest.
     void cancel_subscription(const std::string& channel, const std::string& unsub_json);
@@ -249,6 +261,7 @@ public:
 private:
     std::shared_ptr<IWsConnection>  conn_;
     std::shared_ptr<IWsErrorHandler> error_handler_;  // set to default in init() if null
+    std::function<void()>           disconnect_cb_;
     std::atomic<int64_t>            next_req_id_{1};
     std::atomic<bool>               connected_{false};
 
