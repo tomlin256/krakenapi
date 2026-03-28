@@ -41,10 +41,10 @@ void KrakenWsClient::init() {
     conn_->set_on_open([weak_self]() {
         if (auto self = weak_self.lock()) self->on_open_handler();
     });
-    conn_->set_on_close([weak_self]() {
+    conn_->set_on_close([weak_self](std::string reason) {
         if (auto self = weak_self.lock()) {
             self->connected_.store(false);
-            if (self->disconnect_cb_) self->disconnect_cb_();
+            if (self->disconnect_cb_) self->disconnect_cb_(std::move(reason));
         }
     });
     conn_->set_on_error([weak_self](const std::string& reason) {
@@ -53,7 +53,7 @@ void KrakenWsClient::init() {
     });
 }
 
-void KrakenWsClient::set_on_disconnect(std::function<void()> cb) {
+void KrakenWsClient::set_on_disconnect(std::function<void(std::string)> cb) {
     disconnect_cb_ = std::move(cb);
 }
 

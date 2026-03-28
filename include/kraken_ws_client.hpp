@@ -130,7 +130,7 @@ class IWsConnection {
 public:
     using MessageCb = std::function<void(const std::string&)>;
     using OpenCb    = std::function<void()>;
-    using CloseCb   = std::function<void()>;
+    using CloseCb   = std::function<void(std::string reason)>;
     using ErrorCb   = std::function<void(const std::string& reason)>;
 
     virtual ~IWsConnection() = default;
@@ -250,9 +250,10 @@ public:
               std::chrono::milliseconds timeout = std::chrono::milliseconds{5000});
 
     // Register a callback invoked whenever the WebSocket connection closes.
+    // The reason string carries the close code and message, e.g. "[code 1001] Going Away".
     // Called from the ixwebsocket thread; must be set before the connection
     // opens (or at least before any disconnect can fire).
-    void set_on_disconnect(std::function<void()> cb);
+    void set_on_disconnect(std::function<void(std::string)> cb);
 
     // Called by SubscriptionHandle::cancel() to remove the push callback
     // and transmit an UnsubscribeRequest.
@@ -261,7 +262,7 @@ public:
 private:
     std::shared_ptr<IWsConnection>  conn_;
     std::shared_ptr<IWsErrorHandler> error_handler_;  // set to default in init() if null
-    std::function<void()>           disconnect_cb_;
+    std::function<void(std::string)> disconnect_cb_;
     std::atomic<int64_t>            next_req_id_{1};
     std::atomic<bool>               connected_{false};
 

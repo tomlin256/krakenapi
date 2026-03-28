@@ -53,7 +53,7 @@ public:
     // Test helpers
     void inject_message(const std::string& raw)  { if (msg_cb_)   msg_cb_(raw);    }
     void fire_open()                              { if (open_cb_)  open_cb_();      }
-    void fire_close()                             { if (close_cb_) close_cb_();     }
+    void fire_close(std::string reason = "")      { if (close_cb_) close_cb_(std::move(reason)); }
     void fire_error(const std::string& reason)    { if (error_cb_) error_cb_(reason); }
 
 private:
@@ -825,7 +825,7 @@ TEST(Disconnect, CallbackFiredOnClose) {
     auto [client, conn] = make_test_client();
 
     std::atomic<int> fired{0};
-    client->set_on_disconnect([&] { ++fired; });
+    client->set_on_disconnect([&](std::string) { ++fired; });
 
     conn->fire_close();
 
@@ -836,7 +836,7 @@ TEST(Disconnect, CallbackNotFiredBeforeClose) {
     auto [client, conn] = make_test_client();
 
     std::atomic<int> fired{0};
-    client->set_on_disconnect([&] { ++fired; });
+    client->set_on_disconnect([&](std::string) { ++fired; });
 
     EXPECT_EQ(fired.load(), 0);
 }
@@ -845,7 +845,7 @@ TEST(Disconnect, CallbackFiredOnlyOnce) {
     auto [client, conn] = make_test_client();
 
     std::atomic<int> fired{0};
-    client->set_on_disconnect([&] { ++fired; });
+    client->set_on_disconnect([&](std::string) { ++fired; });
 
     conn->fire_close();
     conn->fire_close();
@@ -866,9 +866,35 @@ TEST(Disconnect, ConnectedFlagClearedBeforeCallbackFires) {
     // The disconnect callback should observe connected_ already false.
     // We verify this indirectly: the callback fires only after close.
     bool cb_fired = false;
-    client->set_on_disconnect([&] { cb_fired = true; });
+    client->set_on_disconnect([&](std::string) { cb_fired = true; });
 
     EXPECT_FALSE(cb_fired);
     conn->fire_close();
     EXPECT_TRUE(cb_fired);
+}
+
+TEST(Disconnect, ReasonStringForwardedToCallback) {
+    auto [client, conn] = make_test_client();
+
+    std::string received_reason;
+    client->set_on_disconnect([&](std::string reason) {
+        received_reason = std::move(reason);
+    });
+
+    conn->fire_close("[code 1001] Going Away");
+
+    EXPECT_EQ(received_reason, "[code 1001] Going Away");
+}
+
+TEST(Disconnect, EmptyReasonForwardedToCallback) {
+    auto [client, conn] = make_test_client();
+
+    std::string received_reason = "untouched";
+    client->set_on_disconnect([&](std::string reason) {
+        received_reason = std::move(reason);
+    });
+
+    conn->fire_close();  // default empty reason
+
+    EXPECT_EQ(received_reason, "");
 }

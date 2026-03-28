@@ -42,9 +42,16 @@ public:
                 case ix::WebSocketMessageType::Open:
                     if (open_cb_)  open_cb_();
                     break;
-                case ix::WebSocketMessageType::Close:
-                    if (close_cb_) close_cb_();
+                case ix::WebSocketMessageType::Close: {
+                    if (close_cb_) {
+                        std::string reason = "[code " +
+                            std::to_string(msg->closeInfo.code) + "]";
+                        if (!msg->closeInfo.reason.empty())
+                            reason += " " + msg->closeInfo.reason;
+                        close_cb_(std::move(reason));
+                    }
                     break;
+                }
                 case ix::WebSocketMessageType::Message:
                     if (msg_cb_)   msg_cb_(msg->str);
                     break;
