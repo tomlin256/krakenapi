@@ -29,3 +29,14 @@ gtest_discover_tests(test_ws_client)
 add_executable(test_ws_responses test_ws_responses.cpp)
 target_link_libraries(test_ws_responses krakenapi GTest::gtest_main)
 gtest_discover_tests(test_ws_responses)
+
+#-------------------------------------------------------------------------------
+# WsReconnectSession unit tests (no network I/O)
+#-------------------------------------------------------------------------------
+
+add_executable(test_ws_reconnect_session test_ws_reconnect_session.cpp)
+target_include_directories(test_ws_reconnect_session PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+target_link_libraries(test_ws_reconnect_session GTest::gtest_main)
+gtest_discover_tests(test_ws_reconnect_session)
