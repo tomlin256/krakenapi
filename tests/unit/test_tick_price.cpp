@@ -53,17 +53,17 @@ TEST(TickPriceStr, SubTickRounding) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TickPrice::to_json — serialises as a JSON string (not a number)
+// TickPrice::to_json — serialises as a JSON number (not a string)
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST(TickPriceToJson, EmitsJsonString) {
+TEST(TickPriceToJson, EmitsJsonNumber) {
     const auto tp = kraken::TickPrice::from(309.6217, 4);
     const json j = tp.to_json();
-    EXPECT_TRUE(j.is_string());
-    EXPECT_EQ(j.get<std::string>(), "309.6217");
+    EXPECT_TRUE(j.is_number());
+    EXPECT_EQ(j.dump(), "309.6217");
 }
 
-TEST(TickPriceToJson, AddOrderRequestLimitPriceIsString) {
+TEST(TickPriceToJson, AddOrderRequestLimitPriceIsNumber) {
     kraken::ws::AddOrderRequest req;
     req.order_type  = kraken::OrderType::Limit;
     req.side        = kraken::Side::Buy;
@@ -75,8 +75,8 @@ TEST(TickPriceToJson, AddOrderRequestLimitPriceIsString) {
     const json j = req.to_json();
     const auto lp = j["params"]["limit_price"];
 
-    EXPECT_TRUE(lp.is_string()) << "limit_price must be a JSON string, not a number";
-    EXPECT_EQ(lp.get<std::string>(), "309.6217");
+    EXPECT_TRUE(lp.is_number()) << "limit_price must be a JSON number";
+    EXPECT_EQ(lp.dump(), "309.6217");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

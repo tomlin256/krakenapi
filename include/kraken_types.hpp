@@ -235,7 +235,11 @@ struct TickPrice {
         return neg ? "-" + out : out;
     }
 
-    json to_json() const { return str(); }
+    // Serialise as a JSON number via the exact decimal string.
+    // Going through str() eliminates FP multiplication noise (e.g. 3096217*0.0001
+    // → ~309.621699…) before handing the value to nlohmann's shortest-round-trip
+    // dtoa, which reproduces the canonical decimal form ("309.6217").
+    json to_json() const { return std::stod(str()); }
 
     // Reconstruct from a JSON string or number — best-effort round-trip.
     // Only used by tests and sub-object parsing; outbound serialisation never
@@ -255,7 +259,7 @@ struct Triggers {
 
     json to_json() const {
         json j;
-        j["price"] = price.str();
+        j["price"] = price.to_json();
         if (reference)  j["reference"]  = to_string(*reference);
         if (price_type) j["price_type"] = to_string(*price_type);
         return j;
@@ -280,9 +284,9 @@ struct Conditional {
     json to_json() const {
         json j;
         if (order_type)         j["order_type"]         = to_string(*order_type);
-        if (limit_price)        j["limit_price"]        = limit_price->str();
+        if (limit_price)        j["limit_price"]        = limit_price->to_json();
         if (limit_price_type)   j["limit_price_type"]   = to_string(*limit_price_type);
-        if (trigger_price)      j["trigger_price"]      = trigger_price->str();
+        if (trigger_price)      j["trigger_price"]      = trigger_price->to_json();
         if (trigger_price_type) j["trigger_price_type"] = to_string(*trigger_price_type);
         return j;
     }
@@ -348,7 +352,7 @@ struct OrderParams {
         // symbol key differs: WS uses "symbol", REST uses "pair" – callers override if needed
         j["symbol"]     = symbol;
 
-        if (limit_price)      j["limit_price"]      = limit_price->str();
+        if (limit_price)      j["limit_price"]      = limit_price->to_json();
         if (limit_price_type) j["limit_price_type"] = to_string(*limit_price_type);
         if (triggers)         j["triggers"]         = triggers->to_json();
         if (conditional)      j["conditional"]      = conditional->to_json();

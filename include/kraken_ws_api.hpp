@@ -130,7 +130,7 @@ struct AddOrderRequest : TypedWsRequest<AddOrderResponse> {
         params["symbol"]     = symbol;
         params["token"]      = token;
 
-        if (limit_price)      params["limit_price"]      = limit_price->str();
+        if (limit_price)      params["limit_price"]      = limit_price->to_json();
         if (limit_price_type) params["limit_price_type"] = to_string(*limit_price_type);
         if (triggers)         params["triggers"]         = triggers->to_json();
         if (conditional)      params["conditional"]      = conditional->to_json();
@@ -204,10 +204,10 @@ struct AmendOrderRequest : TypedWsRequest<AmendOrderResponse> {
         if (cl_ord_id)        params["cl_ord_id"]        = *cl_ord_id;
         if (order_qty)        params["order_qty"]        = *order_qty;
         if (display_qty)      params["display_qty"]      = *display_qty;
-        if (limit_price)      params["limit_price"]      = limit_price->str();
+        if (limit_price)      params["limit_price"]      = limit_price->to_json();
         if (limit_price_type) params["limit_price_type"] = to_string(*limit_price_type);
         if (triggers)         params["triggers"]         = triggers->to_json();
-        if (post_only_price)  params["post_only_price"]  = post_only_price->str();
+        if (post_only_price)  params["post_only_price"]  = post_only_price->to_json();
         if (deadline)         params["deadline"]         = *deadline;
 
         json msg;
@@ -489,7 +489,7 @@ struct EditOrderRequest : TypedWsRequest<EditOrderResponse> {
         if (cl_ord_id)     params["cl_ord_id"]      = *cl_ord_id;
         if (order_qty)     params["order_qty"]      = *order_qty;
         if (display_qty)   params["display_qty"]    = *display_qty;
-        if (limit_price)   params["limit_price"]    = limit_price->str();
+        if (limit_price)   params["limit_price"]    = limit_price->to_json();
         if (triggers)      params["triggers"]       = triggers->to_json();
         if (post_only)     params["post_only"]      = *post_only;
         if (deadline)      params["deadline"]       = *deadline;
