@@ -1061,7 +1061,7 @@ inline void apply_order_params_to_rest(std::map<std::string, std::string>& p,
     p["volume"]    = std::to_string(op.order_qty);
     p["pair"]      = op.symbol;
 
-    if (op.limit_price)   p["price"]  = std::to_string(*op.limit_price);
+    if (op.limit_price)   p["price"]  = op.limit_price->str();
     if (op.time_in_force) p["timeinforce"] = kraken::to_string(*op.time_in_force);
     if (op.margin && *op.margin) p["leverage"] = "5"; // caller may override
     if (op.post_only && *op.post_only)   p["oflags"] = "post";
@@ -1073,13 +1073,13 @@ inline void apply_order_params_to_rest(std::map<std::string, std::string>& p,
     if (op.deadline)      p["deadline"]   = *op.deadline;
 
     // Triggers (stop price)
-    if (op.triggers) p["price"] = std::to_string(op.triggers->price);
+    if (op.triggers) p["price"] = op.triggers->price.str();
 
     // Conditional close (OTO)
     if (op.conditional) {
         if (op.conditional->order_type) p["close[ordertype]"] = kraken::to_string(*op.conditional->order_type);
-        if (op.conditional->limit_price) p["close[price]"]    = std::to_string(*op.conditional->limit_price);
-        if (op.conditional->trigger_price) p["close[price2]"] = std::to_string(*op.conditional->trigger_price);
+        if (op.conditional->limit_price) p["close[price]"]    = op.conditional->limit_price->str();
+        if (op.conditional->trigger_price) p["close[price2]"] = op.conditional->trigger_price->str();
     }
 }
 
@@ -1128,7 +1128,7 @@ struct AddOrderBatchRequest : TypedPrivateRequest<AddOrderBatchResult> {
             o["ordertype"] = kraken::to_string(op.order_type);
             o["type"]      = kraken::to_string(op.side);
             o["volume"]    = std::to_string(op.order_qty);
-            if (op.limit_price) o["price"] = std::to_string(*op.limit_price);
+            if (op.limit_price) o["price"] = op.limit_price->str();
             if (op.cl_ord_id)   o["cl_ord_id"] = *op.cl_ord_id;
             if (op.order_userref) o["userref"] = *op.order_userref;
             body.push_back(o);

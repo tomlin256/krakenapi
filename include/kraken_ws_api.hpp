@@ -95,7 +95,7 @@ struct AddOrderRequest : TypedWsRequest<AddOrderResponse> {
     std::string token;
 
     // Optional pricing
-    std::optional<double>    limit_price;
+    std::optional<TickPrice> limit_price;
     std::optional<PriceType> limit_price_type;
 
     // Optional trigger section (for triggered order types)
@@ -130,7 +130,7 @@ struct AddOrderRequest : TypedWsRequest<AddOrderResponse> {
         params["symbol"]     = symbol;
         params["token"]      = token;
 
-        if (limit_price)      params["limit_price"]      = *limit_price;
+        if (limit_price)      params["limit_price"]      = limit_price->str();
         if (limit_price_type) params["limit_price_type"] = to_string(*limit_price_type);
         if (triggers)         params["triggers"]         = triggers->to_json();
         if (conditional)      params["conditional"]      = conditional->to_json();
@@ -190,10 +190,10 @@ struct AmendOrderRequest : TypedWsRequest<AmendOrderResponse> {
 
     std::optional<double>    order_qty;
     std::optional<double>    display_qty;
-    std::optional<double>    limit_price;
+    std::optional<TickPrice> limit_price;
     std::optional<PriceType> limit_price_type;
     std::optional<Triggers>  triggers;
-    std::optional<double>    post_only_price; // amend to post-only at this price
+    std::optional<TickPrice> post_only_price; // amend to post-only at this price
     std::optional<std::string> deadline;
     std::optional<int64_t>   req_id;
 
@@ -204,10 +204,10 @@ struct AmendOrderRequest : TypedWsRequest<AmendOrderResponse> {
         if (cl_ord_id)        params["cl_ord_id"]        = *cl_ord_id;
         if (order_qty)        params["order_qty"]        = *order_qty;
         if (display_qty)      params["display_qty"]      = *display_qty;
-        if (limit_price)      params["limit_price"]      = *limit_price;
+        if (limit_price)      params["limit_price"]      = limit_price->str();
         if (limit_price_type) params["limit_price_type"] = to_string(*limit_price_type);
         if (triggers)         params["triggers"]         = triggers->to_json();
-        if (post_only_price)  params["post_only_price"]  = *post_only_price;
+        if (post_only_price)  params["post_only_price"]  = post_only_price->str();
         if (deadline)         params["deadline"]         = *deadline;
 
         json msg;
@@ -475,7 +475,7 @@ struct EditOrderRequest : TypedWsRequest<EditOrderResponse> {
 
     std::optional<double>    order_qty;
     std::optional<double>    display_qty;
-    std::optional<double>    limit_price;
+    std::optional<TickPrice> limit_price;
     std::optional<Triggers>  triggers;
     std::optional<bool>      post_only;
     std::optional<std::string> deadline;
@@ -489,7 +489,7 @@ struct EditOrderRequest : TypedWsRequest<EditOrderResponse> {
         if (cl_ord_id)     params["cl_ord_id"]      = *cl_ord_id;
         if (order_qty)     params["order_qty"]      = *order_qty;
         if (display_qty)   params["display_qty"]    = *display_qty;
-        if (limit_price)   params["limit_price"]    = *limit_price;
+        if (limit_price)   params["limit_price"]    = limit_price->str();
         if (triggers)      params["triggers"]       = triggers->to_json();
         if (post_only)     params["post_only"]      = *post_only;
         if (deadline)      params["deadline"]       = *deadline;

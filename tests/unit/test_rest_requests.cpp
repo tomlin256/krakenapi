@@ -147,7 +147,7 @@ TEST(PrivateRequests, AddOrder_Path) {
     req.params.side       = kraken::Side::Buy;
     req.params.symbol     = "XBTUSD";
     req.params.order_qty  = 0.001;
-    req.params.limit_price = 30000.0;
+    req.params.limit_price = kraken::TickPrice::from(30000.0, 4);
     auto http = req.build(make_dummy_creds());
     EXPECT_EQ(http.path, "/0/private/AddOrder");
     EXPECT_EQ(http.method, HttpRequest::Method::POST);

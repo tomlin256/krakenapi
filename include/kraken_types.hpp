@@ -25,6 +25,8 @@
 // that owns them.
 
 #include <nlohmann/json.hpp>
+#include <cmath>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -194,25 +196,73 @@ inline OrderStatus order_status_from_string(const std::string& s) {
 }
 
 // ============================================================
+// TickPrice — exact decimal price representation
+//
+// A price on Kraken is an integer multiple of the pair's tick size (10^-d).
+// TickPrice stores (ticks, decimals) and serialises as an exact decimal string,
+// bypassing nlohmann/json's floating-point dtoa and any representational noise.
+// ============================================================
+
+struct TickPrice {
+    int64_t ticks{0};
+    int     decimals{0};
+
+    // Snap an absolute price onto the tick grid for a given decimal precision.
+    static TickPrice from(double price, int decimals) {
+        const long double scale = std::pow(10.0L, decimals);
+        return TickPrice{
+            static_cast<int64_t>(std::llroundl(
+                static_cast<long double>(price) * scale)),
+            decimals};
+    }
+
+    // Exact decimal string via integer point-insertion — no FP, no locale.
+    std::string str() const {
+        const bool neg = ticks < 0;
+        const uint64_t mag = neg
+            ? static_cast<uint64_t>(-(ticks + 1)) + 1
+            : static_cast<uint64_t>(ticks);
+        std::string digits = std::to_string(mag);
+        std::string out;
+        if (decimals <= 0) {
+            out = digits;
+        } else {
+            if (static_cast<int>(digits.size()) <= decimals)
+                digits.insert(0, static_cast<size_t>(decimals) - digits.size() + 1, '0');
+            const size_t dot = digits.size() - static_cast<size_t>(decimals);
+            out = digits.substr(0, dot) + "." + digits.substr(dot);
+        }
+        return neg ? "-" + out : out;
+    }
+
+    json to_json() const { return str(); }
+
+    // Reconstruct from a JSON string or number — best-effort round-trip.
+    // Only used by tests and sub-object parsing; outbound serialisation never
+    // depends on this path.
+    static TickPrice from_json(const json& j);
+};
+
+// ============================================================
 // Sub-objects shared between REST and WebSocket
 // ============================================================
 
 // Trigger section for stop/trailing order types.
 struct Triggers {
-    double price{0.0};
+    TickPrice price{};
     std::optional<TriggerReference> reference;  // default: last
     std::optional<PriceType>        price_type; // default: static
 
     json to_json() const {
         json j;
-        j["price"] = price;
+        j["price"] = price.str();
         if (reference)  j["reference"]  = to_string(*reference);
         if (price_type) j["price_type"] = to_string(*price_type);
         return j;
     }
     static Triggers from_json(const json& j) {
         Triggers t;
-        t.price = j.at("price").get<double>();
+        t.price = TickPrice::from_json(j.at("price"));
         if (j.contains("reference"))  t.reference  = trigger_ref_from_string(j["reference"].get<std::string>());
         if (j.contains("price_type")) t.price_type = price_type_from_string(j["price_type"].get<std::string>());
         return t;
@@ -221,27 +271,27 @@ struct Triggers {
 
 // Conditional secondary (OTO) close order.
 struct Conditional {
-    std::optional<OrderType> order_type;
-    std::optional<double>    limit_price;
-    std::optional<PriceType> limit_price_type;
-    std::optional<double>    trigger_price;
-    std::optional<PriceType> trigger_price_type;
+    std::optional<OrderType>  order_type;
+    std::optional<TickPrice>  limit_price;
+    std::optional<PriceType>  limit_price_type;
+    std::optional<TickPrice>  trigger_price;
+    std::optional<PriceType>  trigger_price_type;
 
     json to_json() const {
         json j;
         if (order_type)         j["order_type"]         = to_string(*order_type);
-        if (limit_price)        j["limit_price"]        = *limit_price;
+        if (limit_price)        j["limit_price"]        = limit_price->str();
         if (limit_price_type)   j["limit_price_type"]   = to_string(*limit_price_type);
-        if (trigger_price)      j["trigger_price"]      = *trigger_price;
+        if (trigger_price)      j["trigger_price"]      = trigger_price->str();
         if (trigger_price_type) j["trigger_price_type"] = to_string(*trigger_price_type);
         return j;
     }
     static Conditional from_json(const json& j) {
         Conditional c;
         if (j.contains("order_type"))         c.order_type         = order_type_from_string(j["order_type"].get<std::string>());
-        if (j.contains("limit_price"))        c.limit_price        = j["limit_price"].get<double>();
+        if (j.contains("limit_price"))        c.limit_price        = TickPrice::from_json(j["limit_price"]);
         if (j.contains("limit_price_type"))   c.limit_price_type   = price_type_from_string(j["limit_price_type"].get<std::string>());
-        if (j.contains("trigger_price"))      c.trigger_price      = j["trigger_price"].get<double>();
+        if (j.contains("trigger_price"))      c.trigger_price      = TickPrice::from_json(j["trigger_price"]);
         if (j.contains("trigger_price_type")) c.trigger_price_type = price_type_from_string(j["trigger_price_type"].get<std::string>());
         return c;
     }
@@ -262,7 +312,7 @@ struct OrderParams {
     std::string symbol;       // e.g. "BTC/USD"  (WS) or "XBTUSD" (REST pair field)
 
     // Optional pricing
-    std::optional<double>    limit_price;
+    std::optional<TickPrice> limit_price;
     std::optional<PriceType> limit_price_type;
 
     // Trigger section
@@ -298,7 +348,7 @@ struct OrderParams {
         // symbol key differs: WS uses "symbol", REST uses "pair" – callers override if needed
         j["symbol"]     = symbol;
 
-        if (limit_price)      j["limit_price"]      = *limit_price;
+        if (limit_price)      j["limit_price"]      = limit_price->str();
         if (limit_price_type) j["limit_price_type"] = to_string(*limit_price_type);
         if (triggers)         j["triggers"]         = triggers->to_json();
         if (conditional)      j["conditional"]      = conditional->to_json();
@@ -329,7 +379,7 @@ struct OrderParams {
         if (j.contains("symbol"))      p.symbol = j["symbol"].get<std::string>();
         else if (j.contains("pair"))   p.symbol = j["pair"].get<std::string>();
 
-        if (j.contains("limit_price"))      p.limit_price      = j["limit_price"].get<double>();
+        if (j.contains("limit_price"))      p.limit_price      = TickPrice::from_json(j["limit_price"]);
         if (j.contains("limit_price_type")) p.limit_price_type = price_type_from_string(j["limit_price_type"].get<std::string>());
         if (j.contains("triggers"))         p.triggers         = Triggers::from_json(j["triggers"]);
         if (j.contains("conditional"))      p.conditional      = Conditional::from_json(j["conditional"]);

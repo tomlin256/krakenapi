@@ -126,7 +126,7 @@ TEST(KrakenRestClient, PrivateExecute_AddOrder) {
     req.params.side        = kraken::Side::Buy;
     req.params.symbol      = "XBTUSD";
     req.params.order_qty   = 0.001;
-    req.params.limit_price = 30000.0;
+    req.params.limit_price = kraken::TickPrice::from(30000.0, 4);
 
     auto resp = client.execute(req, dummy_creds());
     ASSERT_TRUE(resp.ok);

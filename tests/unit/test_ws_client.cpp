@@ -196,7 +196,7 @@ TEST(ExecuteAsync, SendsRequestWithInjectedReqId) {
     req.order_qty  = 0.001;
     req.symbol     = "BTC/USD";
     req.token      = "tok";
-    req.limit_price = 30000.0;
+    req.limit_price = kraken::TickPrice::from(30000.0, 1);
 
     auto fut = client->execute_async(req);
 
@@ -241,7 +241,7 @@ TEST(ExecuteAsync, ResolvesOnErrorResponse) {
     req.order_qty  = 0.001;
     req.symbol     = "BTC/USD";
     req.token      = "tok";
-    req.limit_price = 1.0;
+    req.limit_price = kraken::TickPrice::from(1.0, 1);
 
     auto fut = client->execute_async(req);
     int64_t id = json::parse(conn->sent_messages[0])["req_id"].get<int64_t>();
@@ -263,10 +263,10 @@ TEST(ExecuteAsync, TwoRequestsInFlightResolvedInReverseOrder) {
     req1.order_qty  = 0.001;
     req1.symbol     = "BTC/USD";
     req1.token      = "tok";
-    req1.limit_price = 30000.0;
+    req1.limit_price = kraken::TickPrice::from(30000.0, 1);
 
     kraken::ws::AddOrderRequest req2 = req1;
-    req2.limit_price = 31000.0;
+    req2.limit_price = kraken::TickPrice::from(31000.0, 1);
 
     auto fut1 = client->execute_async(req1);
     auto fut2 = client->execute_async(req2);
@@ -301,7 +301,7 @@ TEST(Execute, BlocksUntilResponse) {
     req.order_qty   = 0.001;
     req.symbol      = "BTC/USD";
     req.token       = "tok";
-    req.limit_price  = 30000.0;
+    req.limit_price  = kraken::TickPrice::from(30000.0, 1);
 
     // Inject the response from a separate thread after a short delay.
     std::thread injector([&] {
@@ -326,7 +326,7 @@ TEST(Execute, TimesOutAndReturnsError) {
     req.order_qty   = 0.001;
     req.symbol      = "BTC/USD";
     req.token       = "tok";
-    req.limit_price  = 30000.0;
+    req.limit_price  = kraken::TickPrice::from(30000.0, 1);
 
     // No response injected → should time out.
     auto resp = client->execute(req, 50ms);
@@ -550,7 +550,7 @@ TEST(PreConnectionQueue, MessagesQueuedBeforeOpen) {
     req.order_qty   = 0.001;
     req.symbol      = "BTC/USD";
     req.token       = "tok";
-    req.limit_price  = 30000.0;
+    req.limit_price  = kraken::TickPrice::from(30000.0, 1);
 
     auto fut = client->execute_async(req);
 
@@ -578,10 +578,10 @@ TEST(PreConnectionQueue, FlushedInOrder) {
     req1.order_qty  = 0.001;
     req1.symbol     = "BTC/USD";
     req1.token      = "tok";
-    req1.limit_price = 30000.0;
+    req1.limit_price = kraken::TickPrice::from(30000.0, 1);
 
     kraken::ws::AddOrderRequest req2 = req1;
-    req2.limit_price = 31000.0;
+    req2.limit_price = kraken::TickPrice::from(31000.0, 1);
 
     auto fut1 = client->execute_async(req1);
     auto fut2 = client->execute_async(req2);
@@ -619,7 +619,7 @@ TEST(PreConnectionQueue, DirectSendWhenAlreadyConnected) {
     req.order_qty   = 0.001;
     req.symbol      = "BTC/USD";
     req.token       = "tok";
-    req.limit_price  = 30000.0;
+    req.limit_price  = kraken::TickPrice::from(30000.0, 1);
 
     auto fut = client->execute_async(req);
 

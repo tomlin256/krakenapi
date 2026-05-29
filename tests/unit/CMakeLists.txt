@@ -31,6 +31,14 @@ target_link_libraries(test_ws_responses krakenapi GTest::gtest_main)
 gtest_discover_tests(test_ws_responses)
 
 #-------------------------------------------------------------------------------
+# TickPrice unit tests
+#-------------------------------------------------------------------------------
+
+add_executable(test_tick_price test_tick_price.cpp)
+target_link_libraries(test_tick_price krakenapi GTest::gtest_main)
+gtest_discover_tests(test_tick_price)
+
+#-------------------------------------------------------------------------------
 # WsReconnectSession unit tests (no network I/O)
 #-------------------------------------------------------------------------------
 
