@@ -250,8 +250,8 @@ struct CancelOrderRequest : TypedWsRequest<CancelOrderResponse> {
     json to_json() const {
         json params;
         params["token"] = token;
-        if (order_ids && !order_ids->empty())   params["order_ids"]  = *order_ids;
-        if (cl_ord_ids && !cl_ord_ids->empty()) params["cl_ord_ids"] = *cl_ord_ids;
+        if (order_ids && !order_ids->empty())   params["order_id"]  = *order_ids;
+        if (cl_ord_ids && !cl_ord_ids->empty()) params["cl_ord_id"] = *cl_ord_ids;
 
         json msg;
         msg["method"] = "cancel_order";
@@ -438,8 +438,8 @@ struct BatchCancelRequest : TypedWsRequest<BatchCancelResponse> {
     json to_json() const {
         json params;
         params["token"] = token;
-        if (order_ids && !order_ids->empty())   params["order_ids"]  = *order_ids;
-        if (cl_ord_ids && !cl_ord_ids->empty()) params["cl_ord_ids"] = *cl_ord_ids;
+        if (order_ids && !order_ids->empty())   params["order_id"]  = *order_ids;
+        if (cl_ord_ids && !cl_ord_ids->empty()) params["cl_ord_id"] = *cl_ord_ids;
 
         json msg;
         msg["method"] = "batch_cancel";
