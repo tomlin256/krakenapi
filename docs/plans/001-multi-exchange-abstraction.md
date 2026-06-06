@@ -38,6 +38,9 @@ include/
                           #   SubscribeResponse, BaseWsResponse, MessageFrame
       ws_client.hpp       # GenericWsClient<MsgId> — exchange-agnostic dispatch
       ws_client.inl       # Template bodies (included by ws_client.hpp)
+      ix_ws_connection.hpp# IxWsConnection — generic ixwebsocket IWsConnection impl
+                          #   + make_generic_ws_client(url, identifier) factory
+      reconnect_session.hpp # WsReconnectSession — generic reconnect/backoff machinery
       types.hpp           # Canonical exchange-agnostic enums:
                           #   Side {Buy, Sell}, OrderType {Limit, Market, …},
                           #   TimeInForce {GTC, GTD, IOC}, OrderStatus
@@ -47,21 +50,22 @@ include/
                           #   FeePreference, TickPrice, OrderParams, Triggers,
                           #   Conditional, OrderDescription, OrderInfo, etc.
       rest_api.hpp        # All Kraken REST request/response structs
-      ws_api.hpp          # All Kraken WS request/response structs
+      ws_api.hpp          # All Kraken WS request/response structs + identify_message
       rest_client.hpp     # KrakenRestClient (wraps exchange::rest::GenericRestClient
                           #   with KrakenAuth)
-      ix_ws_connection.hpp# IxWsConnection + URL-string make_ws_client overload
-      reconnect_session.hpp
+      ws_client.hpp       # PUBLIC_WS_URL/PRIVATE_WS_URL consts + make_kraken_ws_client()
+                          #   (thin wrapper over common make_generic_ws_client)
     binance/
       auth.hpp            # BinanceCredentials {api_key, secret_key, Algorithm}
                           #   Algorithm: HmacSha256 | Rsa | Ed25519
       types.hpp           # Binance-specific types and enums
       rest_api.hpp        # Binance REST request/response structs
-      ws_api.hpp          # Binance WebSocket API request/response structs
-      ws_streams.hpp      # Binance market/user data stream types (separate channel
-                          #   architecture: listen key, named streams)
+      ws_api.hpp          # Binance WebSocket API request/response structs + identify
+      ws_streams.hpp      # Binance market stream types + identify_message
+                          #   (listen-key user streams deferred)
       rest_client.hpp     # BinanceRestClient
-      ws_client.hpp       # BinanceWsClient + BinanceStreamClient
+      ws_client.hpp       # STREAM_URL/WS_API_URL consts + make_binance_stream_client()
+                          #   / make_binance_ws_api_client() factories
 src/
   kraken_rest_client.cpp  # Renamed/moved; remains in src/
   kraken_ws_client.cpp
@@ -93,10 +97,10 @@ tests/
 |---|---|
 | `exchange::` | Canonical enums (Side, OrderType, TimeInForce, OrderStatus) |
 | `exchange::rest::` | TypedPublicRequest<R>, TypedPrivateRequest<R>, RestResponse<T>, HttpRequest, IRestAuth |
-| `exchange::ws::` | IWsConnection, WsResponse<T>, SubscriptionHandle, GenericWsClient<MsgId>, BaseWsResponse |
+| `exchange::ws::` | IWsConnection, **IxWsConnection** (generic transport), **WsReconnectSession**, WsResponse<T>, SubscriptionHandle, GenericWsClient, WsRequestBase, TypedWsRequest<R>, BaseWsResponse, `make_generic_ws_client()` |
 | `exchange::kraken::` | Kraken-specific enums, TickPrice, OrderParams, Triggers, Conditional, OrderInfo, etc. |
 | `exchange::kraken::rest::` | All Kraken REST req/resp types, Credentials, KrakenRestClient |
-| `exchange::kraken::ws::` | All Kraken WS req/resp types, SubscribeChannel, IxWsConnection, WsCredentials |
+| `exchange::kraken::ws::` | All Kraken WS req/resp types, SubscribeChannel, WsCredentials, `identify_message`, URL consts, `make_kraken_ws_client()` |
 | `exchange::binance::` | Binance-specific types |
 | `exchange::binance::rest::` | All Binance REST req/resp types, BinanceCredentials, BinanceRestClient |
 | `exchange::binance::ws::` | Binance WS API types, BinanceWsClient |
@@ -351,6 +355,49 @@ Binance has two distinct WebSocket protocols:
 
 Both are instances of `GenericWsClient` with different identifiers and connection URLs.
 
+### E. Transport and reconnect — generic core, narrow per-exchange seams
+
+`IxWsConnection` (the ixwebsocket implementation of `IWsConnection`) and `WsReconnectSession` (the reconnect/backoff thread) look exchange-specific because they live in `kraken_*`/`kraken::ws::` today, but reading them shows **neither contains any Kraken protocol logic**:
+
+- `IxWsConnection` is a pure transport adapter — it forwards ixwebsocket's open/close/message/error callbacks to the `IWsConnection` interface. Its only Kraken coupling is the namespace and a factory that returns `KrakenWsClient`.
+- `WsReconnectSession` is pure machinery — a background thread, a mutex/cv, exponential backoff, and two caller-supplied callbacks (`ConnectFn`, `DisconnectFn`). Its own header already describes it as "transport-level." Zero protocol awareness.
+
+Both therefore move to **`exchange/common/`** (namespace `exchange::ws::`), not into either exchange. The generic URL-string factory becomes:
+
+```cpp
+// exchange/common/ix_ws_connection.hpp
+inline std::shared_ptr<GenericWsClient>
+make_generic_ws_client(const std::string&               url,
+                       MessageIdentifier                identifier,
+                       std::shared_ptr<IWsErrorHandler> error_handler = nullptr) {
+    auto conn   = std::make_shared<IxWsConnection>(url);
+    auto client = std::make_shared<GenericWsClient>(conn, std::move(identifier),
+                                                    std::move(error_handler));
+    client->init();
+    conn->connect();
+    return client;
+}
+```
+
+Each exchange then supplies a one-line wrapper that binds its own `identify_message` and URL constant (`make_kraken_ws_client`, `make_binance_stream_client`, `make_binance_ws_api_client`).
+
+**The genuine per-exchange seams are narrow and data-shaped, not logic-shaped:**
+
+| Seam | Kraken | Binance | Where it lives |
+|---|---|---|---|
+| Endpoint URLs | `PUBLIC_WS_URL`, `PRIVATE_WS_URL` | `STREAM_URL`, `WS_API_URL` | per-exchange `ws_client.hpp` consts |
+| Client factory | `make_kraken_ws_client` | `make_binance_stream_client` / `…ws_api_client` | per-exchange `ws_client.hpp` |
+| Frame routing | `identify_message` (channel/req_id) | `identify_message` (stream/id) | per-exchange `ws_api.hpp` / `ws_streams.hpp` |
+| Keepalive | app-level `{"channel":"heartbeat"}` frame (informational; already classified as `MessageKind::Heartbeat`) | RFC 6455 protocol ping → ixwebsocket auto-pongs within the 60 s window | transport (ixwebsocket) handles both for free |
+| Reconnect trigger | on socket close | on socket close **and** Binance's mandatory ~24 h server-side disconnect | same `WsReconnectSession`; Binance just disconnects more often |
+| Resubscribe-on-reconnect | re-send Kraken subscribe frames | re-send `SUBSCRIBE` for each stream | caller's `ConnectFn` (per-exchange, supplied at the call site) |
+
+Two points worth calling out:
+1. **Binance keepalive is free.** Binance requires the client to answer the server's 20 s ping with a pong inside 60 s; ixwebsocket auto-responds to protocol ping frames per RFC 6455, so no code is needed. `IWsConnection` deliberately has no ping method — keepalive stays a transport concern.
+2. **Reconnect resubscription is the caller's job, by design.** `WsReconnectSession` stays generic because *what to re-subscribe* is supplied through `ConnectFn`. The Binance `binance_ws_client_example` and the Kraken examples each show their own resubscribe set; the session itself is identical. (An optional future convenience — a `GenericWsClient::resubscribe_all()` that replays its active `subscriptions_` — would live in common too, but is out of scope here.)
+
+Optional, generic (not exchange-specific) extension: give `IxWsConnection`'s constructor optional ping-interval / extra-handshake-header parameters. Not required for Kraken or Binance, but it keeps future exchanges that need handshake auth headers from touching the interface.
+
 ---
 
 ## Steps
@@ -362,8 +409,10 @@ Both are instances of `GenericWsClient` with different identifiers and connectio
 - Create `include/exchange/common/rest.hpp` — copy `TypedPublicRequest<R>`, `TypedPrivateRequest<R>`, `RestResponse<T>`, `HttpRequest`, `IRestAuth` (stub) from `kraken_rest_api.hpp`/`kraken_rest_client.hpp`. Namespace: `exchange::rest::`.
 - Create `include/exchange/common/ws.hpp` — copy `IWsConnection`, `WsResponse<T>`, `SubscriptionHandle`, `BaseWsResponse`, and the request-side scaffold `WsRequestBase` + `TypedWsRequest<R>` (see §A2) from `kraken_ws_client.hpp`/`kraken_ws_api.hpp`. Namespace: `exchange::ws::`. Document the subscribe-request concept (`push_type`, `response_type`, `route_key()`, `to_json()`, `unsubscribe_json()`) as a comment here — it is structural, not a base class.
 - Create `include/exchange/common/ws_client.hpp` + `.inl` — `GenericWsClient` taking `MessageIdentifier`. `subscribe_async` calls `req.route_key()` / `req.unsubscribe_json()` and routes the ack through `detail::make_ws_response(Ack::from_json(j))` (no `to_string(channel)` / hand-built `UnsubscribeRequest` / direct `ack.success` read). Namespace: `exchange::ws::`.
+- Create `include/exchange/common/ix_ws_connection.hpp` — move `IxWsConnection` here verbatim (it has no Kraken logic; see §E), namespace `exchange::ws::`, and add the generic `make_generic_ws_client(url, identifier, error_handler)` factory.
+- Create `include/exchange/common/reconnect_session.hpp` (+ `.inl`) — move `WsReconnectSession` here verbatim (generic machinery; see §E), namespace `exchange::ws::`.
 - Create `include/exchange/common/types.hpp` — `Side`, `OrderType`, `TimeInForce`, `OrderStatus` (extracted from `kraken_types.hpp`). Namespace: `exchange::`.
-- No files deleted yet; Kraken headers `#include` the new common headers internally and re-export via `using`.
+- No files deleted yet; the existing `kraken_ws_client.hpp`, `kraken_ix_ws_connection.hpp`, and `ws_reconnect_session.hpp` become thin re-export shims (`using exchange::ws::IxWsConnection;` etc.) so current code and tests keep compiling unchanged.
 - **Tests**: Full build + all existing tests pass. No behaviour change.
 
 ### Step 2 — Migrate Kraken to `exchange/kraken/` namespaces
@@ -375,10 +424,9 @@ Both are instances of `GenericWsClient` with different identifiers and connectio
 - Create `include/exchange/kraken/rest_api.hpp` — all REST req/resp structs, now using `exchange::kraken::rest::` namespace.
 - Create `include/exchange/kraken/ws_api.hpp` — all WS req/resp structs, `exchange::kraken::ws::`. Adapt the WS request scaffold to the generalised contract (§A2): method-call requests inherit `exchange::ws::TypedWsRequest<R>` (their per-struct `req_id` slot now comes from `WsRequestBase`); `TypedSubscribeRequest<PushMsg, Ch>` gains `route_key()` (`return to_string(channel)`) and `unsubscribe_json()` (builds the existing `UnsubscribeRequest`). `SubscribeResponse` keeps `success`; verify `make_ws_response(SubscribeResponse)` derives `ok` from it.
 - Create `include/exchange/kraken/rest_client.hpp` — `KrakenRestClient` wraps `GenericRestClient` + `KrakenAuth : IRestAuth`.
-- Create `include/exchange/kraken/ix_ws_connection.hpp` — `IxWsConnection` + `make_kraken_ws_client()`.
-- Create `include/exchange/kraken/reconnect_session.hpp` — `WsReconnectSession`.
+- Create `include/exchange/kraken/ws_client.hpp` — Kraken WS endpoint constants (`PUBLIC_WS_URL`, `PRIVATE_WS_URL`) plus a one-line `make_kraken_ws_client(url, error_handler)` that calls the common `make_generic_ws_client(url, kraken::ws::identify_message, …)`. No `IxWsConnection`/`WsReconnectSession` copy here — those are the common headers from Step 1, reused as-is.
 - Update `src/kraken_*.cpp` to use new headers/namespaces.
-- Delete old `include/kraken_*.hpp` files once all includes updated.
+- Delete old `include/kraken_*.hpp` files **and the Step 1 re-export shims** (`kraken_ix_ws_connection.hpp`, `ws_reconnect_session.hpp`) once all includes are updated.
 - Update `tests/unit/` includes and namespace references.
 - **Tests**: Full build + all unit tests pass. Examples compile (update includes).
 
@@ -469,7 +517,7 @@ Endpoints to implement:
   - **Format specifics**: push payloads use **terse single-letter keys** (`e`=event, `E`=event-time-ms, `s`=symbol, `p`=price, `q`=qty, `k`=kline-object, …) — `from_json` maps these explicitly. Numbers are strings; times are int-ms. Kline data is nested under `k`.
   - `TypedStreamSubscribeRequest<PushMsg>` (§A2) — stores the `"<symbol>@<stream>"` string; `route_key()` returns it; `to_json()`/`unsubscribe_json()` emit `{"method":"SUBSCRIBE|UNSUBSCRIBE","params":[stream],"id":req_id}`. `response_type = BinanceStreamAck` (parses `{"result":null,"id":N}`; `make_ws_response` derives `ok` from result-present / no-error). Per-stream aliases: `BinanceAggTradeSubscribe`, `BinanceTradeSubscribe`, `BinanceKlineSubscribe`, etc.
   - The subscribe ack carries **no stream echo**, so `SubscriptionHandle` remembers the `route_key` from the request — the generic client already supports this (the handle stores its own key), so no client change is needed.
-- `make_binance_stream_client(url)` factory — returns `GenericWsClient` configured with `BinanceStreamIdentifier`.
+- `make_binance_stream_client(url)` factory — one-liner over the common `make_generic_ws_client(url, BinanceStreamIdentifier)`. No new transport or reconnect code: `IxWsConnection` and `WsReconnectSession` are reused unchanged from `exchange/common/` (see §E). ixwebsocket auto-pongs Binance's 20 s server pings; `WsReconnectSession` handles the mandatory ~24 h reconnect, with the resubscribe set supplied by the caller's `ConnectFn`.
 - Create `tests/unit/binance_ws_stream_example_json.hpp` — captured push frames + subscribe ack (the direct analog of `ws_client_example_json.hpp`).
 - Create `tests/unit/test_binance_ws_client.cpp` — `identify_message` tests (one per event type), `from_json` field assertions, and `MockWsConnection` subscribe-lifecycle tests (fire_open → subscribe ack by id → inject push frame → callback fires → cancel).
 - Add `examples/binance_ws_client_example.cpp` — the direct analog of `ws_client_example.cpp`: a CLI11 app with one subcommand per stream (`aggtrade <symbol>`, `trade <symbol>`, `kline <symbol> --interval 1m`, `ticker <symbol>`, `miniticker <symbol>`, `bookticker <symbol>`, `depth <symbol> [--levels N]`), each `run_*()` creating a client via `make_binance_stream_client(STREAM_URL)`, subscribing with the typed `TypedStreamSubscribeRequest` + a push callback that logs frames, then unsubscribing via the handle. Mirror the Kraken example's **connection-reuse demo** with the Binance-natural equivalent: subscribe to *several streams on one client* over the single combined-stream connection (e.g. `aggTrade` + `bookTicker` for the same symbol), showing multiple active `SubscriptionHandle`s sharing one socket. Public streams only — no credentials. Links `binanceapi ixwebsocket spdlog::spdlog CLI11::CLI11 example_backward`.
@@ -484,7 +532,7 @@ Endpoints to implement:
   - Request/response pairs, each inheriting `exchange::ws::TypedWsRequest<R>` (§A2) with its own `to_json()` rendering `req_id` as the top-level `"id"`: `BinanceWsNewOrderRequest → BinanceWsNewOrderResponse` (`method:"order.place"`), `BinanceWsCancelOrderRequest → BinanceWsCancelOrderResponse` (`method:"order.cancel"`), `BinanceWsPingRequest → BinanceWsPongMessage` (`method:"ping"`).
   - **Format specifics**: request is `{"id":"<uuid|int>","method":"…","params":{…}}`; success reply `{"id":…,"status":200,"result":{…},"rateLimits":[…]}`; error reply `{"id":…,"status":400,"error":{"code":-2010,"msg":"…"}}`. `BinanceWsIdentifier` classifies every reply as a `MethodResponse` with `correlation_id = stringify(id)` — there is no `channel`/push concept on the WS API endpoint. `ok` is derived from `status < 400`; on error, populate `WsResponse::error` from `error.msg`.
   - The `id` is generated as an `int64_t` and stringified (the generic client's `correlation_id` is already a string), matching the Kraken adapter's approach.
-- `make_binance_ws_api_client(url)` factory (endpoint `wss://ws-api.binance.com/ws-api/v3`).
+- `make_binance_ws_api_client(url)` factory (endpoint `wss://ws-api.binance.com/ws-api/v3`) — again a one-liner over the common `make_generic_ws_client`; transport/reconnect reused from `exchange/common/` (§E).
 - Create `tests/unit/binance_ws_api_example_json.hpp` fixtures (success + error replies) and add `identify_message` + `from_json` + `MockWsConnection` execute-lifecycle tests to `test_binance_ws_client.cpp`.
 - **Tests**: All unit tests pass.
 
