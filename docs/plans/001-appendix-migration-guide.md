@@ -81,12 +81,15 @@ Rule of thumb: include `exchange/kraken/<area>.hpp` and the common headers come 
 
 ---
 
-## 7. Fast path — the drop-in compatibility shim
+## 7. Fast path — the shipped compatibility shim (recommended)
 
-If you want your existing `kraken::…` source to compile against the new library **without touching call sites**, add this header once and include it everywhere you previously relied on the old names. It reopens the `kraken` namespace and re-aliases it onto the new layout:
+**The library ships a deprecated compatibility shim** (CMake option `KRAKENAPI_BUILD_COMPAT_SHIM`, default **ON**). With it, your existing `#include "kraken_*.hpp"` lines and `kraken::…` code compile and run **completely unchanged** — including the factory calls — because the shipped shim adds real forwarder functions, not just aliases. This is the recommended path: adopt the new version, keep building, migrate at your pace, then configure with `-DKRAKENAPI_BUILD_COMPAT_SHIM=OFF` to confirm you have fully migrated. See [001-appendix-compat-shim.md](001-appendix-compat-shim.md) for the design and the step-by-step adoption workflow.
+
+You normally do **not** need to write your own shim. The hand-rolled version below is only a fallback for callers who have turned the shipped shim **off** but still want a partial local bridge — note it cannot cover the two factory edits in §8 (a local namespace *alias* can't host forwarder functions; the shipped shim uses real namespaces and does cover them).
 
 ```cpp
-// kraken_compat.hpp — local shim; lets pre-refactor code keep using kraken::…
+// kraken_compat.hpp — LOCAL fallback only; prefer the shipped shim above.
+// Lets pre-refactor code keep using kraken::… when KRAKENAPI_BUILD_COMPAT_SHIM=OFF.
 #pragma once
 #include "exchange/kraken/rest_client.hpp"
 #include "exchange/kraken/rest_api.hpp"
