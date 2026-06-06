@@ -165,6 +165,128 @@ make_kraken_ws_client(const std::string& url) {
 
 The concrete `correlation_id` / `route_key` derivation for every Binance frame is tabulated in [001-appendix-binance-message-formats.md](001-appendix-binance-message-formats.md).
 
+### A2. WebSocket request scaffold — `TypedWsRequest<R>` and `TypedSubscribeRequest`
+
+The dispatch loop above is only half the WS story. The request side has its own typed scaffold — the WS counterpart of `TypedPublicRequest<R>` / `TypedPrivateRequest<R>` on the REST side — and it generalises along the same lines: the *binding of request → response/push types* is exchange-agnostic and moves to `exchange::ws::`; only the *wire rendering* (`to_json`) stays per-exchange.
+
+#### Method-call requests — `TypedWsRequest<R>`
+
+Today this is literally `template<typename R> struct TypedWsRequest { using response_type = R; };`, and each request struct carries its own `req_id` field that `GenericWsClient::execute_async` assigns (`req.req_id = id`). It moves to `exchange::ws::` verbatim, with the per-struct `req_id` slot hoisted into a shared base so the assignment is uniform:
+
+```cpp
+// exchange/common/ws.hpp
+namespace exchange::ws {
+
+// Client-assigned correlation-id slot. Each exchange's to_json() renders it
+// in whatever wire location/format that exchange uses (Kraken: "req_id" inside
+// the message; Binance: top-level "id").
+struct WsRequestBase { int64_t req_id{0}; };
+
+template<typename R>
+struct TypedWsRequest : WsRequestBase {
+    using response_type = R;
+};
+
+} // namespace exchange::ws
+```
+
+**Contract that `GenericWsClient::execute_async<Req>` requires** (unchanged in substance, now the only thing an adapter must satisfy):
+1. `Req` derives `WsRequestBase` (so the client can assign `req.req_id`).
+2. `Req::response_type` names the reply type.
+3. `Req::to_json() const -> json` — must serialise `req_id` into the exchange's correlation field.
+4. `Req::response_type::from_json(const json&) -> Resp`.
+5. `detail::make_ws_response(Resp)` derives `ok` (already type-dispatched: `success` for `BaseResponse` subtypes, `status<400` for Binance replies, always-true for plain `PongMessage`).
+
+So `KrakenAddOrderRequest`, `BinanceWsNewOrderRequest`, and `BinanceWsPingRequest` are all just `: TypedWsRequest<TheirResponse>` with their own `to_json()`. No client changes.
+
+#### Subscription requests — generalising `TypedSubscribeRequest`
+
+This is the one place the current scaffold is genuinely Kraken-shaped and needs widening. Today:
+
+```cpp
+template<typename PushMsg, SubscribeChannel Ch>   // Ch is a Kraken-only enum
+struct TypedSubscribeRequest : SubscribeRequest {
+    using push_type     = PushMsg;
+    using response_type = SubscribeResponse;       // Kraken-only ack type
+    static constexpr SubscribeChannel channel_value = Ch;
+    TypedSubscribeRequest() { this->channel = Ch; }
+};
+```
+
+…and `subscribe_async` reaches into Kraken specifics: it computes the routing key with `to_string(req.channel)` and hand-builds a Kraken `UnsubscribeRequest`. Binance streams have **no fixed channel enum** — a stream is an open-ended `"<symbol>@<stream>"` string (`"btcusdt@aggTrade"`) — and a different ack shape (`{"result":null,"id":N}`), so neither `SubscribeChannel` nor `SubscribeResponse` fits.
+
+**Generalisation**: keep the compile-time `push_type` / `response_type` binding (that is the type-safety win and it is exchange-neutral), but replace the three Kraken-specific touch-points with small member functions every subscribe request provides. The informal concept becomes:
+
+```cpp
+// A WS subscribe request models:
+//   using push_type      = <push message type>;   // e.g. BinanceAggTradeEvent
+//   using response_type  = <ack type>;            // from_json + make_ws_response → ok
+//   int64_t req_id;                                // inherited from WsRequestBase
+//   std::string route_key() const;                 // key the push callback registers under
+//   json to_json() const;                          // the SUBSCRIBE frame
+//   json unsubscribe_json() const;                 // the matching UNSUBSCRIBE frame
+```
+
+`GenericWsClient::subscribe_async` then becomes fully exchange-agnostic — the two Kraken-specific lines change to:
+
+```cpp
+const std::string key      = req.route_key();          // was: to_string(req.channel)
+std::string       unsub    = req.unsubscribe_json().dump();  // was: hand-built UnsubscribeRequest
+// ack handling routes through detail::make_ws_response(Ack::from_json(j)),
+// so ws.ok is derived uniformly instead of reading ack.success directly.
+```
+
+Each exchange keeps its own typed alias layer on top. **Kraken** retains its enum internally and implements the concept in two one-line members:
+
+```cpp
+// exchange/kraken/ws_api.hpp
+template<typename PushMsg, SubscribeChannel Ch>
+struct TypedSubscribeRequest : SubscribeRequest {        // SubscribeRequest : WsRequestBase
+    using push_type     = PushMsg;
+    using response_type = SubscribeResponse;
+    static constexpr SubscribeChannel channel_value = Ch;
+    TypedSubscribeRequest() { this->channel = Ch; }
+    std::string route_key() const { return to_string(channel); }   // "ticker"
+    json        unsubscribe_json() const;                          // builds UnsubscribeRequest
+    // to_json() inherited from SubscribeRequest
+};
+using TickerSubscribeRequest = TypedSubscribeRequest<TickerMessage, SubscribeChannel::Ticker>;
+```
+
+**Binance** models the same concept with a stream string instead of an enum:
+
+```cpp
+// exchange/binance/ws_streams.hpp
+template<typename PushMsg>
+struct TypedStreamSubscribeRequest : exchange::ws::WsRequestBase {
+    using push_type     = PushMsg;
+    using response_type = BinanceStreamAck;            // {"result":null,"id":N}
+    std::string stream;                                 // "btcusdt@aggTrade"
+    std::string route_key() const { return stream; }
+    json to_json() const {
+        return {{"method","SUBSCRIBE"}, {"params", json::array({stream})}, {"id", req_id}};
+    }
+    json unsubscribe_json() const {
+        return {{"method","UNSUBSCRIBE"}, {"params", json::array({stream})}, {"id", req_id}};
+    }
+};
+using BinanceAggTradeSubscribe = TypedStreamSubscribeRequest<BinanceAggTradeEvent>;
+```
+
+#### Request-side concept across both exchanges
+
+| Concept | Kraken | Binance streams | Binance WS API |
+|---|---|---|---|
+| Method-call base | `TypedWsRequest<R>` | — (streams have no method calls) | `TypedWsRequest<R>` |
+| Correlation slot | `req_id` → `"req_id"` in msg | `req_id` → top-level `"id"` | `req_id` → top-level `"id"` |
+| Method name | `"add_order"`, `"ping"` | `"SUBSCRIBE"` | `"order.place"`, `"ping"` |
+| Subscribe base | `TypedSubscribeRequest<PushMsg, Ch>` | `TypedStreamSubscribeRequest<PushMsg>` | — (no push channel) |
+| `route_key()` | `to_string(channel)` → `"ticker"` | `stream` → `"btcusdt@aggTrade"` | — |
+| Ack type (`response_type`) | `SubscribeResponse` (`success` flag) | `BinanceStreamAck` (`result==null`) | — |
+| `unsubscribe_json()` | `UnsubscribeRequest` frame | `UNSUBSCRIBE` frame | — |
+
+Net effect: `TypedWsRequest<R>` moves to `exchange::ws::` unchanged; `TypedSubscribeRequest` loses its three Kraken-specific touch-points to `route_key()` / `unsubscribe_json()` / a `from_json`-able ack type, after which a single `GenericWsClient::subscribe_async` drives Kraken channels and Binance streams identically.
+
 ### B. `IRestAuth` — authentication strategy
 
 ```cpp
@@ -238,8 +360,8 @@ Both are instances of `GenericWsClient` with different identifiers and connectio
 **Done when**: New headers exist; existing code compiles after `#include` path update.
 
 - Create `include/exchange/common/rest.hpp` — copy `TypedPublicRequest<R>`, `TypedPrivateRequest<R>`, `RestResponse<T>`, `HttpRequest`, `IRestAuth` (stub) from `kraken_rest_api.hpp`/`kraken_rest_client.hpp`. Namespace: `exchange::rest::`.
-- Create `include/exchange/common/ws.hpp` — copy `IWsConnection`, `WsResponse<T>`, `SubscriptionHandle`, `BaseWsResponse` from `kraken_ws_client.hpp`/`kraken_ws_api.hpp`. Namespace: `exchange::ws::`.
-- Create `include/exchange/common/ws_client.hpp` + `.inl` — `GenericWsClient` taking `MessageIdentifier`. Namespace: `exchange::ws::`.
+- Create `include/exchange/common/ws.hpp` — copy `IWsConnection`, `WsResponse<T>`, `SubscriptionHandle`, `BaseWsResponse`, and the request-side scaffold `WsRequestBase` + `TypedWsRequest<R>` (see §A2) from `kraken_ws_client.hpp`/`kraken_ws_api.hpp`. Namespace: `exchange::ws::`. Document the subscribe-request concept (`push_type`, `response_type`, `route_key()`, `to_json()`, `unsubscribe_json()`) as a comment here — it is structural, not a base class.
+- Create `include/exchange/common/ws_client.hpp` + `.inl` — `GenericWsClient` taking `MessageIdentifier`. `subscribe_async` calls `req.route_key()` / `req.unsubscribe_json()` and routes the ack through `detail::make_ws_response(Ack::from_json(j))` (no `to_string(channel)` / hand-built `UnsubscribeRequest` / direct `ack.success` read). Namespace: `exchange::ws::`.
 - Create `include/exchange/common/types.hpp` — `Side`, `OrderType`, `TimeInForce`, `OrderStatus` (extracted from `kraken_types.hpp`). Namespace: `exchange::`.
 - No files deleted yet; Kraken headers `#include` the new common headers internally and re-export via `using`.
 - **Tests**: Full build + all existing tests pass. No behaviour change.
@@ -251,7 +373,7 @@ Both are instances of `GenericWsClient` with different identifiers and connectio
 - Create `include/exchange/kraken/auth.hpp` — move `Credentials`, `sign()`, `make_nonce()`, crypto helpers. Namespace: `exchange::kraken::rest::`.
 - Create `include/exchange/kraken/types.hpp` — Kraken-specific types (PriceType, TriggerReference, StpType, FeePreference, TickPrice, OrderParams, Triggers, Conditional, OrderDescription, OrderInfo, TradeInfo, LedgerEntry). Namespace: `exchange::kraken::`.
 - Create `include/exchange/kraken/rest_api.hpp` — all REST req/resp structs, now using `exchange::kraken::rest::` namespace.
-- Create `include/exchange/kraken/ws_api.hpp` — all WS req/resp structs, `exchange::kraken::ws::`.
+- Create `include/exchange/kraken/ws_api.hpp` — all WS req/resp structs, `exchange::kraken::ws::`. Adapt the WS request scaffold to the generalised contract (§A2): method-call requests inherit `exchange::ws::TypedWsRequest<R>` (their per-struct `req_id` slot now comes from `WsRequestBase`); `TypedSubscribeRequest<PushMsg, Ch>` gains `route_key()` (`return to_string(channel)`) and `unsubscribe_json()` (builds the existing `UnsubscribeRequest`). `SubscribeResponse` keeps `success`; verify `make_ws_response(SubscribeResponse)` derives `ok` from it.
 - Create `include/exchange/kraken/rest_client.hpp` — `KrakenRestClient` wraps `GenericRestClient` + `KrakenAuth : IRestAuth`.
 - Create `include/exchange/kraken/ix_ws_connection.hpp` — `IxWsConnection` + `make_kraken_ws_client()`.
 - Create `include/exchange/kraken/reconnect_session.hpp` — `WsReconnectSession`.
@@ -345,7 +467,8 @@ Endpoints to implement:
   - `BinanceStreamIdentifier` — `identify_message()` for stream frames. Use the **combined-stream** endpoint (`wss://stream.binance.com/stream`) so multiple streams share one connection; every push frame is then wrapped as `{"stream":"btcusdt@aggTrade","data":{…}}`. The `route_key` is the `"stream"` value; the subscribe-ack `{"result":null,"id":N}` is a `MethodResponse` with `correlation_id = id`.
   - Push message types: `BinanceAggTradeEvent`, `BinanceTradeEvent`, `BinanceTickerEvent` (`24hrTicker`), `BinanceMiniTickerEvent`, `BinanceKlineEvent`, `BinanceBookTickerEvent`, `BinanceDepthUpdateEvent` (diff) + `BinancePartialDepth` (snapshot).
   - **Format specifics**: push payloads use **terse single-letter keys** (`e`=event, `E`=event-time-ms, `s`=symbol, `p`=price, `q`=qty, `k`=kline-object, …) — `from_json` maps these explicitly. Numbers are strings; times are int-ms. Kline data is nested under `k`.
-  - `BinanceSubscribeRequest` / `BinanceUnsubscribeRequest` — `{"method":"SUBSCRIBE","params":["<symbol>@<stream>",…],"id":N}`. Note the subscribe ack carries **no channel/stream echo**, so `SubscriptionHandle` must remember the `route_key` from the request (Kraken's ack echoes the channel; Binance's does not — the generic client already supports this since the handle stores its own key).
+  - `TypedStreamSubscribeRequest<PushMsg>` (§A2) — stores the `"<symbol>@<stream>"` string; `route_key()` returns it; `to_json()`/`unsubscribe_json()` emit `{"method":"SUBSCRIBE|UNSUBSCRIBE","params":[stream],"id":req_id}`. `response_type = BinanceStreamAck` (parses `{"result":null,"id":N}`; `make_ws_response` derives `ok` from result-present / no-error). Per-stream aliases: `BinanceAggTradeSubscribe`, `BinanceTradeSubscribe`, `BinanceKlineSubscribe`, etc.
+  - The subscribe ack carries **no stream echo**, so `SubscriptionHandle` remembers the `route_key` from the request — the generic client already supports this (the handle stores its own key), so no client change is needed.
 - `make_binance_stream_client(url)` factory — returns `GenericWsClient` configured with `BinanceStreamIdentifier`.
 - Create `tests/unit/binance_ws_stream_example_json.hpp` — captured push frames + subscribe ack (the direct analog of `ws_client_example_json.hpp`).
 - Create `tests/unit/test_binance_ws_client.cpp` — `identify_message` tests (one per event type), `from_json` field assertions, and `MockWsConnection` subscribe-lifecycle tests (fire_open → subscribe ack by id → inject push frame → callback fires → cancel).
@@ -358,7 +481,7 @@ Endpoints to implement:
 
 - Create `include/exchange/binance/ws_api.hpp`:
   - `BinanceWsCredentials` — per-request signing: `apiKey` + `signature` + `timestamp` inside `params` (the logon-session flow is deferred). Reuses `BinanceAuth`'s HMAC-SHA256 over the sorted `params`.
-  - Request/response pairs: `BinanceWsNewOrderRequest → BinanceWsNewOrderResponse` (`method:"order.place"`), `BinanceWsCancelOrderRequest → BinanceWsCancelOrderResponse` (`method:"order.cancel"`), `BinanceWsPingRequest → BinanceWsPongMessage` (`method:"ping"`).
+  - Request/response pairs, each inheriting `exchange::ws::TypedWsRequest<R>` (§A2) with its own `to_json()` rendering `req_id` as the top-level `"id"`: `BinanceWsNewOrderRequest → BinanceWsNewOrderResponse` (`method:"order.place"`), `BinanceWsCancelOrderRequest → BinanceWsCancelOrderResponse` (`method:"order.cancel"`), `BinanceWsPingRequest → BinanceWsPongMessage` (`method:"ping"`).
   - **Format specifics**: request is `{"id":"<uuid|int>","method":"…","params":{…}}`; success reply `{"id":…,"status":200,"result":{…},"rateLimits":[…]}`; error reply `{"id":…,"status":400,"error":{"code":-2010,"msg":"…"}}`. `BinanceWsIdentifier` classifies every reply as a `MethodResponse` with `correlation_id = stringify(id)` — there is no `channel`/push concept on the WS API endpoint. `ok` is derived from `status < 400`; on error, populate `WsResponse::error` from `error.msg`.
   - The `id` is generated as an `int64_t` and stringified (the generic client's `correlation_id` is already a string), matching the Kraken adapter's approach.
 - `make_binance_ws_api_client(url)` factory (endpoint `wss://ws-api.binance.com/ws-api/v3`).
