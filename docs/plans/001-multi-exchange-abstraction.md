@@ -8,6 +8,7 @@ This file is the architecture overview and step plan. Two companion docs hold th
 
 - **[001-appendix-binance-message-formats.md](001-appendix-binance-message-formats.md)** — every Binance REST and WebSocket message captured verbatim from the live API docs, annotated with field types and the dispatch routing key. This is the source material for the test fixtures (the Binance analog of `tests/unit/ws_client_example_json.hpp`).
 - **[001-appendix-testing-strategy.md](001-appendix-testing-strategy.md)** — the test approach mirrored from the existing Kraken suite: captured-frame fixture headers, `from_json` parse tests asserting every field, request-build tests, `identify_message` tests, and mock-performer / `MockWsConnection` end-to-end tests. Lists every new Binance test file and what it covers.
+- **[001-appendix-migration-guide.md](001-appendix-migration-guide.md)** — how existing `krakenapi` callers move from the `kraken::` / `kraken_*.hpp` surface to the new `exchange::…` / `exchange/…` layout: include-path and namespace mapping tables, function renames, a drop-in compatibility shim, test-harness migration, and worked before/after diffs.
 
 ---
 
@@ -424,6 +425,7 @@ Optional, generic (not exchange-specific) extension: give `IxWsConnection`'s con
 - Create `include/exchange/kraken/rest_api.hpp` — all REST req/resp structs, now using `exchange::kraken::rest::` namespace.
 - Create `include/exchange/kraken/ws_api.hpp` — all WS req/resp structs, `exchange::kraken::ws::`. Adapt the WS request scaffold to the generalised contract (§A2): method-call requests inherit `exchange::ws::TypedWsRequest<R>` (their per-struct `req_id` slot now comes from `WsRequestBase`); `TypedSubscribeRequest<PushMsg, Ch>` gains `route_key()` (`return to_string(channel)`) and `unsubscribe_json()` (builds the existing `UnsubscribeRequest`). `SubscribeResponse` keeps `success`; verify `make_ws_response(SubscribeResponse)` derives `ok` from it.
 - Create `include/exchange/kraken/rest_client.hpp` — `KrakenRestClient` wraps `GenericRestClient` + `KrakenAuth : IRestAuth`.
+- In `exchange::kraken::rest` and `exchange::kraken::ws`, re-export the common scaffold types each builds on (`using exchange::rest::RestResponse; using exchange::rest::HttpRequest;` and `using exchange::ws::WsResponse; using exchange::ws::SubscriptionHandle; using exchange::ws::GenericWsClient;`). This keeps `exchange::kraken::rest::RestResponse`-style references resolving and makes the migration-guide compatibility shim work (see [001-appendix-migration-guide.md](001-appendix-migration-guide.md)).
 - Create `include/exchange/kraken/ws_client.hpp` — Kraken WS endpoint constants (`PUBLIC_WS_URL`, `PRIVATE_WS_URL`) plus a one-line `make_kraken_ws_client(url, error_handler)` that calls the common `make_generic_ws_client(url, kraken::ws::identify_message, …)`. No `IxWsConnection`/`WsReconnectSession` copy here — those are the common headers from Step 1, reused as-is.
 - Update `src/kraken_*.cpp` to use new headers/namespaces.
 - Delete old `include/kraken_*.hpp` files **and the Step 1 re-export shims** (`kraken_ix_ws_connection.hpp`, `ws_reconnect_session.hpp`) once all includes are updated.
@@ -552,6 +554,7 @@ Endpoints to implement:
 - Run `ctest --output-on-failure` — all tests pass.
 - Verify **all** examples compile against the restructured headers (both Kraken and the two new Binance examples).
 - Update `CLAUDE.md` to reflect new namespace layout, file structure, and patterns.
+- Update `README.md` and link the migration guide ([001-appendix-migration-guide.md](001-appendix-migration-guide.md)) from the release notes so existing callers find it. Confirm the `exchange::kraken::*` re-exports from Step 2 are present so the guide's compatibility shim actually compiles.
 
 ---
 
