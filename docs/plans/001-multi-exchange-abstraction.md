@@ -2,6 +2,13 @@
 
 **Goal**: Generalise the krakenapi request/response scaffold so that Kraken and Binance (and future exchanges) share a single set of client, connection, and response-envelope types. Only authentication schemes, endpoint paths, and message formats differ per exchange.
 
+## Companion documents
+
+This file is the architecture overview and step plan. Two companion docs hold the detail that the steps depend on:
+
+- **[001-appendix-binance-message-formats.md](001-appendix-binance-message-formats.md)** — every Binance REST and WebSocket message captured verbatim from the live API docs, annotated with field types and the dispatch routing key. This is the source material for the test fixtures (the Binance analog of `tests/unit/ws_client_example_json.hpp`).
+- **[001-appendix-testing-strategy.md](001-appendix-testing-strategy.md)** — the test approach mirrored from the existing Kraken suite: captured-frame fixture headers, `from_json` parse tests asserting every field, request-build tests, `identify_message` tests, and mock-performer / `MockWsConnection` end-to-end tests. Lists every new Binance test file and what it covers.
+
 ---
 
 ## Motivation
@@ -64,6 +71,10 @@ src/
 tests/
   unit/
     (existing Kraken tests, updated for new namespaces/headers)
+    binance_rest_example_json.hpp      # captured REST fixtures (cf. ws_client_example_json.hpp)
+    binance_account_example_json.hpp   # captured account/order fixtures
+    binance_ws_stream_example_json.hpp # captured WS stream push frames
+    binance_ws_api_example_json.hpp    # captured WS API replies
     test_binance_auth.cpp
     test_binance_rest_requests.cpp
     test_binance_rest_responses.cpp
@@ -73,6 +84,8 @@ tests/
     binance_public_rest.cpp
     binance_ws_streams.cpp
 ```
+
+> Fixture headers and the full test matrix are detailed in [001-appendix-testing-strategy.md](001-appendix-testing-strategy.md); their captured JSON comes from [001-appendix-binance-message-formats.md](001-appendix-binance-message-formats.md).
 
 ### Namespace layout after migration
 
@@ -95,7 +108,7 @@ tests/
 
 ## Key Architectural Decisions
 
-### A. `GenericWsClient<MsgId>` — parameterised dispatch
+### A. `GenericWsClient` — runtime-parameterised dispatch
 
 The entire `KrakenWsClient` dispatch loop (pending-handler map, subscription-callback map, pre-connection queue, `SubscriptionHandle`, thread safety) is exchange-agnostic. Only `identify_message(const json&)` differs. The refactored client is:
 
@@ -107,8 +120,10 @@ enum class FrameKind { MethodResponse, PushMessage, Unknown };
 
 struct FrameDescriptor {
     FrameKind kind;
-    std::optional<int64_t> req_id;   // set when kind == MethodResponse
-    std::string channel;             // set when kind == PushMessage
+    // MethodResponse / subscribe-ack: correlates the reply to its request.
+    std::optional<std::string> correlation_id;
+    // PushMessage: the subscription routing key the callback was registered under.
+    std::string route_key;
 };
 
 using MessageIdentifier = std::function<FrameDescriptor(const json&)>;
@@ -143,6 +158,12 @@ make_kraken_ws_client(const std::string& url) {
                exchange::kraken::ws::identify_message);
 }
 ```
+
+**Why `correlation_id` is a `std::string`, not `int64_t`** — Kraken correlates replies by an integer `req_id`; Binance's WebSocket API correlates by an `id` that may be an integer *or* a string (their docs show UUID strings). Keying the internal `pending_` map on `std::string` covers both: the Kraken adapter stringifies its generated `int64_t` req_id before sending and the wire format still emits it as a JSON integer; the Binance adapter uses its `id` directly. The correlation key is internal-only — it never dictates the wire type.
+
+**Why `route_key` instead of `channel`** — Kraken routes push frames by a `"channel"` field (`"ticker"`, `"book"`). Binance combined streams route by a `"stream"` field (`"btcusdt@aggTrade"`), and raw single-stream connections carry only an event-type `"e"` field. `route_key` is whatever string the subscribe request registered the callback under; each exchange's `identify_message` extracts the matching key from an inbound frame. The `subscriptions_` map and `SubscriptionHandle` are otherwise unchanged.
+
+The concrete `correlation_id` / `route_key` derivation for every Binance frame is tabulated in [001-appendix-binance-message-formats.md](001-appendix-binance-message-formats.md).
 
 ### B. `IRestAuth` — authentication strategy
 
@@ -184,7 +205,20 @@ struct RestResponse {
 };
 ```
 
-Each exchange's client parses its own wire format (Kraken: `{"error":[],"result":{}}`, Binance: `{"code":-1121,"msg":"..."}`) and normalises into this envelope. The Kraken parse helper `parse_rest_response<T>()` moves to `exchange::kraken::rest::`.
+Each exchange's client parses its own wire format and normalises into this envelope:
+
+| | Kraken | Binance |
+|---|---|---|
+| Success shape | `{"error":[],"result":{…}}` | bare object/array (`{…}` or `[…]`) — no envelope |
+| Error shape | `{"error":["EOrder:…"],"result":{}}` | `{"code":-1121,"msg":"Invalid symbol."}` |
+| Success signal | `error` array empty | HTTP 2xx **and** no `code`/`msg` error object |
+| `ok` derivation | `error.empty()` | `http_status < 400 && !has("code")` |
+
+Two consequences for the Binance client:
+1. **No wrapping envelope** — the result payload *is* the top-level JSON, so `parse_binance_response<T>()` passes the whole body to `T::from_json` on success and reads `code`/`msg` on failure. A success body can be a JSON array (e.g. `myTrades`, `openOrders`), which the helper handles.
+2. **HTTP status matters** — unlike Kraken (always 200 + error array), Binance signals failure with non-2xx status codes. The HTTP performer must surface the status code to the parser; `HttpRequest`/the performer signature gains a status-code return path.
+
+The Kraken parse helper `parse_rest_response<T>()` moves to `exchange::kraken::rest::`; the Binance helper `parse_binance_response<T>()` lives in `exchange::binance::rest::`. Both yield the same `exchange::rest::RestResponse<T>`.
 
 ### D. Binance WebSocket — two channels, one client
 
@@ -232,11 +266,20 @@ Both are instances of `GenericWsClient` with different identifiers and connectio
 
 - Create `include/exchange/binance/auth.hpp`:
   - `enum class BinanceSignAlgorithm { HmacSha256, Rsa, Ed25519 }`.
-  - `struct BinanceCredentials { api_key, secret_key, BinanceSignAlgorithm }`.
-  - `BinanceAuth : IRestAuth` — injects `X-MBX-APIKEY` header, appends `timestamp` + `recvWindow` + `signature` to query string.
-  - HMAC-SHA256 signing in Step 3; RSA/Ed25519 deferred to a later step.
-- Create `include/exchange/binance/rest_client.hpp` + `src/binance_rest_client.cpp` — `BinanceRestClient`, mirrors `KrakenRestClient` interface. Default base URL: `https://api.binance.com`.
-- Create `tests/unit/test_binance_auth.cpp` — verify HMAC-SHA256 signature against Binance's documented test vector.
+  - `struct BinanceCredentials { api_key, secret_key, BinanceSignAlgorithm, recv_window_ms=5000 }`.
+  - `BinanceAuth : IRestAuth` — injects `X-MBX-APIKEY` header, appends `timestamp` (+ `recvWindow`) to the query/body, computes the signature over the **entire** `query_string + body` concatenation, and appends `&signature=<sig>`.
+  - HMAC-SHA256 signing in Step 3; RSA/Ed25519 deferred (see Deferred items).
+- **Signing differences from Kraken** (these are the easy-to-get-wrong bits — call them out in the test):
+  | | Kraken | Binance HMAC |
+  |---|---|---|
+  | Digest | HMAC-**SHA512** | HMAC-**SHA256** |
+  | Signed payload | `path + SHA256(nonce + body)` | `query_string + body` (concatenated, already URL-encoded) |
+  | Output encoding | **base64** | **lowercase hex** |
+  | Anti-replay | `nonce` (µs counter) | `timestamp` (ms) + optional `recvWindow` |
+  | Key material | base64-decoded secret | raw UTF-8 secret bytes |
+  - Reuse the existing `hmac_*` OpenSSL helpers; add `hmac_sha256()` + a `to_hex()` encoder alongside the existing `base64_encode()`.
+- Create `include/exchange/binance/rest_client.hpp` + `src/binance_rest_client.cpp` — `BinanceRestClient`, mirrors `KrakenRestClient` interface. Default base URL: `https://api.binance.com`. The HTTP performer must return the response **status code** as well as the body (see envelope section C).
+- Create `tests/unit/test_binance_auth.cpp` — verify HMAC-SHA256 hex signature against Binance's published worked example (the SPOT `order` example in *REST API → SIGNED endpoint examples*, which gives a known key/secret/params → expected signature). This is the Binance analog of `test_signature.cpp`.
 - **Tests**: New tests pass; all Kraken tests still pass.
 
 ### Step 4 — Binance REST public endpoints
@@ -257,8 +300,14 @@ Endpoints to implement (in `include/exchange/binance/rest_api.hpp`):
 | `BinanceRecentTradesRequest` | GET `/api/v3/trades` | `BinanceTradesResult` |
 
 - Each inherits `exchange::rest::TypedPublicRequest<R>`.
-- `from_json()` deserialises Binance's JSON format (arrays for klines/trades, objects for ticker).
-- Create `tests/unit/test_binance_rest_requests.cpp` and `test_binance_rest_responses.cpp`.
+- **Format specifics** (full JSON in the appendix; these drive the field types):
+  - Numbers arrive as **JSON strings** (`"4.00000200"`), same as Kraken — parse with `std::stod(j.value("field","0"))`.
+  - Timestamps are **integer milliseconds** (`1499865549590`), *not* ISO-8601 strings — store as `int64_t`. (Kraken WS uses ISO strings; do not copy that here.)
+  - `klines` is an **array of 12-element mixed arrays** — parse positionally by index, not by key.
+  - `depth` bids/asks are **2-element string arrays** `["price","qty"]` — parse positionally.
+  - `ticker/price`, `ticker/24hr`, `bookTicker` accept a single `symbol` or a `symbols=[...]` list; with a list the response becomes a JSON **array** of the object. Support both (single object vs array) in `from_json`.
+- Create `tests/unit/binance_rest_example_json.hpp` — captured response fixtures (the REST analog of `ws_client_example_json.hpp`; see testing-strategy doc). Populate from the appendix.
+- Create `tests/unit/test_binance_rest_requests.cpp` (path/method/query) and `test_binance_rest_responses.cpp` (`from_json` field assertions against the fixtures).
 - Add `examples/binance_public_rest.cpp`.
 - **Tests**: All unit tests pass; example compiles and runs against live Binance (no credentials needed).
 
@@ -279,8 +328,13 @@ Endpoints to implement:
 | `BinanceMyTradesRequest` | GET `/api/v3/myTrades` | `BinanceMyTradesResult` |
 
 - All inherit `exchange::rest::TypedPrivateRequest<R>`.
-- `BinanceNewOrderRequest` maps `exchange::Side` and `exchange::OrderType` to Binance wire strings (`"BUY"/"SELL"`, `"LIMIT"/"MARKET"`).
-- Unit tests use `make_test_client()` (same pattern as Kraken tests).
+- `BinanceNewOrderRequest` maps `exchange::Side` → `"BUY"/"SELL"` and `exchange::OrderType` → `"LIMIT"/"MARKET"/…` (uppercase wire strings; Binance-only types like `STOP_LOSS_LIMIT` live in `exchange::binance::`).
+- **Format specifics**:
+  - `POST /api/v3/order` has three response shapes selected by the `newOrderRespType` param: **ACK** (ids only), **RESULT** (+ fill status), **FULL** (+ `fills[]` array). `BinanceNewOrderResponse` carries all fields as `std::optional` and a `fills` vector that is empty unless FULL. Default for LIMIT/MARKET is FULL.
+  - `DELETE /api/v3/openOrders` returns a **JSON array** of cancelled-order objects; `myTrades`, `openOrders`, `allOrders` likewise return arrays.
+  - Order fields reuse the string-number + int-ms-timestamp conventions from Step 4.
+- Create `tests/unit/binance_account_example_json.hpp` fixtures (account, order ACK/RESULT/FULL, cancel, openOrders, myTrades) — captured from the appendix.
+- Unit tests use `make_test_client()` (same injected-performer pattern as `test_client.cpp`): assert the signed request path/query and that `from_json` parses each fixture. Signing correctness is already covered by `test_binance_auth.cpp`.
 - **Tests**: All unit tests pass.
 
 ### Step 6 — Binance WebSocket market streams
@@ -288,11 +342,13 @@ Endpoints to implement:
 **Done when**: `BinanceStreamClient` subscribes to ticker and trade streams; unit-tested with `MockWsConnection`.
 
 - Create `include/exchange/binance/ws_streams.hpp`:
-  - `BinanceStreamIdentifier` — `identify_message()` for stream frames (inspects `"stream"`, `"data"` fields).
-  - Push message types: `BinanceAggTradeEvent`, `BinanceTickerEvent`, `BinanceMiniTickerEvent`, `BinanceKlineEvent`, `BinanceDepthUpdateEvent`.
-  - `BinanceSubscribeRequest` / `BinanceUnsubscribeRequest` (params: `["<symbol>@<stream>", ...]`).
+  - `BinanceStreamIdentifier` — `identify_message()` for stream frames. Use the **combined-stream** endpoint (`wss://stream.binance.com/stream`) so multiple streams share one connection; every push frame is then wrapped as `{"stream":"btcusdt@aggTrade","data":{…}}`. The `route_key` is the `"stream"` value; the subscribe-ack `{"result":null,"id":N}` is a `MethodResponse` with `correlation_id = id`.
+  - Push message types: `BinanceAggTradeEvent`, `BinanceTradeEvent`, `BinanceTickerEvent` (`24hrTicker`), `BinanceMiniTickerEvent`, `BinanceKlineEvent`, `BinanceBookTickerEvent`, `BinanceDepthUpdateEvent` (diff) + `BinancePartialDepth` (snapshot).
+  - **Format specifics**: push payloads use **terse single-letter keys** (`e`=event, `E`=event-time-ms, `s`=symbol, `p`=price, `q`=qty, `k`=kline-object, …) — `from_json` maps these explicitly. Numbers are strings; times are int-ms. Kline data is nested under `k`.
+  - `BinanceSubscribeRequest` / `BinanceUnsubscribeRequest` — `{"method":"SUBSCRIBE","params":["<symbol>@<stream>",…],"id":N}`. Note the subscribe ack carries **no channel/stream echo**, so `SubscriptionHandle` must remember the `route_key` from the request (Kraken's ack echoes the channel; Binance's does not — the generic client already supports this since the handle stores its own key).
 - `make_binance_stream_client(url)` factory — returns `GenericWsClient` configured with `BinanceStreamIdentifier`.
-- Create `tests/unit/test_binance_ws_client.cpp` — mock-based tests for subscribe lifecycle.
+- Create `tests/unit/binance_ws_stream_example_json.hpp` — captured push frames + subscribe ack (the direct analog of `ws_client_example_json.hpp`).
+- Create `tests/unit/test_binance_ws_client.cpp` — `identify_message` tests (one per event type), `from_json` field assertions, and `MockWsConnection` subscribe-lifecycle tests (fire_open → subscribe ack by id → inject push frame → callback fires → cancel).
 - Add `examples/binance_ws_streams.cpp`.
 - **Tests**: All unit tests pass.
 
@@ -301,11 +357,12 @@ Endpoints to implement:
 **Done when**: `BinanceWsClient` can place and cancel orders over WebSocket.
 
 - Create `include/exchange/binance/ws_api.hpp`:
-  - `BinanceWsCredentials` (session-based: either logon flow or `X-MBX-APIKEY` per request).
-  - Request/response pairs: `BinanceWsNewOrderRequest → BinanceWsNewOrderResponse`, `BinanceWsCancelOrderRequest → BinanceWsCancelOrderResponse`, `BinanceWsPingRequest → BinanceWsPongMessage`.
-  - `BinanceWsIdentifier` — `identify_message()` for WS API frames (Binance uses `"id"` + `"status"` fields).
-- `make_binance_ws_api_client(url)` factory.
-- Add unit tests.
+  - `BinanceWsCredentials` — per-request signing: `apiKey` + `signature` + `timestamp` inside `params` (the logon-session flow is deferred). Reuses `BinanceAuth`'s HMAC-SHA256 over the sorted `params`.
+  - Request/response pairs: `BinanceWsNewOrderRequest → BinanceWsNewOrderResponse` (`method:"order.place"`), `BinanceWsCancelOrderRequest → BinanceWsCancelOrderResponse` (`method:"order.cancel"`), `BinanceWsPingRequest → BinanceWsPongMessage` (`method:"ping"`).
+  - **Format specifics**: request is `{"id":"<uuid|int>","method":"…","params":{…}}`; success reply `{"id":…,"status":200,"result":{…},"rateLimits":[…]}`; error reply `{"id":…,"status":400,"error":{"code":-2010,"msg":"…"}}`. `BinanceWsIdentifier` classifies every reply as a `MethodResponse` with `correlation_id = stringify(id)` — there is no `channel`/push concept on the WS API endpoint. `ok` is derived from `status < 400`; on error, populate `WsResponse::error` from `error.msg`.
+  - The `id` is generated as an `int64_t` and stringified (the generic client's `correlation_id` is already a string), matching the Kraken adapter's approach.
+- `make_binance_ws_api_client(url)` factory (endpoint `wss://ws-api.binance.com/ws-api/v3`).
+- Create `tests/unit/binance_ws_api_example_json.hpp` fixtures (success + error replies) and add `identify_message` + `from_json` + `MockWsConnection` execute-lifecycle tests to `test_binance_ws_client.cpp`.
 - **Tests**: All unit tests pass.
 
 ### Step 8 — CMake, build validation, final cleanup
