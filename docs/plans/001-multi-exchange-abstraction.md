@@ -81,8 +81,8 @@ tests/
     test_binance_ws_client.cpp
   examples/
     (existing examples, header paths updated)
-    binance_public_rest.cpp
-    binance_ws_streams.cpp
+    binance_rest_client_example.cpp    # analog of rest_client_example.cpp (BinanceRestClient)
+    binance_ws_client_example.cpp      # analog of ws_client_example.cpp (Binance stream client)
 ```
 
 > Fixture headers and the full test matrix are detailed in [001-appendix-testing-strategy.md](001-appendix-testing-strategy.md); their captured JSON comes from [001-appendix-binance-message-formats.md](001-appendix-binance-message-formats.md).
@@ -430,7 +430,7 @@ Endpoints to implement (in `include/exchange/binance/rest_api.hpp`):
   - `ticker/price`, `ticker/24hr`, `bookTicker` accept a single `symbol` or a `symbols=[...]` list; with a list the response becomes a JSON **array** of the object. Support both (single object vs array) in `from_json`.
 - Create `tests/unit/binance_rest_example_json.hpp` — captured response fixtures (the REST analog of `ws_client_example_json.hpp`; see testing-strategy doc). Populate from the appendix.
 - Create `tests/unit/test_binance_rest_requests.cpp` (path/method/query) and `test_binance_rest_responses.cpp` (`from_json` field assertions against the fixtures).
-- Add `examples/binance_public_rest.cpp`.
+- Add `examples/binance_rest_client_example.cpp` — the direct analog of `rest_client_example.cpp`: a CLI11 app with one subcommand per public endpoint (`ping`, `time`, `exchangeinfo`, `ticker [--symbols …]`, `book <symbol> [--limit N]`, `klines <symbol> --interval 1m`, `trades <symbol> [--limit N]`), each `run_*(BinanceRestClient&, args)` executing the typed request and logging the parsed fields via spdlog. `main()` mirrors the Kraken example: `curl_global_init` → construct `BinanceRestClient` → dispatch by subcommand → `curl_global_cleanup`. Public endpoints only — no credentials. Links `binanceapi spdlog::spdlog CLI11::CLI11 example_backward`.
 - **Tests**: All unit tests pass; example compiles and runs against live Binance (no credentials needed).
 
 ### Step 5 — Binance REST private (account + trading) endpoints
@@ -472,7 +472,7 @@ Endpoints to implement:
 - `make_binance_stream_client(url)` factory — returns `GenericWsClient` configured with `BinanceStreamIdentifier`.
 - Create `tests/unit/binance_ws_stream_example_json.hpp` — captured push frames + subscribe ack (the direct analog of `ws_client_example_json.hpp`).
 - Create `tests/unit/test_binance_ws_client.cpp` — `identify_message` tests (one per event type), `from_json` field assertions, and `MockWsConnection` subscribe-lifecycle tests (fire_open → subscribe ack by id → inject push frame → callback fires → cancel).
-- Add `examples/binance_ws_streams.cpp`.
+- Add `examples/binance_ws_client_example.cpp` — the direct analog of `ws_client_example.cpp`: a CLI11 app with one subcommand per stream (`aggtrade <symbol>`, `trade <symbol>`, `kline <symbol> --interval 1m`, `ticker <symbol>`, `miniticker <symbol>`, `bookticker <symbol>`, `depth <symbol> [--levels N]`), each `run_*()` creating a client via `make_binance_stream_client(STREAM_URL)`, subscribing with the typed `TypedStreamSubscribeRequest` + a push callback that logs frames, then unsubscribing via the handle. Mirror the Kraken example's **connection-reuse demo** with the Binance-natural equivalent: subscribe to *several streams on one client* over the single combined-stream connection (e.g. `aggTrade` + `bookTicker` for the same symbol), showing multiple active `SubscriptionHandle`s sharing one socket. Public streams only — no credentials. Links `binanceapi ixwebsocket spdlog::spdlog CLI11::CLI11 example_backward`.
 - **Tests**: All unit tests pass.
 
 ### Step 7 — Binance WebSocket API (bidirectional trading)
@@ -497,10 +497,12 @@ Endpoints to implement:
   - New `krakenapi::binanceapi` target — Binance sources + links `krakenapi::krakenapi` for common scaffold.
   - Common scaffold (`include/exchange/common/`) is header-only; no separate lib.
 - Update top-level `CMakeLists.txt` to `add_subdirectory` any new source directories.
-- Update `tests/CMakeLists.txt` to add Binance unit test executables.
+- Update `tests/CMakeLists.txt` to add Binance unit test executables **and the two example executables**, mirroring the existing `rest_client_example` / `ws_client_example` wiring:
+  - `binance_rest_client_example` → `target_link_libraries(… binanceapi spdlog::spdlog CLI11::CLI11 example_backward)`
+  - `binance_ws_client_example` → `target_link_libraries(… binanceapi ixwebsocket spdlog::spdlog CLI11::CLI11 example_backward)` (ixwebsocket for the real transport, as the Kraken WS example does)
 - Remove any dead code or stale comments from the refactor.
 - Run `ctest --output-on-failure` — all tests pass.
-- Verify examples compile against the restructured headers.
+- Verify **all** examples compile against the restructured headers (both Kraken and the two new Binance examples).
 - Update `CLAUDE.md` to reflect new namespace layout, file structure, and patterns.
 
 ---

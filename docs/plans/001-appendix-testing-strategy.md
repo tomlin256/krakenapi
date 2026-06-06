@@ -51,14 +51,25 @@ Reuse the existing `MockWsConnection` (it implements the exchange-agnostic `IWsC
 
 Per the project C++ guidelines: no `sleep_for`, no wall-clock waits. All WS tests drive state synchronously via `fire_open()` / `inject_message()` / `fire_close()`. The one place timing appears — `execute()` timeout — is tested by injecting *no* reply and using a short timeout bound, asserting the failure result rather than racing a real clock (same approach as the existing Kraken timeout test).
 
-## Per-step test deliverables (summary)
+## Example programs (runnable demos, not just unit tests)
 
-| Plan step | New test files | New fixtures |
+Beyond the mocked unit tests, the deliverable includes two **runnable client examples**, one-to-one analogs of the existing Kraken pair (`tests/examples/rest_client_example.cpp`, `tests/examples/ws_client_example.cpp`). They are public-endpoint only (no credentials), so they double as live smoke tests of the real transport that the mocked unit tests deliberately avoid.
+
+| Binance example | Kraken analog | Demonstrates |
 |---|---|---|
-| 3 (auth) | `test_binance_auth.cpp` | — |
-| 4 (public REST) | `test_binance_rest_requests.cpp`, `test_binance_rest_responses.cpp` | `binance_rest_example_json.hpp` |
-| 5 (private REST) | (extend the Step 4 files + `test_client` cases) | `binance_account_example_json.hpp` |
-| 6 (WS streams) | `test_binance_ws_client.cpp` | `binance_ws_stream_example_json.hpp` |
-| 7 (WS API) | (extend `test_binance_ws_client.cpp`) | `binance_ws_api_example_json.hpp` |
+| `examples/binance_rest_client_example.cpp` | `rest_client_example.cpp` | `BinanceRestClient` against every public REST endpoint, one CLI11 subcommand each (`ping`, `time`, `exchangeinfo`, `ticker`, `book`, `klines`, `trades`); `curl_global_init`/`cleanup` lifecycle; spdlog field logging. |
+| `examples/binance_ws_client_example.cpp` | `ws_client_example.cpp` | `make_binance_stream_client(url)` + typed `TypedStreamSubscribeRequest` subscriptions, one CLI11 subcommand per stream; push-callback logging; `SubscriptionHandle::cancel()`; **multi-stream-on-one-connection** demo (the Binance-natural form of the Kraken connection-reuse demo). |
+
+Both are wired into `tests/CMakeLists.txt` exactly like their Kraken counterparts (Step 8): the REST example links `binanceapi spdlog CLI11 example_backward`; the WS example additionally links `ixwebsocket`. They are covered by the build (CI compiles all examples); the WS example is *not* part of `ctest` since it opens a live socket — same treatment as `ws_client_example`.
+
+## Per-step deliverables (summary)
+
+| Plan step | New test files | New fixtures | New example |
+|---|---|---|---|
+| 3 (auth) | `test_binance_auth.cpp` | — | — |
+| 4 (public REST) | `test_binance_rest_requests.cpp`, `test_binance_rest_responses.cpp` | `binance_rest_example_json.hpp` | `binance_rest_client_example.cpp` |
+| 5 (private REST) | (extend the Step 4 files + `test_client` cases) | `binance_account_example_json.hpp` | — (examples are public-only) |
+| 6 (WS streams) | `test_binance_ws_client.cpp` | `binance_ws_stream_example_json.hpp` | `binance_ws_client_example.cpp` |
+| 7 (WS API) | (extend `test_binance_ws_client.cpp`) | `binance_ws_api_example_json.hpp` | — |
 
 Every step ends with a full build + full `ctest` run, both green, before the checkpoint commit (project guideline).
