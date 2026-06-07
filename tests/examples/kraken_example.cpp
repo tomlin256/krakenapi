@@ -129,7 +129,7 @@ int main(int argc, char* argv[]) {
         op.side        = Side::Buy;
         op.symbol      = "XBTUSD";     // REST pair name
         op.order_qty   = 1.2;
-        op.limit_price = 26500.0;
+        op.limit_price = TickPrice::from(26500.0, 1);
         op.order_userref = 100054;
 
         // --- REST ---
@@ -164,7 +164,7 @@ int main(int argc, char* argv[]) {
         // WS:
         ws::AmendOrderRequest ws_amend;
         ws_amend.order_id    = "AA5JGQ-SBMRC-SCJ7J7";
-        ws_amend.limit_price = 27000.0;
+        ws_amend.limit_price = TickPrice::from(27000.0, 1);
         ws_send(ws_amend.to_json(), ws_creds);
     }
 
@@ -196,9 +196,9 @@ int main(int argc, char* argv[]) {
         // BatchAdd – build shared OrderParams vector, use for both REST and WS
         std::vector<OrderParams> ops;
         ops.push_back({ .order_type = OrderType::Limit, .side = Side::Buy,
-                         .order_qty = 0.5, .limit_price = 26000.0 });
+                         .order_qty = 0.5, .limit_price = TickPrice::from(26000.0, 1) });
         ops.push_back({ .order_type = OrderType::Limit, .side = Side::Buy,
-                         .order_qty = 0.5, .limit_price = 25500.0 });
+                         .order_qty = 0.5, .limit_price = TickPrice::from(25500.0, 1) });
 
         // REST
         rest::AddOrderBatchRequest rest_batch;
