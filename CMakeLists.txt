@@ -18,6 +18,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 #-------------------------------------------------------------------------------
 
 option(KRAKENAPI_BUILD_TESTS "Build tests" ON)
+option(KRAKENAPI_BUILD_COMPAT_SHIM
+       "Install deprecated kraken_*.hpp compatibility headers (source-compat for pre-refactor callers)"
+       ON)
 
 #-------------------------------------------------------------------------------
 # Find OpenSSL

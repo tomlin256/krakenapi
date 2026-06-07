@@ -1,10 +1,7 @@
 add_library(krakenapi STATIC
     # Common scaffold — generic exchange::ws:: implementation shared across exchanges
     exchange/common/ws_client.cpp
-    # Old kraken:: implementations — retired in Phase 2 of plan 002
-    kraken_types.cpp
-    kraken_rest_client.cpp
-    # New exchange::kraken:: namespace implementations
+    # exchange::kraken:: namespace implementations
     kraken/types.cpp
     kraken/rest_client.cpp
 )

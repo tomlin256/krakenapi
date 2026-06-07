@@ -9,16 +9,15 @@
 
 #pragma once
 
-// ws_reconnect_session.hpp — thin compatibility shim
+// ws_reconnect_session.hpp — DEPRECATED: use exchange/common/reconnect_session.hpp instead.
 //
-// WsReconnectSession has moved to exchange/common/reconnect_session.hpp.
-// This file re-exports it into the kraken::ws namespace for callers that
-// include the old path.
+// This header is a thin compatibility forwarder. It pulls in the new-layout
+// implementation and reopens the legacy kraken::ws:: namespace on top of it
+// via kraken_compat.hpp, so pre-refactor includes keep compiling unchanged.
+
+#ifndef KRAKENAPI_SUPPRESS_DEPRECATION
+#  pragma message("ws_reconnect_session.hpp is deprecated; include exchange/common/reconnect_session.hpp. See docs/plans/001-appendix-migration-guide.md (removed in vNEXT_MAJOR).")
+#endif
 
 #include "exchange/common/reconnect_session.hpp"
-
-namespace kraken::ws {
-
-using exchange::ws::WsReconnectSession;
-
-} // namespace kraken::ws
+#include "kraken_compat.hpp"
