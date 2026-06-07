@@ -72,8 +72,8 @@ static std::pair<std::shared_ptr<kraken::ws::KrakenWsClient>,
                  std::shared_ptr<MockWsConnection>>
 make_test_client() {
     auto conn   = std::make_shared<MockWsConnection>();
-    auto client = std::make_shared<kraken::ws::KrakenWsClient>(conn);
-    client->init();
+    // make_ws_client wires kraken_frame_descriptor and calls init() internally.
+    auto client = kraken::ws::make_ws_client(conn);
     conn->fire_open();   // simulate immediate connection
     return {client, conn};
 }
@@ -540,8 +540,7 @@ TEST(Cancel, IsIdempotent) {
 
 TEST(PreConnectionQueue, MessagesQueuedBeforeOpen) {
     auto conn   = std::make_shared<MockWsConnection>();
-    auto client = std::make_shared<kraken::ws::KrakenWsClient>(conn);
-    client->init();
+    auto client = kraken::ws::make_ws_client(conn);  // calls init(); does NOT connect
     // Deliberately NOT calling conn->fire_open() yet.
 
     kraken::ws::AddOrderRequest req;
@@ -569,8 +568,7 @@ TEST(PreConnectionQueue, MessagesQueuedBeforeOpen) {
 
 TEST(PreConnectionQueue, FlushedInOrder) {
     auto conn   = std::make_shared<MockWsConnection>();
-    auto client = std::make_shared<kraken::ws::KrakenWsClient>(conn);
-    client->init();
+    auto client = kraken::ws::make_ws_client(conn);  // calls init(); does NOT connect
 
     kraken::ws::AddOrderRequest req1;
     req1.order_type = kraken::OrderType::Limit;

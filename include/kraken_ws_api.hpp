@@ -15,12 +15,15 @@
 #include <vector>
 #include <stdexcept>
 
+#include "exchange/common/ws.hpp"
 #include "kraken_types.hpp"
 
 namespace kraken::ws {
 
 using json = nlohmann::json;
 
+// ── Re-export common types used throughout this header ───────────────────────
+using exchange::ws::WsRequestBase;
 
 // ============================================================
 // Authentication credentials
@@ -40,16 +43,14 @@ struct WsCredentials {
 // Typed request bases  (mirror TypedPublicRequest/TypedPrivateRequest from REST)
 // ============================================================
 
-// Method-call requests: declares the expected single response type.
+// Method-call requests: forward to the common exchange-agnostic scaffold.
+// Each Kraken request struct inherits TypedWsRequest<Resp> and provides
+// to_json() that emits req_id (inherited from WsRequestBase) as "req_id".
 template<typename R>
-struct TypedWsRequest {
-    using response_type = R;
-};
+using TypedWsRequest = exchange::ws::TypedWsRequest<R>;
 
 // Forward declarations of all response types so that TypedWsRequest<Resp>
 // can be used as a base class before the response struct is fully defined.
-// (TypedWsRequest<R> only stores 'using response_type = R', so R need not
-// be complete – but the name must be visible in scope.)
 struct AddOrderResponse;
 struct AmendOrderResponse;
 struct CancelOrderResponse;
@@ -64,11 +65,11 @@ struct PongMessage;
 // Response base
 // ============================================================
 
-struct BaseResponse {
+// Kraken method-call responses carry extra fields on top of the common
+// success/error base (exchange::ws::BaseWsResponse).
+struct BaseResponse : exchange::ws::BaseWsResponse {
     std::string              method;
-    bool                     success{false};
     std::optional<int64_t>   req_id;
-    std::optional<std::string> error;
     std::optional<std::string> time_in;
     std::optional<std::string> time_out;
 
@@ -120,7 +121,6 @@ struct AddOrderRequest : TypedWsRequest<AddOrderResponse> {
     std::optional<double>        cash_order_qty;  // buy market without margin
     std::optional<bool>          validate;
     std::optional<std::string>   sender_sub_id;
-    std::optional<int64_t>       req_id;
 
     json to_json() const {
         json params;
@@ -153,7 +153,7 @@ struct AddOrderRequest : TypedWsRequest<AddOrderResponse> {
         json msg;
         msg["method"] = "add_order";
         msg["params"] = params;
-        if (req_id) msg["req_id"] = *req_id;
+        msg["req_id"] = req_id;
         return msg;
     }
 };
@@ -195,7 +195,6 @@ struct AmendOrderRequest : TypedWsRequest<AmendOrderResponse> {
     std::optional<Triggers>  triggers;
     std::optional<TickPrice> post_only_price; // amend to post-only at this price
     std::optional<std::string> deadline;
-    std::optional<int64_t>   req_id;
 
     json to_json() const {
         json params;
@@ -213,7 +212,7 @@ struct AmendOrderRequest : TypedWsRequest<AmendOrderResponse> {
         json msg;
         msg["method"] = "amend_order";
         msg["params"] = params;
-        if (req_id) msg["req_id"] = *req_id;
+        msg["req_id"] = req_id;
         return msg;
     }
 };
@@ -245,7 +244,6 @@ struct CancelOrderRequest : TypedWsRequest<CancelOrderResponse> {
     // Provide one or more order ids OR cl_ord_ids
     std::optional<std::vector<std::string>> order_ids;
     std::optional<std::vector<std::string>> cl_ord_ids;
-    std::optional<int64_t> req_id;
 
     json to_json() const {
         json params;
@@ -256,7 +254,7 @@ struct CancelOrderRequest : TypedWsRequest<CancelOrderResponse> {
         json msg;
         msg["method"] = "cancel_order";
         msg["params"] = params;
-        if (req_id) msg["req_id"] = *req_id;
+        msg["req_id"] = req_id;
         return msg;
     }
 };
@@ -297,13 +295,12 @@ struct CancelOrderResponse : BaseResponse {
 
 struct CancelAllRequest : TypedWsRequest<CancelAllResponse> {
     std::string token;
-    std::optional<int64_t> req_id;
 
     json to_json() const {
         json msg;
         msg["method"] = "cancel_all";
         msg["params"]["token"] = token;
-        if (req_id) msg["req_id"] = *req_id;
+        msg["req_id"] = req_id;
         return msg;
     }
 };
@@ -329,14 +326,13 @@ struct CancelAllResponse : BaseResponse {
 struct CancelOnDisconnectRequest : TypedWsRequest<CancelOnDisconnectResponse> {
     std::string token;
     int32_t     timeout{60};  // seconds; 0 = disable
-    std::optional<int64_t> req_id;
 
     json to_json() const {
         json msg;
         msg["method"] = "cancel_after";
         msg["params"]["token"]   = token;
         msg["params"]["timeout"] = timeout;
-        if (req_id) msg["req_id"] = *req_id;
+        msg["req_id"] = req_id;
         return msg;
     }
 };
@@ -366,7 +362,6 @@ struct BatchAddRequest : TypedWsRequest<BatchAddResponse> {
     std::string symbol;
     std::optional<std::string> deadline;
     std::optional<bool>        validate;
-    std::optional<int64_t>     req_id;
 
     std::vector<OrderParams> orders;
 
@@ -384,7 +379,7 @@ struct BatchAddRequest : TypedWsRequest<BatchAddResponse> {
         json msg;
         msg["method"] = "batch_add";
         msg["params"] = params;
-        if (req_id) msg["req_id"] = *req_id;
+        msg["req_id"] = req_id;
         return msg;
     }
 };
@@ -433,7 +428,6 @@ struct BatchCancelRequest : TypedWsRequest<BatchCancelResponse> {
     std::string token;
     std::optional<std::vector<std::string>> order_ids;
     std::optional<std::vector<std::string>> cl_ord_ids;
-    std::optional<int64_t> req_id;
 
     json to_json() const {
         json params;
@@ -444,7 +438,7 @@ struct BatchCancelRequest : TypedWsRequest<BatchCancelResponse> {
         json msg;
         msg["method"] = "batch_cancel";
         msg["params"] = params;
-        if (req_id) msg["req_id"] = *req_id;
+        msg["req_id"] = req_id;
         return msg;
     }
 };
@@ -480,7 +474,6 @@ struct EditOrderRequest : TypedWsRequest<EditOrderResponse> {
     std::optional<bool>      post_only;
     std::optional<std::string> deadline;
     std::optional<std::string> new_cl_ord_id;
-    std::optional<int64_t>   req_id;
 
     json to_json() const {
         json params;
@@ -498,7 +491,7 @@ struct EditOrderRequest : TypedWsRequest<EditOrderResponse> {
         json msg;
         msg["method"] = "edit_order";
         msg["params"] = params;
-        if (req_id) msg["req_id"] = *req_id;
+        msg["req_id"] = req_id;
         return msg;
     }
 };
@@ -552,7 +545,7 @@ inline std::string to_string(SubscribeChannel ch) {
     throw std::invalid_argument("Unknown channel");
 }
 
-struct SubscribeRequest {
+struct SubscribeRequest : WsRequestBase {
     SubscribeChannel channel;
     std::optional<std::vector<std::string>> symbols;  // for market data channels
     std::optional<std::string> token;   // required for authenticated channels
@@ -560,7 +553,6 @@ struct SubscribeRequest {
     std::optional<int32_t>     interval; // for OHLC (minutes: 1,5,15,30,60,240,1440,10080,21600)
     std::optional<bool>        snapshot; // whether to send snapshot on subscribe
     std::optional<bool>        snapshot_trades; // executions channel
-    std::optional<int64_t>     req_id;
 
     json to_json() const {
         json params;
@@ -575,7 +567,7 @@ struct SubscribeRequest {
         json msg;
         msg["method"] = "subscribe";
         msg["params"] = params;
-        if (req_id) msg["req_id"] = *req_id;
+        msg["req_id"] = req_id;
         return msg;
     }
 };
@@ -633,6 +625,18 @@ struct TypedSubscribeRequest : SubscribeRequest {
     using response_type = SubscribeResponse;
     static constexpr SubscribeChannel channel_value = Ch;
     TypedSubscribeRequest() { this->channel = Ch; }
+
+    // Routing key used by ExchangeWsClient to dispatch incoming push frames.
+    std::string route_key() const { return to_string(channel); }
+
+    // Pre-built UNSUBSCRIBE frame sent by SubscriptionHandle::cancel().
+    json unsubscribe_json() const {
+        UnsubscribeRequest unsub;
+        unsub.channel = channel;
+        unsub.symbols = symbols;
+        unsub.token   = token;
+        return unsub.to_json();
+    }
 };
 
 // ============================================================
@@ -1054,12 +1058,10 @@ struct StatusMessage {
 };
 
 struct PingRequest : TypedWsRequest<PongMessage> {
-    std::optional<int64_t> req_id;
-
     json to_json() const {
         json msg;
         msg["method"] = "ping";
-        if (req_id) msg["req_id"] = *req_id;
+        msg["req_id"] = req_id;
         return msg;
     }
 };
@@ -1157,5 +1159,30 @@ using OHLCSubscribeRequest       = TypedSubscribeRequest<OHLCMessage,       Subs
 using InstrumentSubscribeRequest = TypedSubscribeRequest<InstrumentMessage, SubscribeChannel::Instrument>;
 using ExecutionsSubscribeRequest = TypedSubscribeRequest<ExecutionsMessage,  SubscribeChannel::Executions>;
 using BalancesSubscribeRequest   = TypedSubscribeRequest<BalancesMessage,   SubscribeChannel::Balances>;
+
+// ============================================================
+// Kraken frame descriptor  — the MessageIdentifier for ExchangeWsClient
+//
+// Method replies carry req_id (int); push messages carry channel (string).
+// Kraken stringifies req_id to key the pending_ map (cross-exchange convention).
+// ============================================================
+
+inline exchange::ws::FrameDescriptor kraken_frame_descriptor(const json& j) {
+    exchange::ws::FrameDescriptor desc;
+
+    if (j.contains("req_id") && j["req_id"].is_number_integer()) {
+        desc.kind           = exchange::ws::FrameKind::MethodResponse;
+        desc.correlation_id = std::to_string(j["req_id"].get<int64_t>());
+        return desc;
+    }
+
+    if (j.contains("channel") && j["channel"].is_string()) {
+        desc.kind      = exchange::ws::FrameKind::PushMessage;
+        desc.route_key = j["channel"].get<std::string>();
+        return desc;
+    }
+
+    return desc;  // kind == Unknown
+}
 
 } // namespace kraken::ws
