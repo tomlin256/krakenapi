@@ -2,42 +2,81 @@
 
 A type-safe C++ library for the [Kraken](https://kraken.com) Spot REST and WebSocket v2 APIs.
 
+> **In progress**: this repo is mid-migration to a multi-exchange layout (see
+> [docs/plans/001-multi-exchange-abstraction.md](docs/plans/001-multi-exchange-abstraction.md)).
+> Phases through **Step 2b** are complete: all Kraken code now lives under
+> `exchange::kraken::*`, a generic `exchange::`/`exchange::ws::`/`exchange::rest::`
+> scaffold layer exists for future adapters (e.g. Binance), and the old
+> `kraken_*.hpp` / `kraken::` surface survives only as a **deprecated compatibility
+> shim**. This file documents the post-2b layout — the shim is covered where
+> relevant but is not the primary surface for new code.
+
 ---
 
 ## Project structure
 
 ```
 krakenapi/
-├── CMakeLists.txt                   # Top-level build; fetches all external deps
+├── CMakeLists.txt                       # Top-level build; fetches deps; KRAKENAPI_BUILD_* options
 ├── include/
-│   ├── kraken_types.hpp             # Shared enums, structs, and RestResponse<T>
-│   ├── kraken_rest_api.hpp          # All REST request/response types + HMAC signing
-│   ├── kraken_rest_client.hpp       # KrakenRestClient — typed libcurl executor
-│   ├── kraken_ws_api.hpp            # WebSocket v2 request/response types
-│   ├── kraken_ws_client.hpp         # KrakenWsClient + IWsConnection interface
-│   ├── kraken_ws_client.inl         # Template method implementations (included by .hpp)
-│   └── kraken_ix_ws_connection.hpp  # IxWsConnection (ixwebsocket) + URL factory overload
+│   ├── exchange/
+│   │   ├── common/                      # Exchange-agnostic scaffold — exchange::, ::rest::, ::ws::
+│   │   │   ├── types.hpp                #   Canonical enums: Side, OrderType, TimeInForce, OrderStatus
+│   │   │   ├── rest.hpp                 #   TypedPublicRequest<R>, TypedPrivateRequest<R>, RestResponse<T>,
+│   │   │   │                            #     HttpRequest, IRestAuth
+│   │   │   ├── ws.hpp                   #   IWsConnection, IWsErrorHandler, RateLimitedWsErrorHandler,
+│   │   │   │                            #     WsResponse<T>, SubscriptionHandle, WsRequestBase,
+│   │   │   │                            #     TypedWsRequest<R>, FrameDescriptor, MessageIdentifier
+│   │   │   ├── ws_client.hpp / .inl     #   ExchangeWsClient — exchange-agnostic dispatch
+│   │   │   ├── ix_ws_connection.hpp     #   IxWsConnection + make_exchange_ws_client(url, identifier)
+│   │   │   └── reconnect_session.hpp/.inl # WsReconnectSession — generic reconnect/backoff machinery
+│   │   └── kraken/                      # Kraken adapter — exchange::kraken::, ::rest::, ::ws::
+│   │       ├── auth.hpp                 #   Credentials, sign(), make_nonce() (+ private crypto helpers)
+│   │       ├── types.hpp                #   PriceType, TriggerReference, StpType, FeePreference, TickPrice,
+│   │       │                            #     OrderParams, OrderInfo, TradeInfo, LedgerEntry,
+│   │       │                            #     RestResponse<T> / parse_rest_response<T>
+│   │       ├── rest_api.hpp             #   All Kraken REST request/response types
+│   │       ├── rest_client.hpp          #   KrakenRestClient — typed libcurl executor
+│   │       ├── ws_api.hpp               #   All Kraken WS request/response types + identify_message /
+│   │       │                            #     kraken_frame_descriptor
+│   │       └── ws_client.hpp            #   KrakenWsClient alias, PUBLIC/PRIVATE_WS_URL, make_kraken_ws_client()
+│   ├── kraken_compat.hpp                # DEPRECATED — reopens kraken:: as a shim over exchange::kraken::
+│   ├── kraken_types.hpp, kraken_rest_api.hpp, kraken_rest_client.hpp,
+│   │   kraken_ws_api.hpp, kraken_ws_client(.hpp|.inl), kraken_ix_ws_connection.hpp
+│   │                                    # DEPRECATED — old-path forwarders: #include the new header
+│   │                                    #   + kraken_compat.hpp, plus a deprecation #pragma message
+│   └── ws_reconnect_session(.hpp|.inl)  # DEPRECATED — old-path forwarder for reconnect_session.hpp
 ├── src/
-│   ├── CMakeLists.txt               # Builds libkrakenapi.a; exports krakenapi::krakenapi
-│   ├── kraken_rest_client.cpp       # KrakenRestClient implementation
-│   └── kraken_ws_client.cpp         # KrakenWsClient non-template implementations
+│   ├── CMakeLists.txt                   # Builds libkrakenapi.a; exports krakenapi::krakenapi
+│   ├── exchange/common/
+│   │   └── ws_client.cpp                # ExchangeWsClient non-template impl (exchange-agnostic)
+│   └── kraken/
+│       ├── rest_client.cpp              # KrakenRestClient implementation
+│       └── types.cpp                    # TickPrice::from_json and other non-template type bodies
 └── tests/
-    ├── CMakeLists.txt               # Fetches spdlog; wires examples + unit tests
+    ├── CMakeLists.txt                   # Fetches spdlog/CLI11/backward-cpp; wires examples + unit tests
     ├── examples/
-    │   ├── public_rest.cpp          # Fetch recent trades (no credentials)
-    │   ├── private_rest.cpp         # Get WS token from ~/.kraken/default
-    │   ├── public_ws.cpp            # Subscribe to ticker over WS (low-level)
-    │   ├── private_ws.cpp           # Subscribe to balances over authenticated WS
-    │   ├── ws_client_example.cpp    # KrakenWsClient all public channels (Ticker/Book/Trade/OHLC/Instrument) + connection reuse demo
-    │   ├── kraken_example.cpp       # REST + WebSocket combined demo
-    │   └── kapi.hpp / kapi.cpp      # Legacy KAPI reference wrapper (not installed)
+    │   ├── public_rest.cpp              # Fetch recent trades (no credentials)
+    │   ├── private_rest.cpp             # Get WS token from ~/.kraken/default
+    │   ├── public_ws.cpp                # Subscribe to ticker over WS (low-level)
+    │   ├── private_ws.cpp               # Subscribe to balances over authenticated WS
+    │   ├── ws_client_example.cpp        # KrakenWsClient all public channels + connection reuse demo
+    │   ├── rest_client_example.cpp      # CLI11 demo of every public REST endpoint via KrakenRestClient
+    │   ├── kraken_example.cpp           # REST + WebSocket combined demo
+    │   ├── backward_init.cpp            # Shared crash-backtrace init, linked into examples via `example_backward`
+    │   └── kapi.hpp / kapi.cpp          # Legacy KAPI reference wrapper (not installed)
     └── unit/
         ├── CMakeLists.txt
-        ├── test_signature.cpp       # HMAC-SHA512 output vs. reference KAPI impl
+        ├── test_signature.cpp           # HMAC-SHA512 output vs. reference KAPI impl
         ├── test_rest_requests.cpp
         ├── test_rest_responses.cpp
-        ├── test_client.cpp          # Full execute() cycle with mock HTTP performer
-        └── test_ws_client.cpp       # KrakenWsClient lifecycle with MockWsConnection
+        ├── test_client.cpp              # Full execute() cycle with mock HTTP performer
+        ├── test_ws_client.cpp           # ExchangeWsClient (KrakenWsClient) lifecycle with MockWsConnection
+        ├── test_ws_responses.cpp        # from_json field assertions against captured fixtures
+        ├── test_order_type.cpp          # Generic vs. Kraken OrderType wire format (underscore vs. hyphen)
+        ├── test_tick_price.cpp          # TickPrice exact-decimal serialisation (FP-noise-free)
+        ├── test_ws_reconnect_session.cpp # WsReconnectSession lifecycle — deterministic, no sleeps
+        └── ws_client_example_json.hpp
 ```
 
 ---
@@ -56,6 +95,13 @@ krakenapi/
   | spdlog | v1.17.0 | Examples and tests |
   | Google Test | v1.16.0 | Unit tests |
 
+### Build options
+
+| Option | Default | Effect |
+|---|---|---|
+| `KRAKENAPI_BUILD_TESTS` | `ON` | Build unit tests and example programs |
+| `KRAKENAPI_BUILD_COMPAT_SHIM` | `ON` | Install the deprecated `kraken_*.hpp` / `kraken::` forwarders described in [docs/plans/001-appendix-compat-shim.md](docs/plans/001-appendix-compat-shim.md) |
+
 ### Common build commands
 
 ```bash
@@ -73,6 +119,10 @@ cmake --build build
 # Skip tests and examples
 cmake -B build -DKRAKENAPI_BUILD_TESTS=OFF
 cmake --build build
+
+# Drop the deprecated kraken_*.hpp compat shim
+cmake -B build -DKRAKENAPI_BUILD_COMPAT_SHIM=OFF
+cmake --build build
 ```
 
 ### Build outputs
@@ -85,6 +135,7 @@ cmake --build build
 | `build/bin/public_ws` | Public WebSocket demo (low-level) |
 | `build/bin/private_ws` | Private WebSocket demo |
 | `build/bin/ws_client_example` | `KrakenWsClient` — all 5 public channels + connection reuse demo |
+| `build/bin/rest_client_example` | CLI11 demo of every public REST endpoint via `KrakenRestClient` |
 | `build/bin/kraken_example` | Combined REST + WebSocket demo |
 
 ---
@@ -95,12 +146,16 @@ cmake --build build
 cd build && ctest --output-on-failure
 ```
 
-There are two test executables:
+There are six test executables (161 tests total):
 
 | Binary | Source | What it tests |
 |---|---|---|
-| `build/bin/kraken_unit_tests` | `tests/unit/` (REST tests) | REST request building, response parsing, signature, HTTP mock |
-| `build/bin/test_ws_client` | `tests/unit/test_ws_client.cpp` | `KrakenWsClient` lifecycle with `MockWsConnection` |
+| `build/bin/kraken_unit_tests` | `test_signature/rest_requests/rest_responses/client.cpp` | REST request building, response parsing, signature, HTTP mock |
+| `build/bin/test_ws_client` | `test_ws_client.cpp` | `ExchangeWsClient` (as `KrakenWsClient`) lifecycle with `MockWsConnection` |
+| `build/bin/test_ws_responses` | `test_ws_responses.cpp` | `identify_message` + `from_json` against captured WS fixtures |
+| `build/bin/test_tick_price` | `test_tick_price.cpp` | `TickPrice::from`/`str` exact-decimal round-tripping |
+| `build/bin/test_order_type` | `test_order_type.cpp` | Generic (`exchange::to_string`) vs. Kraken (`kraken_order_type_to_string`) wire formats |
+| `build/bin/test_ws_reconnect_session` | `test_ws_reconnect_session.cpp` | `WsReconnectSession` start/stop/backoff/reconnect — deterministic, no real sleeps |
 
 Tests do **not** require network access or credentials — all I/O is mocked.
 
@@ -112,7 +167,11 @@ Tests do **not** require network access or credentials — all I/O is mocked.
 | `test_rest_requests.cpp` | Each request type builds the correct HTTP path, method, query string, and body |
 | `test_rest_responses.cpp` | JSON deserialization is correct for every response type |
 | `test_client.cpp` | `KrakenRestClient::execute()` round-trips public and private requests end-to-end using an injected mock performer |
-| `test_ws_client.cpp` | `KrakenWsClient` execute/subscribe lifecycle, timeout, pre-connection queuing, `SubscriptionHandle::cancel()` idempotency |
+| `test_ws_client.cpp` | `ExchangeWsClient` execute/subscribe lifecycle, timeout, pre-connection queuing, `SubscriptionHandle::cancel()` idempotency |
+| `test_ws_responses.cpp` | `identify_message` classification and `from_json` field assertions against `ws_client_example_json.hpp` fixtures |
+| `test_order_type.cpp` | Generic vs. Kraken `OrderType` converters round-trip and produce the *correct, distinct* wire strings (underscore vs. hyphen) |
+| `test_tick_price.cpp` | `TickPrice::str()` produces exact decimals — including the floating-point-noise repro case |
+| `test_ws_reconnect_session.cpp` | `WsReconnectSession` start/stop/backoff/reconnect callbacks, driven by synchronous step injection (no `sleep_for`) |
 
 ---
 
@@ -120,30 +179,58 @@ Tests do **not** require network access or credentials — all I/O is mocked.
 
 | Namespace | Location | Contains |
 |---|---|---|
-| `kraken::` | `kraken_types.hpp` | Shared enums (`OrderType`, `Side`, `TimeInForce`, …), shared structs (`OrderParams`, `OrderInfo`, `TradeInfo`, `LedgerEntry`), generic envelope `RestResponse<T>`, `parse_rest_response<T>()` |
-| `kraken::rest::` | `kraken_rest_api.hpp`, `kraken_rest_client.hpp` | All REST request/response types, `Credentials`, `HttpRequest`, `KrakenRestClient` |
-| `kraken::ws::` | `kraken_ws_api.hpp`, `kraken_ws_client.hpp`, `kraken_ix_ws_connection.hpp` | All WebSocket v2 request/response types, `KrakenWsClient`, `IWsConnection`, `IxWsConnection`, `SubscriptionHandle`, `WsResponse<T>` |
+| `exchange::` | `exchange/common/types.hpp` | Canonical enums shared by every adapter: `Side`, `OrderType`, `TimeInForce`, `OrderStatus` (+ `to_string`/`from_string`) |
+| `exchange::rest::` | `exchange/common/rest.hpp` | `TypedPublicRequest<R>`, `TypedPrivateRequest<R>`, `RestResponse<T>`, `HttpRequest`, `IRestAuth` |
+| `exchange::ws::` | `exchange/common/{ws,ws_client,ix_ws_connection,reconnect_session}.hpp` | `IWsConnection`, `IWsErrorHandler`, `RateLimitedWsErrorHandler`, `IxWsConnection`, `WsReconnectSession`, `ExchangeWsClient`, `SubscriptionHandle`, `WsResponse<T>`, `WsRequestBase`, `TypedWsRequest<R>`, `FrameDescriptor`, `FrameKind`, `MessageIdentifier`, `make_exchange_ws_client()` |
+| `exchange::kraken::` | `exchange/kraken/types.hpp` | Kraken-only types — `PriceType`, `TriggerReference`, `StpType`, `FeePreference`, `TickPrice`, `OrderParams`, `OrderInfo`, `TradeInfo`, `LedgerEntry` — plus `RestResponse<T>` / `parse_rest_response<T>()` (Kraken's REST envelope; re-exports the canonical enums too) |
+| `exchange::kraken::rest::` | `exchange/kraken/{auth,rest_api,rest_client}.hpp` | `Credentials`, all REST request/response types, `KrakenRestClient` |
+| `exchange::kraken::ws::` | `exchange/kraken/{ws_api,ws_client}.hpp` | All WS request/response types, `SubscribeChannel`, `WsCredentials`, `identify_message`/`kraken_frame_descriptor`, `KrakenWsClient` (alias for `ExchangeWsClient`), `make_kraken_ws_client()`, URL constants |
+| `kraken::` *(deprecated)* | `kraken_compat.hpp` + old-path `kraken_*.hpp` forwarders | Reopens the pre-refactor namespace as aliases/forwarders over `exchange::kraken::*`, so untouched legacy call sites keep compiling and behaving identically. Gated by `KRAKENAPI_BUILD_COMPAT_SHIM` (default `ON`); see [docs/plans/001-appendix-compat-shim.md](docs/plans/001-appendix-compat-shim.md) and the migration guide for the full mapping |
+
+**Why the split**: `exchange::common::*` holds the scaffold that is genuinely exchange-agnostic — request/response binding templates, the WS dispatch loop, the connection interface, reconnect machinery. `exchange::kraken::*` supplies only what's Kraken-specific: wire formats, auth, endpoint URLs, and `identify_message`. A future Binance adapter (`exchange::binance::*`) reuses the entire common layer and follows the same three-tier shape.
 
 ---
 
-## Shared types reference (`kraken_types.hpp`)
+## Shared types reference
 
-### Enumerations
+### Canonical enumerations (`exchange/common/types.hpp`, namespace `exchange::`)
 
-All enums have free-function converters: `to_string(Enum)` and `foo_from_string(const std::string&)`. The `*_from_string` functions throw `std::invalid_argument` on unknown input.
+All enums have free-function converters: `to_string(Enum)` and `foo_from_string(const std::string&)`. The `*_from_string` functions throw `std::invalid_argument` on unknown input. `exchange::kraken::` re-exports all four via `using` declarations, so Kraken code refers to them unprefixed.
 
 | Enum | Values |
 |---|---|
-| `OrderType` | `Limit`, `Market`, `Iceberg`, `StopLoss`, `StopLossLimit`, `TakeProfit`, `TakeProfitLimit`, `TrailingStop`, `TrailingStopLimit`, `SettlePosition` |
 | `Side` | `Buy`, `Sell` |
+| `OrderType` | `Limit`, `Market`, `Iceberg`, `StopLoss`, `StopLossLimit`, `TakeProfit`, `TakeProfitLimit`, `TrailingStop`, `TrailingStopLimit`, `SettlePosition` |
 | `TimeInForce` | `GTC`, `GTD`, `IOC` |
+| `OrderStatus` | `PendingNew`, `New`, `PartiallyFilled`, `Filled`, `Canceled`, `Expired`, `Unknown` |
+
+**`OrderType` wire format diverges per exchange — this is the one enum every adapter must convert itself.** The canonical `to_string`/`from_string` produce underscore-separated strings (`"stop_loss"`); Kraken's wire format uses hyphens (`"stop-loss"`). Kraken therefore keeps its own pair — `kraken_order_type_to_string` / `kraken_order_type_from_string` in `exchange::kraken::` — alongside (not instead of) the canonical converters. `test_order_type.cpp` asserts both produce the *correct, genuinely different* strings for every value; the compat shim's `kraken::to_string(OrderType)` forwards specifically to the Kraken pair (see note in `kraken_compat.hpp` about why a blanket `using` would be unsafe here). `Side`, `TimeInForce`, and `OrderStatus` have identical wire formats across both layers, so Kraken simply re-exports the canonical converters.
+
+### Kraken-specific enumerations (`exchange/kraken/types.hpp`, namespace `exchange::kraken::`)
+
+| Enum | Values |
+|---|---|
 | `PriceType` | `Static`, `Pct`, `Quote` |
 | `TriggerReference` | `Index`, `Last` |
 | `StpType` | `CancelNewest`, `CancelOldest`, `CancelBoth` |
 | `FeePreference` | `Base`, `Quote` |
-| `OrderStatus` | `PendingNew`, `New`, `PartiallyFilled`, `Filled`, `Canceled`, `Expired`, `Unknown` |
 
-### Core structs
+### `TickPrice` — exact-decimal price representation
+
+```cpp
+struct TickPrice {
+    int64_t ticks{0};
+    int     decimals{0};
+
+    static TickPrice from(double price, int decimals);  // snap to the tick grid
+    std::string      str() const;                       // exact decimal string
+    static TickPrice from_json(const json&);
+};
+```
+
+Stores a price as an integer tick count plus a decimal-point position. `str()` builds the decimal string by integer point-insertion — no floating-point formatting — so `TickPrice::from(3096217 * 0.0001, 4).str()` yields the exact `"309.6217"` rather than `"309.62169999..."`. `test_tick_price.cpp::FpNoiseBugRepro` is a dedicated regression test for exactly this class of bug.
+
+### Core structs (namespace `exchange::kraken::`)
 
 | Struct | Key fields | Used for |
 |---|---|---|
@@ -155,39 +242,29 @@ All enums have free-function converters: `to_string(Enum)` and `foo_from_string(
 | `TradeInfo` | `pair`, `price`, `vol`, `cost`, `fee`, `margin`, `time`, `type` (`Side`), `order_type` (`OrderType`), `pos_status`, `closing` | Trade execution record |
 | `LedgerEntry` | `refid`, `time`, `type`, `subtype`, `aclass`, `asset`, `amount`, `fee`, `balance` | Ledger transaction record |
 
-### Generic REST response envelope
+### `RestResponse<T>` and `parse_rest_response<T>` — Kraken's REST envelope
 
 ```cpp
 template<typename T>
 struct RestResponse {
-    bool ok;                         // true when error array is empty
-    std::optional<T> result;         // populated on success
-    std::vector<std::string> errors; // populated on failure
+    std::vector<std::string> errors;
+    bool                     ok{false};
+    std::optional<T>         result;
 };
 
 template<typename T>
 RestResponse<T> parse_rest_response(const json& j);
 ```
 
+This is the envelope type `KrakenRestClient::execute()` actually returns, and it lives in **`exchange::kraken::`** — not `exchange::rest::`. (The common scaffold separately defines a same-shaped `exchange::rest::RestResponse<T>` in `exchange/common/rest.hpp` for adapters that choose to build on it directly; Kraken kept its pre-refactor envelope type rather than switching, so every existing call site naming `exchange::kraken::RestResponse<T>` — including the compat shim's `kraken::RestResponse<T>` alias — continues to resolve to the same type unchanged.)
+
 Always check `resp.ok` before accessing `resp.result`.
 
 ---
 
-## REST API reference (`kraken_rest_api.hpp`)
+## REST API reference (`exchange/kraken/rest_api.hpp`, namespace `exchange::kraken::rest::`)
 
-### Crypto utilities (header-only)
-
-| Function | Signature | Purpose |
-|---|---|---|
-| `base64_decode` | `(std::string_view) → std::vector<uint8_t>` | Decode base64 (handles unpadded input) |
-| `base64_encode` | `(const std::vector<uint8_t>&) → std::string` | Encode binary to base64 |
-| `sha256` | `(const std::string&) → std::vector<uint8_t>` | SHA-256 digest |
-| `hmac_sha512` | `(const std::vector<uint8_t>& key, const std::string& msg) → std::vector<uint8_t>` | HMAC-SHA512 |
-| `url_encode` | `(const std::string&) → std::string` | URL-encode a string |
-| `build_form_body` | `(const std::map<std::string,std::string>&) → std::string` | Build URL-encoded form body |
-| `make_nonce` | `() → uint64_t` | Monotonic µs-based nonce |
-
-### Authentication
+### Authentication (`exchange/kraken/auth.hpp`)
 
 ```cpp
 struct Credentials {
@@ -204,7 +281,12 @@ struct Credentials {
     static Credentials from_file(const std::string& name,
                                  const std::string& location = "~/.kraken");
 };
+
+// Monotonic µs-based nonce generator — the only other public symbol in auth.hpp.
+uint64_t make_nonce();
 ```
+
+The base64/SHA-256/HMAC-SHA-512/URL-encoding helpers that back `sign()` are private implementation details in `exchange::kraken::rest::detail::` — they are not part of the public surface (encapsulated per the project's interface-design convention; only `Credentials` and `make_nonce()` are exposed). `test_signature.cpp` exercises `sign()` end-to-end against the legacy reference implementation rather than testing the helpers individually.
 
 ### Public REST endpoints
 
@@ -251,7 +333,7 @@ struct Credentials {
 | `AllocateEarnRequest` | POST | `/0/private/AllocateEarn` | `EarnBoolResult` |
 | `DeallocateEarnRequest` | POST | `/0/private/DeallocateEarn` | `EarnBoolResult` |
 
-### REST client API
+### REST client API (`exchange/kraken/rest_client.hpp`)
 
 ```cpp
 class KrakenRestClient {
@@ -273,16 +355,18 @@ inline KrakenRestClient make_test_client(
     std::function<std::string(const HttpRequest&)> fn);
 ```
 
+`HttpRequest` is re-exported from `exchange::rest::` (`using exchange::rest::HttpRequest;`) — it is one of the genuinely exchange-agnostic scaffold types.
+
 ---
 
-## WebSocket API reference (`kraken_ws_api.hpp`)
+## WebSocket API reference (`exchange/kraken/ws_api.hpp`, namespace `exchange::kraken::ws::`)
 
 ### WebSocket endpoints
 
 | Endpoint | URL |
 |---|---|
-| Public | `wss://ws.kraken.com/v2` (`kraken::ws::PUBLIC_WS_URL`) |
-| Private (authenticated) | `wss://ws-auth.kraken.com/v2` (`kraken::ws::PRIVATE_WS_URL`) |
+| Public | `wss://ws.kraken.com/v2` (`exchange::kraken::ws::PUBLIC_WS_URL`) |
+| Private (authenticated) | `wss://ws-auth.kraken.com/v2` (`exchange::kraken::ws::PRIVATE_WS_URL`) |
 
 ### Authentication
 
@@ -310,7 +394,7 @@ These use `execute()` / `execute_async()` (single request → single response):
 | `BatchAddRequest` | `BatchAddResponse` | Place multiple orders atomically |
 | `BatchCancelRequest` | `BatchCancelResponse` | Cancel multiple orders atomically |
 
-`AddOrderRequest`, `BatchAddRequest`, `EditOrderRequest`, and `AmendOrderRequest` accept a `WsCredentials` token for private channels.
+`AddOrderRequest`, `BatchAddRequest`, `EditOrderRequest`, and `AmendOrderRequest` accept a `WsCredentials` token for private channels. Every method-call request derives `exchange::ws::TypedWsRequest<R>` (re-exported in this namespace), which in turn derives `WsRequestBase` — the common scaffold's `int64_t req_id{0}` slot that `ExchangeWsClient` assigns automatically.
 
 **`PingRequest`** structure — note that `req_id` is optional (unlike other requests where it is auto-assigned):
 
@@ -336,24 +420,24 @@ These use `subscribe()` / `subscribe_async()` (request → ack + continuous push
 | `SubscribeChannel::Executions` | `ExecutionsSubscribeRequest` | `ExecutionsMessage` | Yes |
 | `SubscribeChannel::Balances` | `BalancesSubscribeRequest` | `BalancesMessage` | Yes |
 
-`UnsubscribeRequest` mirrors `SubscribeRequest` for the same channels.
+`UnsubscribeRequest` mirrors `SubscribeRequest` for the same channels. Each `TypedSubscribeRequest<PushMsg, Ch>` additionally provides `route_key()` (→ `to_string(channel)`) and `unsubscribe_json()` (→ builds the matching `UnsubscribeRequest` frame) — the two members the generic `ExchangeWsClient::subscribe_async` needs and that make the dispatch loop exchange-agnostic (see [Architecture](#architecture-and-key-patterns) below).
 
-### BaseResponse (inherited by all method-call responses)
+### `BaseResponse` (inherited by all method-call responses)
 
 ```cpp
-struct BaseResponse {
-    std::string method;
-    bool success;
-    std::optional<int64_t> req_id;
-    std::optional<std::string> error;
+struct BaseResponse : exchange::ws::BaseWsResponse {  // success, error
+    std::string                method;
+    std::optional<int64_t>     req_id;
     std::optional<std::string> time_in;
     std::optional<std::string> time_out;
 };
 ```
 
-### MessageKind and dispatch
+`exchange::ws::BaseWsResponse` is the common scaffold's minimal `{success, error}` base — `ExchangeWsClient`'s response-construction helper detects it via `std::is_base_of_v` to decide how to derive `WsResponse::ok`. Kraken's `BaseResponse` adds the Kraken-specific reply fields on top; the shape callers see is unchanged from before the refactor.
 
-`identify_message(const json&)` classifies inbound frames by inspecting `"method"` (for replies) or `"channel"` (for push messages):
+### `MessageKind` and dispatch
+
+`identify_message(const json&)` classifies inbound frames by inspecting `"method"` (for replies) or `"channel"` (for push messages) and returns a Kraken-specific `MessageKind` — this is the **caller-facing** classifier for code that bypasses `KrakenWsClient` and handles raw frames itself (see [low-level dispatch](#websocket-message-dispatch-low-level)).
 
 | MessageKind value | Trigger |
 |---|---|
@@ -380,7 +464,9 @@ struct BaseResponse {
 | `Heartbeat` | `"channel": "heartbeat"` |
 | `Unknown` | No match |
 
-### WsResponse<T>
+A second, **internal** classifier — `kraken_frame_descriptor(const json&) -> exchange::ws::FrameDescriptor` — drives `ExchangeWsClient`'s generic dispatch loop (it is Kraken's `MessageIdentifier`; see Architecture). It answers a coarser question (`MethodResponse` vs. `PushMessage`, plus a `correlation_id`/`route_key` string) than `MessageKind` does, and the two are independent: `identify_message` exists for callers who want fine-grained frame classification, `kraken_frame_descriptor` exists so `ExchangeWsClient` can route frames without knowing any Kraken-specific type names.
+
+### `WsResponse<T>`
 
 ```cpp
 template<typename T>
@@ -391,7 +477,7 @@ struct WsResponse {
 };
 ```
 
-`ok` is derived from `BaseResponse::success` for response types that inherit `BaseResponse`; for plain types like `PongMessage` it is always `true`.
+Defined once in `exchange::ws::` and re-exported here. `ok` is derived from `success`/`error` for response types that derive `BaseWsResponse` (which includes Kraken's `BaseResponse`); for plain types like `PongMessage` it is always `true`.
 
 ---
 
@@ -399,7 +485,7 @@ struct WsResponse {
 
 ### REST layer
 
-Every public REST endpoint follows the **TypedPublicRequest<R>** pattern:
+Every public REST endpoint follows the **`TypedPublicRequest<R>`** pattern (the base classes `PublicRequest`/`PrivateRequest` are Kraken's; the `response_type` binding idiom mirrors `exchange::rest::TypedPublicRequest<R>` in the common scaffold):
 
 ```cpp
 struct GetServerTimeRequest : PublicRequest {
@@ -408,7 +494,7 @@ struct GetServerTimeRequest : PublicRequest {
 };
 ```
 
-Every private REST endpoint follows **TypedPrivateRequest<R>**:
+Every private REST endpoint follows **`TypedPrivateRequest<R>`**:
 
 ```cpp
 struct GetAccountBalanceRequest : PrivateRequest {
@@ -421,7 +507,7 @@ struct GetAccountBalanceRequest : PrivateRequest {
 
 ```cpp
 auto resp = client.execute(GetServerTimeRequest{});
-// resp is RestResponse<ServerTime>
+// resp is exchange::kraken::RestResponse<ServerTime>
 ```
 
 ### REST authentication (private endpoints)
@@ -436,11 +522,43 @@ auto resp = client.execute(GetServerTimeRequest{});
    ```
 4. Send headers `API-Key` and `API-Sign` with the POST request.
 
-`Credentials::sign(path, nonce_str, postdata)` in `kraken_rest_api.hpp` implements this. Unit tests in `test_signature.cpp` verify it matches the legacy reference implementation byte-for-byte.
+`Credentials::sign(path, nonce_str, postdata)` in `exchange/kraken/auth.hpp` implements this (the supporting crypto primitives are private `detail::` helpers — see the [REST API reference](#rest-api-reference-exchangekrakenrest_apihpp-namespace-exchangekrakenrest)). Unit tests in `test_signature.cpp` verify it matches the legacy reference implementation byte-for-byte.
 
-### WebSocket layer — `KrakenWsClient`
+### WebSocket layer — `ExchangeWsClient` (generic) and `KrakenWsClient` (Kraken alias)
 
-`KrakenWsClient` provides a type-safe wrapper over a raw WebSocket connection. It mirrors the REST client's typed request/response pattern with two operation modes:
+The entire request/subscription dispatch loop — pending-handler map, push-subscription map, pre-connection queue, `SubscriptionHandle`, thread safety — lives in **`exchange::ws::ExchangeWsClient`**, fully exchange-agnostic. It is parameterised at *construction time* (not via templates) by a `MessageIdentifier`:
+
+```cpp
+// exchange/common/ws.hpp
+using MessageIdentifier = std::function<FrameDescriptor(const json&)>;
+
+struct FrameDescriptor {
+    FrameKind                  kind;            // MethodResponse | PushMessage | Unknown
+    std::optional<std::string> correlation_id;  // MethodResponse: matches a pending request by req_id/id
+    std::string                route_key;       // PushMessage: matches an active subscription callback
+};
+```
+
+**`KrakenWsClient` is a type alias for `ExchangeWsClient`** — not a subclass, not a wrapper:
+
+```cpp
+// exchange/kraken/ws_client.hpp
+using KrakenWsClient = exchange::ws::ExchangeWsClient;
+```
+
+Kraken supplies its `MessageIdentifier` as a free function, `kraken_frame_descriptor(const json&) -> FrameDescriptor` (in `exchange/kraken/ws_api.hpp`), and binds it once in the factory:
+
+```cpp
+// exchange/kraken/ws_client.hpp
+inline std::shared_ptr<KrakenWsClient>
+make_kraken_ws_client(std::shared_ptr<IWsConnection> conn,
+                      std::shared_ptr<IWsErrorHandler> error_handler = nullptr) {
+    return exchange::ws::make_exchange_ws_client(std::move(conn), kraken_frame_descriptor,
+                                                  std::move(error_handler));
+}
+```
+
+Existing code holding `shared_ptr<KrakenWsClient>` keeps compiling and behaving identically — it is the same runtime type as `shared_ptr<ExchangeWsClient>`. All the request/response/subscription types, method names, and call patterns described below are unchanged from before the refactor; only their *namespace and underlying client type* moved.
 
 #### Method calls (single request → single response)
 
@@ -469,11 +587,11 @@ handle.cancel();  // unsubscribes; idempotent
 **Three phases:**
 1. **Phase 1** — WebSocket connection opens (`on_open` fires). Requests made before `on_open` are queued internally and flushed atomically when the socket opens.
 2. **Phase 2** — `SubscribeRequest` is sent (with an auto-assigned unique `req_id`).
-3. **Phase 3** — `SubscribeResponse` ack received and matched by `req_id`.
+3. **Phase 3** — `SubscribeResponse` ack received and matched by `req_id`/`correlation_id`.
    - Success: push callback installed in the dispatch table; `SubscriptionHandle` is active.
    - Failure: push callback never installed; `SubscriptionHandle` is inactive.
 
-Incoming server frames are dispatched to either a pending handler (matched by `req_id`) or an active push subscription callback (matched by the `"channel"` field).
+Incoming server frames are dispatched to either a pending handler (matched by `correlation_id`, derived from `req_id`) or an active push subscription callback (matched by `route_key`, which Kraken derives from the `"channel"` field). `subscribe_async` itself contains **no Kraken-specific code** — it calls `req.route_key()` / `req.unsubscribe_json()` on the request and routes the ack through the generic `make_ws_response(Ack::from_json(j))`, so the same client drives any exchange whose subscribe requests satisfy that structural contract.
 
 #### Internal state and thread safety
 
@@ -484,54 +602,74 @@ All mutable state is protected by `std::mutex` with RAII lock guards:
 | `next_req_id_` | `std::atomic<int64_t>` | Auto-incrementing request ID (1-based) |
 | `connected_` | `std::atomic<bool>` | Connection state flag |
 | `send_queue_` | `std::vector<std::string>` | Outbound messages queued before `on_open` |
-| `pending_` | `std::map<int64_t, handler>` | One-shot handlers keyed by `req_id` |
-| `subscriptions_` | `std::map<std::string, callback>` | Active push callbacks keyed by channel |
+| `pending_` | `std::map<std::string, handler>` | One-shot handlers keyed by `correlation_id` |
+| `subscriptions_` | `std::map<std::string, callback>` | Active push callbacks keyed by `route_key` |
 
-`SubscriptionHandle` holds a `std::weak_ptr<KrakenWsClient>` and an atomic active flag, making `cancel()` safe to call from any thread and after the client is destroyed.
+`SubscriptionHandle` holds a `std::weak_ptr<ExchangeWsClient>` and an atomic active flag, making `cancel()` safe to call from any thread and after the client is destroyed.
 
-#### Connection abstraction
+#### Connection abstraction and error handling
 
-`IWsConnection` is a pure abstract interface with no ixwebsocket symbols visible to callers:
+`IWsConnection` is a pure abstract interface with no ixwebsocket symbols visible to callers (now in `exchange::ws::`, `exchange/common/ws.hpp`):
 
 ```cpp
 class IWsConnection {
 public:
-    virtual void connect()                        = 0;
-    virtual void disconnect()                     = 0;
-    virtual bool is_connected() const             = 0;
-    virtual void send(const std::string& msg)     = 0;
-    virtual void set_on_message(MessageCb cb)     = 0;
-    virtual void set_on_open(OpenCb cb)           = 0;
-    virtual void set_on_close(CloseCb cb)         = 0;
+    virtual void connect()                    = 0;
+    virtual void disconnect()                 = 0;
+    virtual bool is_connected() const         = 0;
+    virtual void send(const std::string& msg) = 0;
+    virtual void set_on_message(MessageCb cb) = 0;
+    virtual void set_on_open(OpenCb cb)       = 0;
+    virtual void set_on_close(CloseCb cb)     = 0;
+    virtual void set_on_error(ErrorCb cb)     = 0;
 };
 ```
 
-`IxWsConnection` (in `kraken_ix_ws_connection.hpp`) implements this using ixwebsocket. Unit tests inject `MockWsConnection` instead — no network required.
+`IxWsConnection` (in `exchange/common/ix_ws_connection.hpp` — it has no Kraken-specific logic and moved to the common layer wholesale) implements this using ixwebsocket. Unit tests inject `MockWsConnection` instead — no network required.
+
+`IWsErrorHandler` / `RateLimitedWsErrorHandler` (also in `exchange::ws::`) are an optional strategy for surfacing malformed-frame and connection-error events without flooding logs — `RateLimitedWsErrorHandler` logs at most once per configurable interval (default 60 s), tracking a dropped-event count in between. Pass a `shared_ptr<IWsErrorHandler>` to `make_kraken_ws_client` / `make_exchange_ws_client` to opt in; it defaults to `nullptr` (silent).
+
+#### `WsReconnectSession` — generic reconnect/backoff machinery
+
+Also moved to `exchange::ws::` (`exchange/common/reconnect_session.hpp` + `.inl`) — it contains zero protocol awareness (a background thread, mutex/cv, exponential backoff capped at 60 s, and two caller-supplied callbacks `ConnectFn`/`DisconnectFn`). `test_ws_reconnect_session.cpp` drives it deterministically via synchronous step injection — no `sleep_for` or wall-clock polling, per the project's testing conventions.
 
 #### File split: `.hpp` / `.inl` / `.cpp`
 
 | File | Contents |
 |---|---|
-| `kraken_ws_client.hpp` | Class declarations, `IWsConnection`, `SubscriptionHandle`, `WsResponse<T>` |
-| `kraken_ws_client.inl` | Template method bodies (`execute`, `execute_async`, `subscribe`, `subscribe_async`) — `#include`d at the bottom of the `.hpp` |
-| `src/kraken_ws_client.cpp` | Non-template method bodies (`init`, `on_open_handler`, `on_raw_message`, `cancel_subscription`, `enqueue_or_send`) |
-| `kraken_ix_ws_connection.hpp` | `IxWsConnection` + URL-string factory overload of `make_ws_client()` |
+| `exchange/common/ws_client.hpp` | `ExchangeWsClient` declaration, re-exports of `IWsConnection`/`SubscriptionHandle`/`WsResponse<T>` from `ws.hpp` |
+| `exchange/common/ws_client.inl` | Template method bodies (`execute`, `execute_async`, `subscribe`, `subscribe_async`) — `#include`d at the bottom of the `.hpp` |
+| `src/exchange/common/ws_client.cpp` | Non-template method bodies (`init`, `on_open_handler`, `on_raw_message`, `cancel_subscription`, `enqueue_or_send`) — exchange-agnostic |
+| `exchange/common/ix_ws_connection.hpp` | `IxWsConnection` + the URL-string `make_exchange_ws_client(url, identifier, …)` factory |
+| `exchange/common/reconnect_session.hpp` / `.inl` | `WsReconnectSession` |
+| `exchange/kraken/ws_client.hpp` | `KrakenWsClient` alias, URL constants, `make_kraken_ws_client()` — a thin one-page wrapper over the common factory |
 
-Include only `kraken_ws_client.hpp` for test/mock usage. Include `kraken_ix_ws_connection.hpp` when you need the real ixwebsocket transport.
+Include only `exchange/kraken/ws_client.hpp` (which pulls in `exchange/common/ws_client.hpp`) for test/mock usage. Include `exchange/common/ix_ws_connection.hpp` when you need the real ixwebsocket transport.
 
 #### Factory functions
 
 ```cpp
-// Wraps an already-managed connection (useful for mocks or connection reuse).
-// Defined in kraken_ws_client.inl.
-std::shared_ptr<KrakenWsClient> make_ws_client(std::shared_ptr<IWsConnection> conn);
+// Generic — wraps an already-managed connection with any exchange's identifier.
+// Defined in exchange/common/ws_client.inl via make_exchange_ws_client(conn, identifier, …).
+std::shared_ptr<exchange::ws::ExchangeWsClient>
+exchange::ws::make_exchange_ws_client(std::shared_ptr<IWsConnection> conn,
+                                      MessageIdentifier identifier,
+                                      std::shared_ptr<IWsErrorHandler> error_handler = nullptr);
 
-// Creates a fresh IxWsConnection, calls init() and connect().
-// Defined in kraken_ix_ws_connection.hpp — include that header to use this overload.
-std::shared_ptr<KrakenWsClient> make_ws_client(const std::string& url);
+// Generic — creates a fresh IxWsConnection, calls init() + connect().
+// Defined in exchange/common/ix_ws_connection.hpp.
+std::shared_ptr<exchange::ws::ExchangeWsClient>
+exchange::ws::make_exchange_ws_client(const std::string& url,
+                                      MessageIdentifier identifier,
+                                      std::shared_ptr<IWsErrorHandler> error_handler = nullptr);
+
+// Kraken — one-line wrappers binding kraken_frame_descriptor.
+// Defined in exchange/kraken/ws_client.hpp.
+std::shared_ptr<KrakenWsClient>
+make_kraken_ws_client(std::shared_ptr<IWsConnection> conn, …);
 ```
 
-Both factories call `client->init()` — never call `init()` yourself.
+All factories call `client->init()` — never call `init()` yourself.
 
 ### WebSocket authentication
 
@@ -542,31 +680,15 @@ Private WebSocket channels use a **session token** (not the API key/secret direc
 
 `WsCredentials` wraps the token; `AddOrderRequest`, `SubscribeRequest`, etc. accept it directly.
 
-### Generic REST response envelope
-
-The Kraken REST API wraps every response in `{ "error": [], "result": <T> }`. The helper:
-
-```cpp
-template<typename T>
-RestResponse<T> parse_rest_response(const json& j);
-```
-
-…handles this universally. `RestResponse<T>` has three fields:
-- `bool ok` — true when `error` array is empty
-- `std::optional<T> result` — populated on success
-- `std::vector<std::string> errors` — populated on failure
-
-Always check `resp.ok` before accessing `resp.result`.
-
 ### WebSocket message dispatch (low-level)
 
-For callers that bypass `KrakenWsClient` and handle raw frames themselves:
+For callers that bypass `KrakenWsClient` and handle raw frames themselves — using `MessageKind`, **not** the internal `FrameDescriptor`/`kraken_frame_descriptor` pair that drives `ExchangeWsClient`:
 
 ```cpp
-auto kind = kraken::ws::identify_message(json);
+auto kind = exchange::kraken::ws::identify_message(json);
 switch (kind) {
-    case kraken::ws::MessageKind::Ticker:
-        auto m = kraken::ws::TickerMessage::from_json(json);
+    case exchange::kraken::ws::MessageKind::Ticker:
+        auto m = exchange::kraken::ws::TickerMessage::from_json(json);
         break;
     // ...
 }
@@ -578,7 +700,7 @@ switch (kind) {
 
 ## Adding a new REST endpoint
 
-1. **Declare request and response types** in `kraken_rest_api.hpp`:
+1. **Declare request and response types** in `exchange/kraken/rest_api.hpp`:
    - Public: inherit `PublicRequest`, define `using response_type = YourResult`, implement `build()`.
    - Private: inherit `PrivateRequest`, define `using response_type = YourResult`, implement `build(const Credentials&)`.
    - Add `YourResult::from_json(const json&)` as a static method.
@@ -591,37 +713,38 @@ switch (kind) {
 
 ## Adding a new WebSocket method call
 
-1. Add a request struct in `kraken_ws_api.hpp`:
-   - `using response_type = YourResponse;`
-   - `int64_t req_id{0};` field (set automatically by `KrakenWsClient`).
-   - `json to_json() const` — must include `req_id` in the output.
+1. Add a request struct in `exchange/kraken/ws_api.hpp`:
+   - Inherit `exchange::ws::TypedWsRequest<YourResponse>` (brings `response_type` and the `req_id` slot from `WsRequestBase`).
+   - `json to_json() const` — must serialise `req_id` into Kraken's correlation field (`"req_id"`).
 2. Add `YourResponse` with `static YourResponse from_json(const json&)`.
-   - If the server returns `success`/`error` fields, inherit `BaseResponse`.
-3. Add the new `MessageKind` enum value and handle it in `identify_message()`.
+   - If the server returns `success`/`error` fields, inherit `BaseResponse` (which itself derives the common `BaseWsResponse`).
+3. Add the new `MessageKind` enum value and handle it in **both** `identify_message()` (caller-facing classifier) and `kraken_frame_descriptor()` (drives `ExchangeWsClient` — needs a `correlation_id`).
 4. Add unit tests in `test_ws_client.cpp` using `MockWsConnection`.
 
 ---
 
 ## Adding a new WebSocket subscription
 
-`TypedSubscribeRequest` binds the push message type and the channel **at compile time** via two template parameters:
+`TypedSubscribeRequest` binds the push message type and the channel **at compile time** via two template parameters, and supplies the two members (`route_key()`, `unsubscribe_json()`) the generic `ExchangeWsClient::subscribe_async` needs:
 
 ```cpp
 template<typename PushMsg, SubscribeChannel Ch>
-struct TypedSubscribeRequest : SubscribeRequest {
+struct TypedSubscribeRequest : SubscribeRequest {        // SubscribeRequest : WsRequestBase
     using push_type     = PushMsg;
     using response_type = SubscribeResponse;
     static constexpr SubscribeChannel channel_value = Ch;
-    TypedSubscribeRequest() { this->channel = Ch; }  // channel set automatically
+    TypedSubscribeRequest() { this->channel = Ch; }      // channel set automatically
+    std::string route_key() const { return to_string(channel); }
+    json        unsubscribe_json() const;                // builds the matching UnsubscribeRequest frame
 };
 ```
 
 To add a new subscription channel:
 
-1. Add the `SubscribeChannel` enum value in `kraken_ws_api.hpp`.
+1. Add the `SubscribeChannel` enum value in `exchange/kraken/ws_api.hpp`.
 2. Add the channel → string mapping in `to_string(SubscribeChannel)`.
 3. Add `YourPushMessage` with `static YourPushMessage from_json(const json&)`.
-4. Add the `MessageKind` enum value and handle the `"channel"` string in `identify_message()`.
+4. Add the `MessageKind` enum value and handle the `"channel"` string in **both** `identify_message()` and `kraken_frame_descriptor()` (the latter sets `route_key` from `"channel"`).
 5. Add a convenience type alias:
    ```cpp
    using YourSubscribeRequest = TypedSubscribeRequest<YourPushMessage, SubscribeChannel::YourChannel>;
@@ -632,9 +755,9 @@ To add a new subscription channel:
 
 ## Adding a new low-level WebSocket message type
 
-1. Add request struct with `json to_json() const` and response struct with `static T from_json(const json&)` in `kraken_ws_api.hpp`.
-2. Add the new `MessageKind` enum value.
-3. Handle the new method name or channel string in `identify_message()`.
+1. Add request struct with `json to_json() const` and response struct with `static T from_json(const json&)` in `exchange/kraken/ws_api.hpp`.
+2. Add the new `MessageKind` enum value, and handle the new method/channel string in `identify_message()`.
+3. If the message participates in `ExchangeWsClient` dispatch (method calls and subscriptions do; one-way pushes you only inspect manually do not), also handle it in `kraken_frame_descriptor()`.
 
 ---
 
@@ -645,23 +768,23 @@ To add a new subscription channel:
 Unit tests inject a custom HTTP performer via `make_test_client`:
 
 ```cpp
-auto client = make_test_client([](const kraken::rest::HttpRequest& http) -> std::string {
+auto client = make_test_client([](const exchange::kraken::rest::HttpRequest& http) -> std::string {
     // inspect http.path, http.method, http.body, http.headers
     return R"({"error":[],"result":{...}})";
 });
 auto resp = client.execute(SomeRequest{});
 ```
 
-This factory is declared `inline` in `kraken_rest_client.hpp` and friends `KrakenRestClient`'s private constructor, so no changes to the library source are needed.
+This factory is declared `inline` in `exchange/kraken/rest_client.hpp` and friends `KrakenRestClient`'s private constructor, so no changes to the library source are needed.
 
 ### WebSocket (MockWsConnection)
 
-Unit tests create a `MockWsConnection` (defined in `test_ws_client.cpp`) and inject it via `make_ws_client(conn)`:
+Unit tests create a `MockWsConnection` (defined in `test_ws_client.cpp`) and inject it via `make_kraken_ws_client(conn)`:
 
 ```cpp
 auto conn   = std::make_shared<MockWsConnection>();
-auto client = kraken::ws::make_ws_client(
-                  std::static_pointer_cast<kraken::ws::IWsConnection>(conn));
+auto client = exchange::kraken::ws::make_kraken_ws_client(
+                  std::static_pointer_cast<exchange::ws::IWsConnection>(conn));
 
 conn->fire_open();            // simulate connection open
 conn->sent_messages;          // inspect outbound messages (std::vector<std::string>)
@@ -687,14 +810,14 @@ Line 2: Base64-encoded private key (as provided by Kraken).
 
 Load in code:
 ```cpp
-auto creds = kraken::rest::Credentials::from_file("default");
+auto creds = exchange::kraken::rest::Credentials::from_file("default");
 ```
 
 ---
 
 ## File header
 
-Every `.hpp`, `.inl`, and `.cpp` file must begin with the following banner:
+Every `.hpp`, `.inl`, and `.cpp` file — including everything under `include/exchange/` and `src/exchange/` — must begin with the following banner:
 
 ```cpp
 // =============================================================================
@@ -716,12 +839,13 @@ Place the banner before `#pragma once` (for headers) or before the first `#inclu
 - **C++17** throughout; use structured bindings, `if constexpr`, `std::optional`, `std::string_view` where appropriate.
 - All optional fields on request and response structs use `std::optional<T>`. Only set them when needed; omitted fields are not serialised.
 - JSON serialisation uses `to_json()` / `from_json()` static methods on each struct. Prefer `j.value("key", default)` over `j.at("key")` for fields that may be absent in responses.
-- Enum conversions are done by free functions `to_string(Enum)` and `foo_from_string(const std::string&)` in `kraken_types.hpp`. These throw `std::invalid_argument` on unknown values.
-- Monetary / volume fields returned by the REST API arrive as JSON **strings** (e.g., `"1.5"`) — deserialise with `std::stod(j.value("field", "0"))` rather than `.get<double>()`.
-- The static library (`libkrakenapi.a`) links against libcurl and OpenSSL. It also compiles `kraken_ws_client.cpp`, but does **not** link against ixwebsocket. Callers that use `IxWsConnection` must separately link against `ixwebsocket`.
+- Enum conversions are done by free functions `to_string(Enum)` and `foo_from_string(const std::string&)`. The canonical four (`Side`, `OrderType`, `TimeInForce`, `OrderStatus`) live in `exchange/common/types.hpp`; Kraken-only enums (`PriceType`, `TriggerReference`, `StpType`, `FeePreference`) and Kraken's hyphenated `OrderType` overrides (`kraken_order_type_to_string`/`from_string`) live in `exchange/kraken/types.hpp`. All throw `std::invalid_argument` on unknown values.
+- Monetary / volume fields returned by the REST API arrive as JSON **strings** (e.g., `"1.5"`) — deserialise with `std::stod(j.value("field", "0"))` rather than `.get<double>()`. For prices that must round-trip to an *exact* decimal string (e.g. for order placement), use `TickPrice` instead of raw `double` formatting — see [Shared types reference](#tickprice--exact-decimal-price-representation).
+- The static library (`libkrakenapi.a`) links against libcurl, OpenSSL, and `nlohmann_json`. It compiles both `src/exchange/common/ws_client.cpp` (generic dispatch) and `src/kraken/{rest_client,types}.cpp`, but does **not** link against ixwebsocket. Callers that use `IxWsConnection` must separately link against `ixwebsocket`.
 - IXWebSocket and spdlog are **not** linked into `libkrakenapi.a`; they are used only by examples and tests.
-- Template methods for `KrakenWsClient` live in `kraken_ws_client.inl` (included at the bottom of `.hpp`). Non-template methods live in `src/kraken_ws_client.cpp`. Keep this split consistent when adding new methods.
+- Template methods for `ExchangeWsClient` live in `exchange/common/ws_client.inl` (included at the bottom of the `.hpp`). Non-template methods live in `src/exchange/common/ws_client.cpp`. Both are exchange-agnostic — Kraken contributes no `.cpp`/`.inl` for the WS client, only `kraken_frame_descriptor()` and its request/response types. Keep this split consistent when adding new methods.
 - Push callbacks stored in `subscriptions_` are type-erased to `std::function<void(const json&)>` internally; the typed lambda wrapper is created once in the template method and stored at subscription time.
+- **Don't add new code against the deprecated `kraken::` / `kraken_*.hpp` surface.** It exists solely so pre-refactor external callers keep compiling — see [docs/plans/001-appendix-compat-shim.md](docs/plans/001-appendix-compat-shim.md) and [001-appendix-migration-guide.md](docs/plans/001-appendix-migration-guide.md). New code, tests, and examples target `exchange::kraken::*` directly.
 
 ---
 
@@ -731,7 +855,8 @@ Place the banner before `#pragma once` (for headers) or before the first `#inclu
 # Public (no credentials needed)
 ./build/bin/public_rest
 ./build/bin/public_ws BTC/EUR
-./build/bin/ws_client_example BTC/USD   # KrakenWsClient subscription + connection reuse
+./build/bin/ws_client_example BTC/USD     # KrakenWsClient subscription + connection reuse
+./build/bin/rest_client_example time      # CLI11 demo — try `--help` for every public-endpoint subcommand
 
 # Private (requires ~/.kraken/default)
 ./build/bin/private_rest
