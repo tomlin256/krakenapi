@@ -9,53 +9,39 @@
 
 #pragma once
 
-// kraken_ws_api.hpp — DEPRECATED: use exchange/kraken/ws_api.hpp instead.
+// exchange/kraken/ws_api.hpp
+// Kraken WebSocket v2 API — request/response types and message identification.
 //
-// This header retains the legacy kraken::ws:: namespace for backward compatibility.
-// New code should include exchange/kraken/ws_api.hpp and use exchange::kraken::ws::.
+// Namespace: exchange::kraken::ws
+
+#include "exchange/common/ws.hpp"
+#include "exchange/kraken/types.hpp"
 
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
-#include <stdexcept>
 
-#include "exchange/common/ws.hpp"
-#include "kraken_types.hpp"
-
-namespace kraken::ws {
+namespace exchange::kraken::ws {
 
 using json = nlohmann::json;
 
-// ── Re-export common types used throughout this header ───────────────────────
+// ── Re-export common scaffold types ──────────────────────────────────────────
+
 using exchange::ws::WsRequestBase;
+using exchange::ws::WsResponse;
+using exchange::ws::SubscriptionHandle;
+using exchange::ws::FrameDescriptor;
+using exchange::ws::FrameKind;
+using exchange::ws::BaseWsResponse;
 
-// ============================================================
-// Authentication credentials
-// ============================================================
-
-struct WsCredentials {
-    std::string token;
-
-    json to_json() const {
-        json j;
-        j["token"] = token;
-        return j;
-    }
-};
-
-// ============================================================
-// Typed request bases  (mirror TypedPublicRequest/TypedPrivateRequest from REST)
-// ============================================================
-
-// Method-call requests: forward to the common exchange-agnostic scaffold.
-// Each Kraken request struct inherits TypedWsRequest<Resp> and provides
-// to_json() that emits req_id (inherited from WsRequestBase) as "req_id".
+// Method-call typed request base (re-export from common scaffold).
 template<typename R>
 using TypedWsRequest = exchange::ws::TypedWsRequest<R>;
 
-// Forward declarations of all response types so that TypedWsRequest<Resp>
-// can be used as a base class before the response struct is fully defined.
+// ── Forward declarations ──────────────────────────────────────────────────────
+
 struct AddOrderResponse;
 struct AmendOrderResponse;
 struct CancelOrderResponse;
@@ -66,12 +52,8 @@ struct BatchCancelResponse;
 struct EditOrderResponse;
 struct PongMessage;
 
-// ============================================================
-// Response base
-// ============================================================
+// ── Response base ─────────────────────────────────────────────────────────────
 
-// Kraken method-call responses carry extra fields on top of the common
-// success/error base (exchange::ws::BaseWsResponse).
 struct BaseResponse : exchange::ws::BaseWsResponse {
     std::string              method;
     std::optional<int64_t>   req_id;
@@ -88,48 +70,50 @@ struct BaseResponse : exchange::ws::BaseWsResponse {
     }
 };
 
-// ============================================================
-//  1. ADD ORDER
-// ============================================================
+// ── Authentication credentials ────────────────────────────────────────────────
+
+struct WsCredentials {
+    std::string token;
+
+    json to_json() const {
+        json j;
+        j["token"] = token;
+        return j;
+    }
+};
+
+// ── 1. ADD ORDER ──────────────────────────────────────────────────────────────
 
 struct AddOrderRequest : TypedWsRequest<AddOrderResponse> {
-    // Required
     OrderType   order_type;
     Side        side;
     double      order_qty{0.0};
     std::string symbol;
     std::string token;
 
-    // Optional pricing
     std::optional<TickPrice> limit_price;
     std::optional<PriceType> limit_price_type;
-
-    // Optional trigger section (for triggered order types)
     std::optional<Triggers>   triggers;
-
-    // Optional OTO conditional close order
     std::optional<Conditional> conditional;
-
-    // Optional flags
     std::optional<TimeInForce>   time_in_force;
     std::optional<bool>          margin;
     std::optional<bool>          post_only;
     std::optional<bool>          reduce_only;
-    std::optional<std::string>   effective_time;  // RFC3339
-    std::optional<std::string>   expire_time;     // RFC3339 (GTD only)
-    std::optional<std::string>   deadline;        // RFC3339
+    std::optional<std::string>   effective_time;
+    std::optional<std::string>   expire_time;
+    std::optional<std::string>   deadline;
     std::optional<std::string>   cl_ord_id;
     std::optional<int64_t>       order_userref;
-    std::optional<double>        display_qty;     // iceberg only
+    std::optional<double>        display_qty;
     std::optional<FeePreference> fee_preference;
     std::optional<StpType>       stp_type;
-    std::optional<double>        cash_order_qty;  // buy market without margin
+    std::optional<double>        cash_order_qty;
     std::optional<bool>          validate;
     std::optional<std::string>   sender_sub_id;
 
     json to_json() const {
         json params;
-        params["order_type"] = to_string(order_type);
+        params["order_type"] = kraken_order_type_to_string(order_type);
         params["side"]       = to_string(side);
         params["order_qty"]  = order_qty;
         params["symbol"]     = symbol;
@@ -139,7 +123,7 @@ struct AddOrderRequest : TypedWsRequest<AddOrderResponse> {
         if (limit_price_type) params["limit_price_type"] = to_string(*limit_price_type);
         if (triggers)         params["triggers"]         = triggers->to_json();
         if (conditional)      params["conditional"]      = conditional->to_json();
-        if (time_in_force)    params["time_in_force"]    = to_string(*time_in_force);
+        if (time_in_force)    params["time_in_force"]    = kraken_tif_to_string(*time_in_force);
         if (margin)           params["margin"]           = *margin;
         if (post_only)        params["post_only"]        = *post_only;
         if (reduce_only)      params["reduce_only"]      = *reduce_only;
@@ -183,22 +167,18 @@ struct AddOrderResponse : BaseResponse {
     }
 };
 
-// ============================================================
-//  2. AMEND ORDER
-// ============================================================
+// ── 2. AMEND ORDER ───────────────────────────────────────────────────────────
 
 struct AmendOrderRequest : TypedWsRequest<AmendOrderResponse> {
     std::string token;
-    // Must provide one of:
     std::optional<std::string> order_id;
     std::optional<std::string> cl_ord_id;
-
     std::optional<double>    order_qty;
     std::optional<double>    display_qty;
     std::optional<TickPrice> limit_price;
     std::optional<PriceType> limit_price_type;
     std::optional<Triggers>  triggers;
-    std::optional<TickPrice> post_only_price; // amend to post-only at this price
+    std::optional<TickPrice> post_only_price;
     std::optional<std::string> deadline;
 
     json to_json() const {
@@ -240,13 +220,10 @@ struct AmendOrderResponse : BaseResponse {
     }
 };
 
-// ============================================================
-//  3. CANCEL ORDER
-// ============================================================
+// ── 3. CANCEL ORDER ───────────────────────────────────────────────────────────
 
 struct CancelOrderRequest : TypedWsRequest<CancelOrderResponse> {
     std::string token;
-    // Provide one or more order ids OR cl_ord_ids
     std::optional<std::vector<std::string>> order_ids;
     std::optional<std::vector<std::string>> cl_ord_ids;
 
@@ -294,9 +271,7 @@ struct CancelOrderResponse : BaseResponse {
     }
 };
 
-// ============================================================
-//  4. CANCEL ALL
-// ============================================================
+// ── 4. CANCEL ALL ─────────────────────────────────────────────────────────────
 
 struct CancelAllRequest : TypedWsRequest<CancelAllResponse> {
     std::string token;
@@ -311,7 +286,7 @@ struct CancelAllRequest : TypedWsRequest<CancelAllResponse> {
 };
 
 struct CancelAllResponse : BaseResponse {
-    std::optional<int32_t> count;  // number of orders cancelled
+    std::optional<int32_t> count;
 
     static CancelAllResponse from_json(const json& j) {
         CancelAllResponse r;
@@ -324,13 +299,11 @@ struct CancelAllResponse : BaseResponse {
     }
 };
 
-// ============================================================
-//  5. CANCEL ON DISCONNECT (cancel_after)
-// ============================================================
+// ── 5. CANCEL ON DISCONNECT ───────────────────────────────────────────────────
 
 struct CancelOnDisconnectRequest : TypedWsRequest<CancelOnDisconnectResponse> {
     std::string token;
-    int32_t     timeout{60};  // seconds; 0 = disable
+    int32_t     timeout{60};
 
     json to_json() const {
         json msg;
@@ -358,16 +331,13 @@ struct CancelOnDisconnectResponse : BaseResponse {
     }
 };
 
-// ============================================================
-//  6. BATCH ADD
-// ============================================================
+// ── 6. BATCH ADD ──────────────────────────────────────────────────────────────
 
 struct BatchAddRequest : TypedWsRequest<BatchAddResponse> {
     std::string token;
     std::string symbol;
     std::optional<std::string> deadline;
     std::optional<bool>        validate;
-
     std::vector<OrderParams> orders;
 
     json to_json() const {
@@ -425,9 +395,7 @@ struct BatchAddResponse : BaseResponse {
     }
 };
 
-// ============================================================
-//  7. BATCH CANCEL
-// ============================================================
+// ── 7. BATCH CANCEL ───────────────────────────────────────────────────────────
 
 struct BatchCancelRequest : TypedWsRequest<BatchCancelResponse> {
     std::string token;
@@ -462,16 +430,12 @@ struct BatchCancelResponse : BaseResponse {
     }
 };
 
-// ============================================================
-//  8. EDIT ORDER
-// ============================================================
+// ── 8. EDIT ORDER ─────────────────────────────────────────────────────────────
 
 struct EditOrderRequest : TypedWsRequest<EditOrderResponse> {
     std::string token;
-    // Must provide one of:
     std::optional<std::string> order_id;
     std::optional<std::string> cl_ord_id;
-
     std::optional<double>    order_qty;
     std::optional<double>    display_qty;
     std::optional<TickPrice> limit_price;
@@ -521,9 +485,7 @@ struct EditOrderResponse : BaseResponse {
     }
 };
 
-// ============================================================
-//  9. MARKET DATA SUBSCRIPTIONS
-// ============================================================
+// ── 9. SUBSCRIPTIONS ─────────────────────────────────────────────────────────
 
 enum class SubscribeChannel {
     Ticker,
@@ -552,12 +514,12 @@ inline std::string to_string(SubscribeChannel ch) {
 
 struct SubscribeRequest : WsRequestBase {
     SubscribeChannel channel;
-    std::optional<std::vector<std::string>> symbols;  // for market data channels
-    std::optional<std::string> token;   // required for authenticated channels
-    std::optional<int32_t>     depth;   // for book channel (10, 25, 100, 500, 1000)
-    std::optional<int32_t>     interval; // for OHLC (minutes: 1,5,15,30,60,240,1440,10080,21600)
-    std::optional<bool>        snapshot; // whether to send snapshot on subscribe
-    std::optional<bool>        snapshot_trades; // executions channel
+    std::optional<std::vector<std::string>> symbols;
+    std::optional<std::string> token;
+    std::optional<int32_t>     depth;
+    std::optional<int32_t>     interval;
+    std::optional<bool>        snapshot;
+    std::optional<bool>        snapshot_trades;
 
     json to_json() const {
         json params;
@@ -613,17 +575,6 @@ struct SubscribeResponse : BaseResponse {
     }
 };
 
-// ============================================================
-// Typed subscription request base
-//
-// Inherits all SubscribeRequest fields (channel, symbols, token, depth, …)
-// and adds compile-time type information:
-//   push_type     — the push-data message type streamed after a successful ack
-//   response_type — SubscribeResponse (the Phase 3 acknowledgement)
-//
-// Per-channel convenience aliases are provided at the bottom of this file.
-// ============================================================
-
 template<typename PushMsg, SubscribeChannel Ch>
 struct TypedSubscribeRequest : SubscribeRequest {
     using push_type     = PushMsg;
@@ -644,9 +595,7 @@ struct TypedSubscribeRequest : SubscribeRequest {
     }
 };
 
-// ============================================================
-//  10. MARKET DATA - Ticker (Level 1)
-// ============================================================
+// ── 10. MARKET DATA - Ticker ──────────────────────────────────────────────────
 
 struct TickerData {
     std::string symbol;
@@ -682,7 +631,7 @@ struct TickerData {
 
 struct TickerMessage {
     std::string channel;
-    std::string type;   // "snapshot" | "update"
+    std::string type;
     std::vector<TickerData> data;
 
     static TickerMessage from_json(const json& j) {
@@ -697,9 +646,7 @@ struct TickerMessage {
     }
 };
 
-// ============================================================
-//  11. MARKET DATA - Book (Level 2)
-// ============================================================
+// ── 11. MARKET DATA - Book ────────────────────────────────────────────────────
 
 struct BookEntry {
     double price{0.0};
@@ -730,7 +677,7 @@ struct BookData {
 
 struct BookMessage {
     std::string channel;
-    std::string type;   // "snapshot" | "update"
+    std::string type;
     std::vector<BookData> data;
 
     static BookMessage from_json(const json& j) {
@@ -745,17 +692,15 @@ struct BookMessage {
     }
 };
 
-// ============================================================
-//  12. MARKET DATA - Trades
-// ============================================================
+// ── 12. MARKET DATA - Trades ──────────────────────────────────────────────────
 
 struct TradeData {
     std::string symbol;
     double      price{0.0};
     double      qty{0.0};
-    std::string side;        // "buy" | "sell"
-    std::string ord_type;    // "limit" | "market"
-    int64_t     trade_id{0}; // numeric trade ID as returned by the API
+    std::string side;
+    std::string ord_type;
+    int64_t     trade_id{0};
     std::string timestamp;
 
     static TradeData from_json(const json& j) {
@@ -788,13 +733,11 @@ struct TradeMessage {
     }
 };
 
-// ============================================================
-//  13. MARKET DATA - OHLC / Candles
-// ============================================================
+// ── 13. MARKET DATA - OHLC ────────────────────────────────────────────────────
 
 struct OHLCData {
     std::string symbol;
-    std::string timestamp;  // candle open time
+    std::string timestamp;
     double      open{0.0};
     double      high{0.0};
     double      low{0.0};
@@ -802,8 +745,8 @@ struct OHLCData {
     double      vwap{0.0};
     double      volume{0.0};
     int64_t     trades{0};
-    std::string interval_begin;  // ISO 8601 start time of the candle interval
-    std::optional<int32_t> interval; // interval length in minutes
+    std::string interval_begin;
+    std::optional<int32_t> interval;
 
     static OHLCData from_json(const json& j) {
         OHLCData o;
@@ -839,11 +782,8 @@ struct OHLCMessage {
     }
 };
 
-// ============================================================
-//  14. MARKET DATA - Instrument
-// ============================================================
+// ── 14. MARKET DATA - Instrument ─────────────────────────────────────────────
 
-// Asset entry within the instrument channel "assets" array.
 struct AssetInfo {
     std::string id;
     std::string status;
@@ -866,7 +806,6 @@ struct AssetInfo {
     }
 };
 
-// Pair entry within the instrument channel "pairs" array.
 struct InstrumentInfo {
     std::string symbol;
     std::string base;
@@ -903,7 +842,6 @@ struct InstrumentInfo {
     }
 };
 
-// The instrument channel delivers data as an object {"assets":[…], "pairs":[…]}.
 struct InstrumentMessage {
     std::string channel;
     std::string type;
@@ -927,13 +865,11 @@ struct InstrumentMessage {
     }
 };
 
-// ============================================================
-//  15. USER DATA - Executions
-// ============================================================
+// ── 15. USER DATA - Executions ────────────────────────────────────────────────
 
 struct ExecutionData {
     std::string exec_id;
-    std::string exec_type;        // "filled", "canceled", "pending_new", etc.
+    std::string exec_type;
     std::string order_id;
     std::string symbol;
     std::string side;
@@ -955,7 +891,7 @@ struct ExecutionData {
     std::optional<std::string> time_in_force;
     std::optional<bool>        post_only;
     std::optional<bool>        margin;
-    std::optional<std::string> reason;  // cancel reason
+    std::optional<std::string> reason;
 
     static ExecutionData from_json(const json& j) {
         ExecutionData e;
@@ -1004,9 +940,7 @@ struct ExecutionsMessage {
     }
 };
 
-// ============================================================
-//  16. USER DATA - Balances
-// ============================================================
+// ── 16. USER DATA - Balances ──────────────────────────────────────────────────
 
 struct BalanceData {
     std::string asset;
@@ -1015,9 +949,9 @@ struct BalanceData {
 
     static BalanceData from_json(const json& j) {
         BalanceData b;
-        b.asset       = j.value("asset", "");
-        b.balance     = j.value("balance", 0.0);
-        b.hold_trade  = j.value("hold_trade", 0.0);
+        b.asset      = j.value("asset", "");
+        b.balance    = j.value("balance", 0.0);
+        b.hold_trade = j.value("hold_trade", 0.0);
         return b;
     }
 };
@@ -1039,14 +973,12 @@ struct BalancesMessage {
     }
 };
 
-// ============================================================
-//  17. ADMIN - Status / Heartbeat / Ping
-// ============================================================
+// ── 17. ADMIN - Status / Heartbeat / Ping ────────────────────────────────────
 
 struct StatusMessage {
     std::string channel;
     std::string type;
-    std::string system;    // "online" | "maintenance"
+    std::string system;
     std::string version;
 
     static StatusMessage from_json(const json& j) {
@@ -1072,7 +1004,7 @@ struct PingRequest : TypedWsRequest<PongMessage> {
 };
 
 struct PongMessage {
-    std::string method;  // "pong"
+    std::string method;
     std::optional<int64_t> req_id;
 
     static PongMessage from_json(const json& j) {
@@ -1083,13 +1015,9 @@ struct PongMessage {
     }
 };
 
-// ============================================================
-//  Message Dispatcher
-//  Identify the type of an incoming JSON message.
-// ============================================================
+// ── Message Dispatcher ────────────────────────────────────────────────────────
 
 enum class MessageKind {
-    // Method responses
     AddOrderResponse,
     AmendOrderResponse,
     CancelOrderResponse,
@@ -1101,7 +1029,6 @@ enum class MessageKind {
     SubscribeResponse,
     UnsubscribeResponse,
     Pong,
-    // Push messages
     Ticker,
     Book,
     Level3,
@@ -1116,7 +1043,6 @@ enum class MessageKind {
 };
 
 inline MessageKind identify_message(const json& j) {
-    // Method-reply messages
     if (j.contains("method")) {
         const auto m = j["method"].get<std::string>();
         if (m == "add_order")    return MessageKind::AddOrderResponse;
@@ -1131,7 +1057,6 @@ inline MessageKind identify_message(const json& j) {
         if (m == "unsubscribe")  return MessageKind::UnsubscribeResponse;
         if (m == "pong")         return MessageKind::Pong;
     }
-    // Push channel messages
     if (j.contains("channel")) {
         const auto ch = j["channel"].get<std::string>();
         if (ch == "ticker")      return MessageKind::Ticker;
@@ -1148,14 +1073,7 @@ inline MessageKind identify_message(const json& j) {
     return MessageKind::Unknown;
 }
 
-// ============================================================
-// Per-channel typed subscribe request aliases
-//
-// Usage:
-//   kraken::ws::TickerSubscribeRequest req;
-//   req.symbols = {"BTC/USD"};
-//   auto [ack, handle] = client->subscribe(req, [](TickerMessage msg) { ... });
-// ============================================================
+// ── Per-channel typed subscribe request aliases ───────────────────────────────
 
 using TickerSubscribeRequest     = TypedSubscribeRequest<TickerMessage,     SubscribeChannel::Ticker>;
 using BookSubscribeRequest       = TypedSubscribeRequest<BookMessage,       SubscribeChannel::Book>;
@@ -1165,12 +1083,7 @@ using InstrumentSubscribeRequest = TypedSubscribeRequest<InstrumentMessage, Subs
 using ExecutionsSubscribeRequest = TypedSubscribeRequest<ExecutionsMessage,  SubscribeChannel::Executions>;
 using BalancesSubscribeRequest   = TypedSubscribeRequest<BalancesMessage,   SubscribeChannel::Balances>;
 
-// ============================================================
-// Kraken frame descriptor  — the MessageIdentifier for ExchangeWsClient
-//
-// Method replies carry req_id (int); push messages carry channel (string).
-// Kraken stringifies req_id to key the pending_ map (cross-exchange convention).
-// ============================================================
+// ── Kraken frame descriptor ───────────────────────────────────────────────────
 
 inline exchange::ws::FrameDescriptor kraken_frame_descriptor(const json& j) {
     exchange::ws::FrameDescriptor desc;
@@ -1190,4 +1103,4 @@ inline exchange::ws::FrameDescriptor kraken_frame_descriptor(const json& j) {
     return desc;  // kind == Unknown
 }
 
-} // namespace kraken::ws
+} // namespace exchange::kraken::ws

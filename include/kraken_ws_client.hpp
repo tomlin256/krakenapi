@@ -9,7 +9,8 @@
 
 #pragma once
 
-// kraken_ws_client.hpp — thin compatibility shim
+// kraken_ws_client.hpp — DEPRECATED: use exchange/kraken/ws_client.hpp instead.
+// thin compatibility shim
 //
 // KrakenWsClient is now a type alias for exchange::ws::ExchangeWsClient.
 // All implementation logic lives in exchange/common/ws_client.hpp + .inl.

@@ -9,58 +9,44 @@
 
 #pragma once
 
-// kraken_types.hpp — DEPRECATED: use exchange/kraken/types.hpp instead.
+// exchange/kraken/types.hpp
+// Kraken-specific types: enumerations, order parameter structures, and
+// order/trade/ledger info structs shared between the REST and WebSocket layers.
 //
-// This header retains the legacy kraken:: namespace for backward compatibility.
-// New code should include exchange/kraken/types.hpp and use exchange::kraken::.
+// The canonical exchange-agnostic enums (Side, OrderType, TimeInForce,
+// OrderStatus) live in exchange/common/types.hpp and are pulled in here with
+// using declarations so callers need only include this header.
 //
-// Shared enumerations, sub-objects, and order description types used by both
-// the Kraken REST API layer (kraken_rest_api.hpp) and the WebSocket v2 layer
-// (kraken_ws_api.hpp).
-//
-// Key auth model differences:
-//   REST private:      nonce (uint64) + HMAC-SHA512 signature sent as headers
-//                        API-Key  / API-Sign
-//   WebSocket private: session token obtained via REST /GetWebSocketsToken,
-//                        sent as "token" field inside each request's params.
-//
-// Both layers share order parameter structures (OrderType, Side, Triggers,
-// Conditional, etc.).  Auth-specific fields (nonce/token) live in the layer
-// that owns them.
+// Namespace: exchange::kraken
+
+#include "exchange/common/types.hpp"
 
 #include <nlohmann/json.hpp>
 #include <cmath>
 #include <cstdint>
+#include <map>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
-#include <stdexcept>
-#include <map>
 
-namespace kraken {
+namespace exchange::kraken {
 
 using json = nlohmann::json;
 
-// ============================================================
-// Enumerations + string conversion helpers
-// ============================================================
+// ── Re-export canonical exchange enums ───────────────────────────────────────
 
-enum class OrderType {
-    Limit,
-    Market,
-    Iceberg,
-    StopLoss,
-    StopLossLimit,
-    TakeProfit,
-    TakeProfitLimit,
-    TrailingStop,
-    TrailingStopLimit,
-    SettlePosition
-};
+using exchange::Side;
+using exchange::OrderType;
+using exchange::TimeInForce;
+using exchange::OrderStatus;
 
-enum class Side { Buy, Sell };
+// Pull in the to_string / from_string helpers for re-exported types.
+using exchange::to_string;
+using exchange::side_from_string;
+using exchange::order_status_from_string;
 
-enum class TimeInForce { GTC, GTD, IOC };
+// ── Kraken-specific enumerations ─────────────────────────────────────────────
 
 enum class PriceType { Static, Pct, Quote };
 
@@ -70,68 +56,7 @@ enum class StpType { CancelNewest, CancelOldest, CancelBoth };
 
 enum class FeePreference { Base, Quote };
 
-enum class OrderStatus {
-    PendingNew,
-    New,
-    PartiallyFilled,
-    Filled,
-    Canceled,
-    Expired,
-    Unknown
-};
-
-// -- to_string / from_string ------------------------------------------
-
-inline std::string to_string(OrderType v) {
-    switch (v) {
-        case OrderType::Limit:             return "limit";
-        case OrderType::Market:            return "market";
-        case OrderType::Iceberg:           return "iceberg";
-        case OrderType::StopLoss:          return "stop-loss";
-        case OrderType::StopLossLimit:     return "stop-loss-limit";
-        case OrderType::TakeProfit:        return "take-profit";
-        case OrderType::TakeProfitLimit:   return "take-profit-limit";
-        case OrderType::TrailingStop:      return "trailing-stop";
-        case OrderType::TrailingStopLimit: return "trailing-stop-limit";
-        case OrderType::SettlePosition:    return "settle-position";
-    }
-    throw std::invalid_argument("Unknown OrderType");
-}
-inline OrderType order_type_from_string(const std::string& s) {
-    if (s == "limit")               return OrderType::Limit;
-    if (s == "market")              return OrderType::Market;
-    if (s == "iceberg")             return OrderType::Iceberg;
-    if (s == "stop-loss")           return OrderType::StopLoss;
-    if (s == "stop-loss-limit")     return OrderType::StopLossLimit;
-    if (s == "take-profit")         return OrderType::TakeProfit;
-    if (s == "take-profit-limit")   return OrderType::TakeProfitLimit;
-    if (s == "trailing-stop")       return OrderType::TrailingStop;
-    if (s == "trailing-stop-limit") return OrderType::TrailingStopLimit;
-    if (s == "settle-position")     return OrderType::SettlePosition;
-    throw std::invalid_argument("Unknown order_type: " + s);
-}
-
-inline std::string to_string(Side v)       { return v == Side::Buy ? "buy" : "sell"; }
-inline Side side_from_string(const std::string& s) {
-    if (s == "buy")  return Side::Buy;
-    if (s == "sell") return Side::Sell;
-    throw std::invalid_argument("Unknown side: " + s);
-}
-
-inline std::string to_string(TimeInForce v) {
-    switch (v) {
-        case TimeInForce::GTC: return "gtc";
-        case TimeInForce::GTD: return "gtd";
-        case TimeInForce::IOC: return "ioc";
-    }
-    throw std::invalid_argument("Unknown TimeInForce");
-}
-inline TimeInForce tif_from_string(const std::string& s) {
-    if (s == "gtc") return TimeInForce::GTC;
-    if (s == "gtd") return TimeInForce::GTD;
-    if (s == "ioc") return TimeInForce::IOC;
-    throw std::invalid_argument("Unknown time_in_force: " + s);
-}
+// ── to_string / from_string for Kraken-specific enums ────────────────────────
 
 inline std::string to_string(PriceType v) {
     switch (v) {
@@ -148,7 +73,9 @@ inline PriceType price_type_from_string(const std::string& s) {
     throw std::invalid_argument("Unknown price_type: " + s);
 }
 
-inline std::string to_string(TriggerReference v) { return v == TriggerReference::Index ? "index" : "last"; }
+inline std::string to_string(TriggerReference v) {
+    return v == TriggerReference::Index ? "index" : "last";
+}
 inline TriggerReference trigger_ref_from_string(const std::string& s) {
     if (s == "index") return TriggerReference::Index;
     if (s == "last")  return TriggerReference::Last;
@@ -170,42 +97,60 @@ inline StpType stp_type_from_string(const std::string& s) {
     throw std::invalid_argument("Unknown StpType: " + s);
 }
 
-inline std::string to_string(FeePreference v) { return v == FeePreference::Base ? "base" : "quote"; }
+inline std::string to_string(FeePreference v) {
+    return v == FeePreference::Base ? "base" : "quote";
+}
 inline FeePreference fee_preference_from_string(const std::string& s) {
     if (s == "base")  return FeePreference::Base;
     if (s == "quote") return FeePreference::Quote;
     throw std::invalid_argument("Unknown FeePreference: " + s);
 }
 
-inline std::string to_string(OrderStatus v) {
+// Kraken wire format uses different strings for OrderType than common/types.hpp.
+// These free functions implement the Kraken-specific mapping.
+inline std::string kraken_order_type_to_string(OrderType v) {
     switch (v) {
-        case OrderStatus::PendingNew:      return "pending_new";
-        case OrderStatus::New:             return "new";
-        case OrderStatus::PartiallyFilled: return "partially_filled";
-        case OrderStatus::Filled:          return "filled";
-        case OrderStatus::Canceled:        return "canceled";
-        case OrderStatus::Expired:         return "expired";
-        case OrderStatus::Unknown:         return "unknown";
+        case OrderType::Limit:             return "limit";
+        case OrderType::Market:            return "market";
+        case OrderType::StopLoss:          return "stop-loss";
+        case OrderType::StopLossLimit:     return "stop-loss-limit";
+        case OrderType::TakeProfit:        return "take-profit";
+        case OrderType::TakeProfitLimit:   return "take-profit-limit";
+        case OrderType::TrailingStop:      return "trailing-stop";
+        case OrderType::TrailingStopLimit: return "trailing-stop-limit";
     }
-    return "unknown";
-}
-inline OrderStatus order_status_from_string(const std::string& s) {
-    if (s == "pending_new" || s == "pending")  return OrderStatus::PendingNew;
-    if (s == "new" || s == "open")             return OrderStatus::New;
-    if (s == "partially_filled")               return OrderStatus::PartiallyFilled;
-    if (s == "filled" || s == "closed")        return OrderStatus::Filled;
-    if (s == "canceled" || s == "cancelled")   return OrderStatus::Canceled;
-    if (s == "expired")                        return OrderStatus::Expired;
-    return OrderStatus::Unknown;
+    throw std::invalid_argument("Unknown OrderType");
 }
 
-// ============================================================
-// TickPrice — exact decimal price representation
-//
-// A price on Kraken is an integer multiple of the pair's tick size (10^-d).
-// TickPrice stores (ticks, decimals) and serialises as an exact decimal string,
-// bypassing nlohmann/json's floating-point dtoa and any representational noise.
-// ============================================================
+inline OrderType kraken_order_type_from_string(const std::string& s) {
+    if (s == "limit")               return OrderType::Limit;
+    if (s == "market")              return OrderType::Market;
+    if (s == "stop-loss")           return OrderType::StopLoss;
+    if (s == "stop-loss-limit")     return OrderType::StopLossLimit;
+    if (s == "take-profit")         return OrderType::TakeProfit;
+    if (s == "take-profit-limit")   return OrderType::TakeProfitLimit;
+    if (s == "trailing-stop")       return OrderType::TrailingStop;
+    if (s == "trailing-stop-limit") return OrderType::TrailingStopLimit;
+    throw std::invalid_argument("Unknown order_type: " + s);
+}
+
+inline std::string kraken_tif_to_string(TimeInForce v) {
+    switch (v) {
+        case TimeInForce::GTC: return "gtc";
+        case TimeInForce::GTD: return "gtd";
+        case TimeInForce::IOC: return "ioc";
+    }
+    throw std::invalid_argument("Unknown TimeInForce");
+}
+
+inline TimeInForce kraken_tif_from_string(const std::string& s) {
+    if (s == "gtc") return TimeInForce::GTC;
+    if (s == "gtd") return TimeInForce::GTD;
+    if (s == "ioc") return TimeInForce::IOC;
+    throw std::invalid_argument("Unknown time_in_force: " + s);
+}
+
+// ── TickPrice — exact decimal price representation ───────────────────────────
 
 struct TickPrice {
     int64_t ticks{0};
@@ -239,27 +184,17 @@ struct TickPrice {
         return neg ? "-" + out : out;
     }
 
-    // Serialise as a JSON number via the exact decimal string.
-    // Going through str() eliminates FP multiplication noise (e.g. 3096217*0.0001
-    // → ~309.621699…) before handing the value to nlohmann's shortest-round-trip
-    // dtoa, which reproduces the canonical decimal form ("309.6217").
     json to_json() const { return std::stod(str()); }
 
-    // Reconstruct from a JSON string or number — best-effort round-trip.
-    // Only used by tests and sub-object parsing; outbound serialisation never
-    // depends on this path.
     static TickPrice from_json(const json& j);
 };
 
-// ============================================================
-// Sub-objects shared between REST and WebSocket
-// ============================================================
+// ── Sub-objects shared between REST and WebSocket ─────────────────────────────
 
-// Trigger section for stop/trailing order types.
 struct Triggers {
     TickPrice price{};
-    std::optional<TriggerReference> reference;  // default: last
-    std::optional<PriceType>        price_type; // default: static
+    std::optional<TriggerReference> reference;
+    std::optional<PriceType>        price_type;
 
     json to_json() const {
         json j;
@@ -277,7 +212,6 @@ struct Triggers {
     }
 };
 
-// Conditional secondary (OTO) close order.
 struct Conditional {
     std::optional<OrderType>  order_type;
     std::optional<TickPrice>  limit_price;
@@ -287,7 +221,7 @@ struct Conditional {
 
     json to_json() const {
         json j;
-        if (order_type)         j["order_type"]         = to_string(*order_type);
+        if (order_type)         j["order_type"]         = kraken_order_type_to_string(*order_type);
         if (limit_price)        j["limit_price"]        = limit_price->to_json();
         if (limit_price_type)   j["limit_price_type"]   = to_string(*limit_price_type);
         if (trigger_price)      j["trigger_price"]      = trigger_price->to_json();
@@ -296,7 +230,7 @@ struct Conditional {
     }
     static Conditional from_json(const json& j) {
         Conditional c;
-        if (j.contains("order_type"))         c.order_type         = order_type_from_string(j["order_type"].get<std::string>());
+        if (j.contains("order_type"))         c.order_type         = kraken_order_type_from_string(j["order_type"].get<std::string>());
         if (j.contains("limit_price"))        c.limit_price        = TickPrice::from_json(j["limit_price"]);
         if (j.contains("limit_price_type"))   c.limit_price_type   = price_type_from_string(j["limit_price_type"].get<std::string>());
         if (j.contains("trigger_price"))      c.trigger_price      = TickPrice::from_json(j["trigger_price"]);
@@ -305,19 +239,14 @@ struct Conditional {
     }
 };
 
-// ============================================================
-// Core order parameter block
-// Shared by AddOrderRequest (REST + WS) and BatchOrder entries.
-// Auth fields (token / nonce) are NOT in here – they live in the
-// protocol-specific request wrappers.
-// ============================================================
+// ── Core order parameter block ────────────────────────────────────────────────
 
 struct OrderParams {
     // Required
     OrderType   order_type{OrderType::Market};
     Side        side{Side::Buy};
     double      order_qty{0.0};
-    std::string symbol;       // e.g. "BTC/USD"  (WS) or "XBTUSD" (REST pair field)
+    std::string symbol;
 
     // Optional pricing
     std::optional<TickPrice> limit_price;
@@ -334,33 +263,30 @@ struct OrderParams {
     std::optional<bool>          margin;
     std::optional<bool>          post_only;
     std::optional<bool>          reduce_only;
-    std::optional<std::string>   effective_time;   // RFC3339
-    std::optional<std::string>   expire_time;      // RFC3339 (GTD)
-    std::optional<std::string>   deadline;         // RFC3339, max 60s ahead
+    std::optional<std::string>   effective_time;
+    std::optional<std::string>   expire_time;
+    std::optional<std::string>   deadline;
     std::optional<std::string>   cl_ord_id;
     std::optional<int64_t>       order_userref;
-    std::optional<double>        display_qty;      // iceberg
+    std::optional<double>        display_qty;
     std::optional<FeePreference> fee_preference;
     std::optional<StpType>       stp_type;
-    std::optional<double>        cash_order_qty;   // buy market without margin
+    std::optional<double>        cash_order_qty;
     std::optional<bool>          validate;
     std::optional<std::string>   sender_sub_id;
 
-    // Serialise the common order fields into an existing json object.
-    // The caller adds auth fields (token / nonce) and the outer method wrapper.
     json to_json() const {
         json j;
-        j["order_type"] = to_string(order_type);
+        j["order_type"] = kraken_order_type_to_string(order_type);
         j["side"]       = to_string(side);
         j["order_qty"]  = order_qty;
-        // symbol key differs: WS uses "symbol", REST uses "pair" – callers override if needed
         j["symbol"]     = symbol;
 
         if (limit_price)      j["limit_price"]      = limit_price->to_json();
         if (limit_price_type) j["limit_price_type"] = to_string(*limit_price_type);
         if (triggers)         j["triggers"]         = triggers->to_json();
         if (conditional)      j["conditional"]      = conditional->to_json();
-        if (time_in_force)    j["time_in_force"]    = to_string(*time_in_force);
+        if (time_in_force)    j["time_in_force"]    = kraken_tif_to_string(*time_in_force);
         if (margin)           j["margin"]           = *margin;
         if (post_only)        j["post_only"]        = *post_only;
         if (reduce_only)      j["reduce_only"]      = *reduce_only;
@@ -380,10 +306,9 @@ struct OrderParams {
 
     static OrderParams from_json(const json& j) {
         OrderParams p;
-        if (j.contains("order_type"))  p.order_type = order_type_from_string(j["order_type"].get<std::string>());
+        if (j.contains("order_type"))  p.order_type = kraken_order_type_from_string(j["order_type"].get<std::string>());
         if (j.contains("side"))        p.side       = side_from_string(j["side"].get<std::string>());
         if (j.contains("order_qty"))   p.order_qty  = j["order_qty"].get<double>();
-        // Accept both "symbol" (WS) and "pair" (REST)
         if (j.contains("symbol"))      p.symbol = j["symbol"].get<std::string>();
         else if (j.contains("pair"))   p.symbol = j["pair"].get<std::string>();
 
@@ -391,7 +316,7 @@ struct OrderParams {
         if (j.contains("limit_price_type")) p.limit_price_type = price_type_from_string(j["limit_price_type"].get<std::string>());
         if (j.contains("triggers"))         p.triggers         = Triggers::from_json(j["triggers"]);
         if (j.contains("conditional"))      p.conditional      = Conditional::from_json(j["conditional"]);
-        if (j.contains("time_in_force"))    p.time_in_force    = tif_from_string(j["time_in_force"].get<std::string>());
+        if (j.contains("time_in_force"))    p.time_in_force    = kraken_tif_from_string(j["time_in_force"].get<std::string>());
         if (j.contains("margin"))           p.margin           = j["margin"].get<bool>();
         if (j.contains("post_only"))        p.post_only        = j["post_only"].get<bool>();
         if (j.contains("reduce_only"))      p.reduce_only      = j["reduce_only"].get<bool>();
@@ -410,48 +335,43 @@ struct OrderParams {
     }
 };
 
-// ============================================================
-// Order description – returned by GET open/closed order endpoints
-// and by add-order responses (both REST and WS executions feed).
-// ============================================================
+// ── Order description ─────────────────────────────────────────────────────────
 
 struct OrderDescription {
-    std::string              pair;
-    Side                     side{Side::Buy};
-    OrderType                order_type{OrderType::Market};
-    std::string              price;    // kept as string to preserve precision
-    std::string              price2;
-    std::string              leverage;
-    std::string              order;    // human readable description
-    std::string              close;
+    std::string pair;
+    Side        side{Side::Buy};
+    OrderType   order_type{OrderType::Market};
+    std::string price;
+    std::string price2;
+    std::string leverage;
+    std::string order;
+    std::string close;
 
     static OrderDescription from_json(const json& j) {
         OrderDescription d;
-        d.pair       = j.value("pair", "");
-        d.price      = j.value("price", "");
-        d.price2     = j.value("price2", "");
-        d.leverage   = j.value("leverage", "");
-        d.order      = j.value("order", "");
-        d.close      = j.value("close", "");
+        d.pair     = j.value("pair", "");
+        d.price    = j.value("price", "");
+        d.price2   = j.value("price2", "");
+        d.leverage = j.value("leverage", "");
+        d.order    = j.value("order", "");
+        d.close    = j.value("close", "");
         if (j.contains("type"))      d.side       = side_from_string(j["type"].get<std::string>());
-        if (j.contains("ordertype")) d.order_type = order_type_from_string(j["ordertype"].get<std::string>());
+        if (j.contains("ordertype")) d.order_type = kraken_order_type_from_string(j["ordertype"].get<std::string>());
         return d;
     }
 };
 
-// ============================================================
-// Full order info – used by GetOpenOrders, GetClosedOrders, QueryOrdersInfo
-// ============================================================
+// ── Full order info ───────────────────────────────────────────────────────────
 
 struct OrderInfo {
-    std::string       txid;           // set by caller from map key
+    std::string       txid;
     OrderStatus       status{OrderStatus::Unknown};
     OrderDescription  descr;
     double            vol{0.0};
     double            vol_exec{0.0};
     double            cost{0.0};
     double            fee{0.0};
-    double            price{0.0};     // avg price
+    double            price{0.0};
     double            stopprice{0.0};
     double            limitprice{0.0};
     std::string       misc;
@@ -462,7 +382,7 @@ struct OrderInfo {
     std::optional<double>      starttm;
     std::optional<double>      expiretm;
     std::optional<std::string> reason;
-    std::optional<std::vector<std::string>> trades; // trade ids
+    std::optional<std::vector<std::string>> trades;
 
     static OrderInfo from_json(const json& j, const std::string& id = "") {
         OrderInfo o;
@@ -489,9 +409,7 @@ struct OrderInfo {
     }
 };
 
-// ============================================================
-// Trade info – used by GetTradesHistory, QueryTradesInfo
-// ============================================================
+// ── Trade info ────────────────────────────────────────────────────────────────
 
 struct TradeInfo {
     std::string txid;
@@ -516,18 +434,18 @@ struct TradeInfo {
 
     static TradeInfo from_json(const json& j, const std::string& id = "") {
         TradeInfo t;
-        t.txid     = id;
-        t.ordertxid= j.value("ordertxid", "");
-        t.pair     = j.value("pair", "");
-        t.time     = j.value("time", 0.0);
-        t.price    = std::stod(j.value("price", "0"));
-        t.cost     = std::stod(j.value("cost", "0"));
-        t.fee      = std::stod(j.value("fee", "0"));
-        t.vol      = std::stod(j.value("vol", "0"));
-        t.margin   = std::stod(j.value("margin", "0"));
-        t.misc     = j.value("misc", "");
+        t.txid      = id;
+        t.ordertxid = j.value("ordertxid", "");
+        t.pair      = j.value("pair", "");
+        t.time      = j.value("time", 0.0);
+        t.price     = std::stod(j.value("price", "0"));
+        t.cost      = std::stod(j.value("cost", "0"));
+        t.fee       = std::stod(j.value("fee", "0"));
+        t.vol       = std::stod(j.value("vol", "0"));
+        t.margin    = std::stod(j.value("margin", "0"));
+        t.misc      = j.value("misc", "");
         if (j.contains("type"))      t.type      = side_from_string(j["type"].get<std::string>());
-        if (j.contains("ordertype")) t.ordertype = order_type_from_string(j["ordertype"].get<std::string>());
+        if (j.contains("ordertype")) t.ordertype = kraken_order_type_from_string(j["ordertype"].get<std::string>());
         if (j.contains("posstatus")) t.posstatus = j["posstatus"].get<std::string>();
         if (j.contains("cprice"))    t.cprice    = std::stod(j["cprice"].get<std::string>());
         if (j.contains("ccost"))     t.ccost     = std::stod(j["ccost"].get<std::string>());
@@ -539,9 +457,7 @@ struct TradeInfo {
     }
 };
 
-// ============================================================
-// Ledger entry
-// ============================================================
+// ── Ledger entry ──────────────────────────────────────────────────────────────
 
 struct LedgerEntry {
     std::string txid;
@@ -571,9 +487,7 @@ struct LedgerEntry {
     }
 };
 
-// ============================================================
-// Generic REST envelope  { "error": [], "result": <T> }
-// ============================================================
+// ── Generic REST response envelope ───────────────────────────────────────────
 
 template<typename T>
 struct RestResponse {
@@ -602,4 +516,4 @@ RestResponse<T> parse_rest_response(const json& j) {
     return r;
 }
 
-} // namespace kraken
+} // namespace exchange::kraken

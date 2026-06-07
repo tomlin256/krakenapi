@@ -9,35 +9,19 @@
 
 #pragma once
 
-// kraken_rest_client.hpp — DEPRECATED: use exchange/kraken/rest_client.hpp instead.
-//
-// This header retains the legacy kraken::rest:: namespace for backward compatibility.
-// New code should include exchange/kraken/rest_client.hpp and use exchange::kraken::rest::.
-//
+// exchange/kraken/rest_client.hpp
 // Type-safe HTTP executor for the Kraken REST API.
 //
-// Accepts TypedPublicRequest<R> or TypedPrivateRequest<R> instances,
-// executes them via libcurl, parses the JSON response, and returns
-// a typed RestResponse<R>.
-//
-// Usage (public):
-//   KrakenRestClient client;
-//   auto resp = client.execute(GetServerTimeRequest{});
-//   if (resp.ok) std::cout << resp.result->unixtime;
-//
-// Usage (private):
-//   KrakenRestClient client;
-//   Credentials creds{api_key, api_secret};
-//   auto resp = client.execute(GetAccountBalanceRequest{}, creds);
+// Namespace: exchange::kraken::rest
 
-#include "kraken_rest_api.hpp"
+#include "exchange/kraken/rest_api.hpp"
 
 #include <curl/curl.h>
 #include <functional>
 #include <stdexcept>
 #include <type_traits>
 
-namespace kraken::rest {
+namespace exchange::kraken::rest {
 
 class KrakenRestClient {
 public:
@@ -51,21 +35,21 @@ public:
     // Execute a public request (no credentials required).
     template<typename Req,
              typename = std::enable_if_t<std::is_base_of_v<PublicRequest, Req>>>
-    kraken::RestResponse<typename Req::response_type>
+    exchange::kraken::RestResponse<typename Req::response_type>
     execute(const Req& req) {
         auto http = req.build();
         auto raw  = perform_(http);
-        return kraken::parse_rest_response<typename Req::response_type>(json::parse(raw));
+        return exchange::kraken::parse_rest_response<typename Req::response_type>(json::parse(raw));
     }
 
     // Execute a private request (credentials required).
     template<typename Req,
              typename = std::enable_if_t<std::is_base_of_v<PrivateRequest, Req>>>
-    kraken::RestResponse<typename Req::response_type>
+    exchange::kraken::RestResponse<typename Req::response_type>
     execute(const Req& req, const Credentials& creds) {
         auto http = req.build(creds);
         auto raw  = perform_(http);
-        return kraken::parse_rest_response<typename Req::response_type>(json::parse(raw));
+        return exchange::kraken::parse_rest_response<typename Req::response_type>(json::parse(raw));
     }
 
 private:
@@ -87,4 +71,4 @@ inline KrakenRestClient make_test_client(std::function<std::string(const HttpReq
     return KrakenRestClient(std::move(fn));
 }
 
-} // namespace kraken::rest
+} // namespace exchange::kraken::rest
