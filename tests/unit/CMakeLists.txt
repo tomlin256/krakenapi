@@ -39,6 +39,14 @@ target_link_libraries(test_tick_price krakenapi GTest::gtest_main)
 gtest_discover_tests(test_tick_price)
 
 #-------------------------------------------------------------------------------
+# OrderType to_string/from_string unit tests (generic vs. Kraken wire format)
+#-------------------------------------------------------------------------------
+
+add_executable(test_order_type test_order_type.cpp)
+target_link_libraries(test_order_type krakenapi GTest::gtest_main)
+gtest_discover_tests(test_order_type)
+
+#-------------------------------------------------------------------------------
 # WsReconnectSession unit tests (no network I/O)
 #-------------------------------------------------------------------------------
 

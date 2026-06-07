@@ -112,12 +112,14 @@ inline std::string kraken_order_type_to_string(OrderType v) {
     switch (v) {
         case OrderType::Limit:             return "limit";
         case OrderType::Market:            return "market";
+        case OrderType::Iceberg:           return "iceberg";
         case OrderType::StopLoss:          return "stop-loss";
         case OrderType::StopLossLimit:     return "stop-loss-limit";
         case OrderType::TakeProfit:        return "take-profit";
         case OrderType::TakeProfitLimit:   return "take-profit-limit";
         case OrderType::TrailingStop:      return "trailing-stop";
         case OrderType::TrailingStopLimit: return "trailing-stop-limit";
+        case OrderType::SettlePosition:    return "settle-position";
     }
     throw std::invalid_argument("Unknown OrderType");
 }
@@ -125,12 +127,14 @@ inline std::string kraken_order_type_to_string(OrderType v) {
 inline OrderType kraken_order_type_from_string(const std::string& s) {
     if (s == "limit")               return OrderType::Limit;
     if (s == "market")              return OrderType::Market;
+    if (s == "iceberg")             return OrderType::Iceberg;
     if (s == "stop-loss")           return OrderType::StopLoss;
     if (s == "stop-loss-limit")     return OrderType::StopLossLimit;
     if (s == "take-profit")         return OrderType::TakeProfit;
     if (s == "take-profit-limit")   return OrderType::TakeProfitLimit;
     if (s == "trailing-stop")       return OrderType::TrailingStop;
     if (s == "trailing-stop-limit") return OrderType::TrailingStopLimit;
+    if (s == "settle-position")     return OrderType::SettlePosition;
     throw std::invalid_argument("Unknown order_type: " + s);
 }
 

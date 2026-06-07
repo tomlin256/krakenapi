@@ -23,12 +23,14 @@ enum class Side { Buy, Sell };
 enum class OrderType {
     Limit,
     Market,
+    Iceberg,
     StopLoss,
     StopLossLimit,
     TakeProfit,
     TakeProfitLimit,
     TrailingStop,
-    TrailingStopLimit
+    TrailingStopLimit,
+    SettlePosition
 };
 
 enum class TimeInForce { GTC, GTD, IOC };
@@ -56,12 +58,14 @@ inline std::string to_string(OrderType v) {
     switch (v) {
         case OrderType::Limit:             return "limit";
         case OrderType::Market:            return "market";
+        case OrderType::Iceberg:           return "iceberg";
         case OrderType::StopLoss:          return "stop_loss";
         case OrderType::StopLossLimit:     return "stop_loss_limit";
         case OrderType::TakeProfit:        return "take_profit";
         case OrderType::TakeProfitLimit:   return "take_profit_limit";
         case OrderType::TrailingStop:      return "trailing_stop";
         case OrderType::TrailingStopLimit: return "trailing_stop_limit";
+        case OrderType::SettlePosition:    return "settle_position";
     }
     throw std::invalid_argument("Unknown OrderType");
 }
