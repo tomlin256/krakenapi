@@ -2,6 +2,20 @@
 
 **Goal**: Generalise the krakenapi request/response scaffold so that Kraken and Binance (and future exchanges) share a single set of client, connection, and response-envelope types. Only authentication schemes, endpoint paths, and message formats differ per exchange.
 
+---
+
+> **MANDATORY — Branch and commit discipline**
+>
+> All implementation work for this plan **must** be done on a dedicated feature branch. Do **not** commit implementation work directly to `main`.
+>
+> ```
+> git checkout -b feature/multi-exchange-abstraction
+> ```
+>
+> Commit at the completion of every step (and at meaningful sub-step checkpoints within longer steps). Each commit should leave the build and tests green. These commits are not just safety checkpoints — they are the source of reference diffs that will be used when writing the agent onboarding guide in Step 9. A sparse commit history makes that guide impossible to write well.
+
+---
+
 ## Companion documents
 
 This file is the architecture overview and step plan. Two companion docs hold the detail that the steps depend on:
@@ -704,11 +718,11 @@ Endpoints to implement:
 
 ### Step 9 — Write the agent onboarding guide for new exchanges
 
-**Prerequisite**: Step 8 complete — Binance is a working, tested reference implementation.
+**Prerequisite**: Step 8 complete — Binance is a working, tested reference implementation with a clean per-step commit history on the feature branch.
 
-**Done when**: `docs/agent-add-exchange.md` exists and is verified against the Binance adapter: every checklist item has a concrete Binance counterpart that can be pointed to as a working example.
+**Done when**: `docs/agent-add-exchange.md` exists and is verified against the Binance adapter: every checklist item has a concrete Binance counterpart that can be pointed to as a working example, and the reference diffs cited in the guide resolve to real commits on the feature branch.
 
-The guide is a self-contained playbook handed to a Claude agent at the start of a new exchange integration. It must require no prior context beyond what the user supplies and the existing Kraken and Binance adapters in the repo.
+The guide is a self-contained playbook handed to a Claude agent at the start of a new exchange integration. It must require no prior context beyond what the user supplies and the existing Kraken and Binance adapters in the repo. Where the guide says "follow this pattern", it cites a specific file path and, where the change is non-obvious, a commit hash from the feature branch that introduced it.
 
 #### Structure of `docs/agent-add-exchange.md`
 
