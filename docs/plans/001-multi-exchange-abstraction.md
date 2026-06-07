@@ -702,6 +702,71 @@ Endpoints to implement:
 - Update `CLAUDE.md` to reflect new namespace layout, file structure, and patterns.
 - Update `README.md` and link the migration guide ([001-appendix-migration-guide.md](001-appendix-migration-guide.md)) from the release notes so existing callers find it. Confirm the `exchange::kraken::*` re-exports from Step 2 are present so the guide's compatibility shim actually compiles.
 
+### Step 9 — Write the agent onboarding guide for new exchanges
+
+**Prerequisite**: Step 8 complete — Binance is a working, tested reference implementation.
+
+**Done when**: `docs/agent-add-exchange.md` exists and is verified against the Binance adapter: every checklist item has a concrete Binance counterpart that can be pointed to as a working example.
+
+The guide is a self-contained playbook handed to a Claude agent at the start of a new exchange integration. It must require no prior context beyond what the user supplies and the existing Kraken and Binance adapters in the repo.
+
+#### Structure of `docs/agent-add-exchange.md`
+
+**1 — Inputs to collect from the user before starting**
+
+The agent must ask for all of the following before writing any code:
+
+| Input | What to ask for |
+|---|---|
+| Exchange name + namespace slug | e.g. `coinbase` → `exchange::coinbase::` and `src/coinbase/` |
+| Auth documentation | Signing algorithm (HMAC / RSA / Ed25519), header names, nonce or timestamp scheme, exact signing payload format (what string is signed and how) |
+| REST base URL | e.g. `https://api.exchange.com` |
+| REST endpoint list | At least one public and one private endpoint, each with a sample request and the raw JSON response |
+| WebSocket URL(s) | One or both of: market-data stream URL, trading API URL |
+| WebSocket connection model | Single stream vs. combined streams; subscribe/unsubscribe wire format; correlation field name (`id`, `req_id`, etc.) |
+| WebSocket channel list | Each channel with at least one captured push frame (the raw JSON as the server sends it) |
+| Any exchange quirks | Non-standard error shapes, mandatory keepalives, reconnect requirements, per-request vs. session auth |
+
+**2 — Implementation checklist**
+
+Each item lists the files to create and the Binance file to use as the reference pattern.
+
+| # | What to implement | Files | Binance reference |
+|---|---|---|---|
+| 1 | Auth | `include/exchange/<name>/auth.hpp`, `src/<name>/auth.cpp` (if non-trivial) | `exchange/binance/auth.hpp`, `src/binance/rest_client.cpp` |
+| 2 | Exchange-specific types | `include/exchange/<name>/types.hpp` | `exchange/binance/types.hpp` |
+| 3 | REST request/response structs | `include/exchange/<name>/rest_api.hpp` | `exchange/binance/rest_api.hpp` |
+| 4 | REST client | `include/exchange/<name>/rest_client.hpp`, `src/<name>/rest_client.cpp` | `exchange/binance/rest_client.hpp`, `src/binance/rest_client.cpp` |
+| 5 | REST fixture header + unit tests | `tests/unit/<name>_rest_example_json.hpp`, `test_<name>_auth.cpp`, `test_<name>_rest_requests.cpp`, `test_<name>_rest_responses.cpp` | `binance_rest_example_json.hpp`, `test_binance_auth.cpp`, `test_binance_rest_*.cpp` |
+| 6 | WS request/response structs + `identify_message` | `include/exchange/<name>/ws_api.hpp` (and `ws_streams.hpp` if the exchange has separate stream and trading WS protocols) | `exchange/binance/ws_api.hpp`, `exchange/binance/ws_streams.hpp` |
+| 7 | WS client header + factory | `include/exchange/<name>/ws_client.hpp` | `exchange/binance/ws_client.hpp` |
+| 8 | WS source | `src/<name>/ws_client.cpp` (non-template methods, if any) | `src/binance/ws_client.cpp` |
+| 9 | WS fixture header + unit tests | `tests/unit/<name>_ws_example_json.hpp`, `test_<name>_ws_client.cpp` | `binance_ws_stream_example_json.hpp`, `test_binance_ws_client.cpp` |
+| 10 | CMake wiring | `KRAKENAPI_BUILD_<NAME>` option in `CMakeLists.txt`; library target in `src/CMakeLists.txt`; test and example targets in `tests/CMakeLists.txt` — following the §F pattern | Binance blocks in each `CMakeLists.txt` |
+| 11 | REST CLI example | `tests/examples/<name>/rest_client_example.cpp` | `tests/examples/binance/binance_rest_client_example.cpp` |
+| 12 | WS CLI example | `tests/examples/<name>/ws_client_example.cpp` | `tests/examples/binance/binance_ws_client_example.cpp` |
+
+**3 — Conventions to enforce**
+
+The guide must remind the agent of the project-wide rules that apply to every new adapter (not obvious from context alone):
+
+- File banner on every `.hpp`, `.inl`, `.cpp` (year, project name, MIT licence block — see `CLAUDE.md`).
+- `KRAKENAPI_BUILD_<NAME>` option defaults to `ON`; add the compat-shim dependency rule if applicable.
+- Numbers from REST responses arrive as JSON strings — use `std::stod(j.value("field", "0"))`, not `.get<double>()`.
+- All optional fields are `std::optional<T>`; omitted fields must not be serialised in `to_json()`.
+- Unit tests use `MockWsConnection` for all WS tests — no network access.
+- Both CLI examples must compile when the exchange flag is `ON` and be absent from the build when it is `OFF`.
+- `ctest --output-on-failure` must be green before declaring any checklist item done.
+
+**4 — Done criteria**
+
+The agent declares the integration complete only when:
+
+1. `cmake -B build && cmake --build build` succeeds from a clean directory with all exchange flags `ON`.
+2. `ctest --output-on-failure` passes every test, including the new exchange's auth, REST, and WS suites.
+3. Both CLI examples (`rest_client_example`, `ws_client_example`) run against the live exchange and produce parsed output (no credentials needed for public endpoints).
+4. `cmake -B build -DKRAKENAPI_BUILD_<NAME>=OFF && cmake --build build` succeeds with no trace of the new exchange's targets.
+
 ---
 
 ## Self-Review — Risks, Assumptions, and Open Questions
