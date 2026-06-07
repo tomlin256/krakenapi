@@ -7,3 +7,4 @@
 | 001 | ↳ [Appendix: Testing strategy](plans/001-appendix-testing-strategy.md) | Reference |
 | 001 | ↳ [Appendix: Migration guide for existing krakenapi users](plans/001-appendix-migration-guide.md) | Reference |
 | 001 | ↳ [Appendix: Shipped backwards-compatibility shim](plans/001-appendix-compat-shim.md) | Reference |
+| 002 | [Step 2b — Ship the Kraken backwards-compatibility shim](plans/002-step-2b-compat-shim.md) | Draft |
