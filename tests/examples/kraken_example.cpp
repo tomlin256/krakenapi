@@ -10,9 +10,9 @@
 // Demonstrates REST and WebSocket API usage.
 // Both layers share types from kraken_types.hpp.
 
-#include "kraken_types.hpp"
-#include "kraken_rest_api.hpp"
-#include "kraken_ws_api.hpp"
+#include "exchange/kraken/types.hpp"
+#include "exchange/kraken/rest_api.hpp"
+#include "exchange/kraken/ws_api.hpp"
 
 #include <CLI/CLI.hpp>
 #include <nlohmann/json.hpp>
@@ -24,7 +24,7 @@ using json = nlohmann::json;
 // ============================================================
 // Hypothetical HTTP send helper (provide your own, e.g. libcurl)
 // ============================================================
-std::string http_send(const kraken::rest::HttpRequest& req) {
+std::string http_send(const exchange::kraken::rest::HttpRequest& req) {
     // transport implementation not shown
     (void)req;
     return R"({"error":[],"result":{}})";
@@ -33,7 +33,7 @@ std::string http_send(const kraken::rest::HttpRequest& req) {
 // ============================================================
 // Hypothetical WebSocket send helper
 // ============================================================
-void ws_send(const json& msg, kraken::ws::WsCredentials& creds) {
+void ws_send(const json& msg, exchange::kraken::ws::WsCredentials& creds) {
     std::cout << "[WS SEND] " << msg << "\n";
 }
 
@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
     CLI::App app{"Kraken API usage demonstration — REST and WebSocket"};
     CLI11_PARSE(app, argc, argv);
 
-    using namespace kraken;
+    using namespace exchange::kraken;
 
     // --------------------------------------------------------
     // Credentials

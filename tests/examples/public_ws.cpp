@@ -24,7 +24,7 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
-#include "kraken_ws_api.hpp"
+#include "exchange/kraken/ws_api.hpp"
 
 #include <optional>
 #include <string>
@@ -41,20 +41,20 @@ static void handle_message(const json& j, bool dump_json)
     if (dump_json)
         spdlog::info("[raw] {}", j.dump());
 
-    switch (kraken::ws::identify_message(j))
+    switch (exchange::kraken::ws::identify_message(j))
     {
-        case kraken::ws::MessageKind::SubscribeResponse:
+        case exchange::kraken::ws::MessageKind::SubscribeResponse:
         {
-            auto r = kraken::ws::SubscribeResponse::from_json(j);
+            auto r = exchange::kraken::ws::SubscribeResponse::from_json(j);
             if (r.success)
                 spdlog::info("[subscribe] channel={} OK", r.channel.value_or("?"));
             else
                 spdlog::error("[subscribe] FAILED: {}", r.error.value_or("unknown"));
             break;
         }
-        case kraken::ws::MessageKind::Ticker:
+        case exchange::kraken::ws::MessageKind::Ticker:
         {
-            auto m = kraken::ws::TickerMessage::from_json(j);
+            auto m = exchange::kraken::ws::TickerMessage::from_json(j);
             for (const auto& d : m.data)
                 spdlog::info("[ticker/{}] {} bid={:.4f} ask={:.4f} last={:.4f} "
                              "vol={:.4f} chg={:+.2f}%",
@@ -62,9 +62,9 @@ static void handle_message(const json& j, bool dump_json)
                              d.volume, d.change_pct);
             break;
         }
-        case kraken::ws::MessageKind::Book:
+        case exchange::kraken::ws::MessageKind::Book:
         {
-            auto m = kraken::ws::BookMessage::from_json(j);
+            auto m = exchange::kraken::ws::BookMessage::from_json(j);
             for (const auto& d : m.data)
             {
                 spdlog::info("[book/{}] {} bids={} asks={}",
@@ -83,9 +83,9 @@ static void handle_message(const json& j, bool dump_json)
             }
             break;
         }
-        case kraken::ws::MessageKind::Trade:
+        case exchange::kraken::ws::MessageKind::Trade:
         {
-            auto m = kraken::ws::TradeMessage::from_json(j);
+            auto m = exchange::kraken::ws::TradeMessage::from_json(j);
             for (const auto& d : m.data)
                 spdlog::info("[trade/{}] {} price={:.4f} qty={:.6f} side={} "
                              "type={} id={}",
@@ -93,9 +93,9 @@ static void handle_message(const json& j, bool dump_json)
                              d.side, d.ord_type, d.trade_id);
             break;
         }
-        case kraken::ws::MessageKind::OHLC:
+        case exchange::kraken::ws::MessageKind::OHLC:
         {
-            auto m = kraken::ws::OHLCMessage::from_json(j);
+            auto m = exchange::kraken::ws::OHLCMessage::from_json(j);
             for (const auto& d : m.data)
                 spdlog::info("[ohlc/{}] {} ts={} O={:.4f} H={:.4f} L={:.4f} "
                              "C={:.4f} vol={:.4f} trades={}",
@@ -104,9 +104,9 @@ static void handle_message(const json& j, bool dump_json)
                              d.volume, d.trades);
             break;
         }
-        case kraken::ws::MessageKind::Instrument:
+        case exchange::kraken::ws::MessageKind::Instrument:
         {
-            auto m = kraken::ws::InstrumentMessage::from_json(j);
+            auto m = exchange::kraken::ws::InstrumentMessage::from_json(j);
             spdlog::info("[instrument/{}] {} asset(s), {} pair(s)",
                          m.type, m.assets.size(), m.pairs.size());
             std::size_t n = std::min<std::size_t>(5, m.pairs.size());
@@ -122,14 +122,14 @@ static void handle_message(const json& j, bool dump_json)
                 spdlog::info("  … and {} more pairs", m.pairs.size() - n);
             break;
         }
-        case kraken::ws::MessageKind::Status:
+        case exchange::kraken::ws::MessageKind::Status:
         {
-            auto m = kraken::ws::StatusMessage::from_json(j);
+            auto m = exchange::kraken::ws::StatusMessage::from_json(j);
             spdlog::info("[status/{}] system={} version={}",
                          m.type, m.system, m.version);
             break;
         }
-        case kraken::ws::MessageKind::Heartbeat:
+        case exchange::kraken::ws::MessageKind::Heartbeat:
             spdlog::debug("[heartbeat]");
             break;
         default:
@@ -192,24 +192,24 @@ int main(int argc, char* argv[])
 
     // ── Build subscribe request ───────────────────────────────────────────────
 
-    kraken::ws::SubscribeRequest sub_req;
+    exchange::kraken::ws::SubscribeRequest sub_req;
 
     if (ticker_cmd->parsed()) {
-        sub_req.channel = kraken::ws::SubscribeChannel::Ticker;
+        sub_req.channel = exchange::kraken::ws::SubscribeChannel::Ticker;
         sub_req.symbols = std::vector<std::string>{ticker_symbol};
     } else if (book_cmd->parsed()) {
-        sub_req.channel = kraken::ws::SubscribeChannel::Book;
+        sub_req.channel = exchange::kraken::ws::SubscribeChannel::Book;
         sub_req.symbols = std::vector<std::string>{book_symbol};
         if (book_depth) sub_req.depth = *book_depth;
     } else if (trade_cmd->parsed()) {
-        sub_req.channel = kraken::ws::SubscribeChannel::Trade;
+        sub_req.channel = exchange::kraken::ws::SubscribeChannel::Trade;
         sub_req.symbols = std::vector<std::string>{trade_symbol};
     } else if (ohlc_cmd->parsed()) {
-        sub_req.channel = kraken::ws::SubscribeChannel::OHLC;
+        sub_req.channel = exchange::kraken::ws::SubscribeChannel::OHLC;
         sub_req.symbols = std::vector<std::string>{ohlc_symbol};
         if (ohlc_interval) sub_req.interval = *ohlc_interval;
     } else {
-        sub_req.channel = kraken::ws::SubscribeChannel::Instrument;
+        sub_req.channel = exchange::kraken::ws::SubscribeChannel::Instrument;
     }
 
     const std::string sub_json = sub_req.to_json().dump();

@@ -12,9 +12,9 @@
 #include <CLI/CLI.hpp>
 #include <spdlog/spdlog.h>
 
-#include "kraken_rest_client.hpp"
+#include "exchange/kraken/rest_client.hpp"
 
-using namespace kraken::rest;
+using namespace exchange::kraken::rest;
 
 int main(int argc, char* argv[])
 {
@@ -41,7 +41,7 @@ int main(int argc, char* argv[])
             spdlog::info("trades ({}):", resp.result->trades.size());
             for (const auto& t : resp.result->trades)
                 spdlog::info("  price={} volume={} side={}", t.price, t.volume,
-                             t.side == kraken::Side::Buy ? "buy" : "sell");
+                             t.side == exchange::Side::Buy ? "buy" : "sell");
         } else {
             for (const auto& e : resp.errors)
                 spdlog::error("Error: {}", e);

@@ -7,8 +7,8 @@
 // full license information.
 // =============================================================================
 
-#include "kraken_rest_client.hpp"
-#include "kraken_ws_api.hpp"
+#include "exchange/kraken/rest_client.hpp"
+#include "exchange/kraken/ws_api.hpp"
 
 #include <ixwebsocket/IXWebSocket.h>
 #include <CLI/CLI.hpp>
@@ -16,7 +16,7 @@
 
 #include <stdexcept>
 
-using namespace kraken::rest;
+using namespace exchange::kraken::rest;
 
 int main(int argc, char* argv[])
 {
@@ -54,9 +54,9 @@ int main(int argc, char* argv[])
          {
             spdlog::info("ws opened");
 
-            kraken::ws::SubscribeRequest req;
+            exchange::kraken::ws::SubscribeRequest req;
             req.req_id = 10;
-            req.channel = kraken::ws::SubscribeChannel::Balances;
+            req.channel = exchange::kraken::ws::SubscribeChannel::Balances;
             req.token   = token;
             webSocket.send(req.to_json().dump());
          }
@@ -71,20 +71,20 @@ int main(int argc, char* argv[])
          else if (msg->type == ix::WebSocketMessageType::Message)
          {
             auto j = nlohmann::json::parse(msg->str);
-            switch (kraken::ws::identify_message(j))
+            switch (exchange::kraken::ws::identify_message(j))
             {
-               case kraken::ws::MessageKind::SubscribeResponse:
+               case exchange::kraken::ws::MessageKind::SubscribeResponse:
                {
-                  auto r = kraken::ws::SubscribeResponse::from_json(j);
+                  auto r = exchange::kraken::ws::SubscribeResponse::from_json(j);
                   spdlog::info("subscribe {}({}): {}",
                      r.method,
                      r.req_id.value_or(-1),
                      r.success ? "success" : "failure");
                   break;
                }
-               case kraken::ws::MessageKind::Balances:
+               case exchange::kraken::ws::MessageKind::Balances:
                {
-                  auto bals = kraken::ws::BalancesMessage::from_json(j);
+                  auto bals = exchange::kraken::ws::BalancesMessage::from_json(j);
                   for (const auto& b : bals.data)
                      spdlog::info("Balance {}: {:.8f} (hold: {:.8f})", b.asset, b.balance, b.hold_trade);
                   break;
