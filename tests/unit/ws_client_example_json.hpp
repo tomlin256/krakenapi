@@ -17,7 +17,7 @@
 
 #pragma once
 
-namespace kraken::ws::test {
+namespace exchange::kraken::ws::test {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin — Status / Heartbeat
@@ -104,4 +104,4 @@ inline constexpr const char* kBatchCancelResponseJson = R"({"method":"batch_canc
 
 inline constexpr const char* kEditOrderResponseJson = R"({"method":"edit_order","req_id":9,"result":{"cl_ord_id":"edit-1","order_id":"ORDER-002","original_order_id":"ORDER-001"},"success":true,"time_in":"2026-03-15T12:00:00.000Z","time_out":"2026-03-15T12:00:00.001Z"})";
 
-} // namespace kraken::ws::test
+} // namespace exchange::kraken::ws::test

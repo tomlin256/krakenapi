@@ -7,12 +7,12 @@
 // full license information.
 // =============================================================================
 
-#include "kraken_rest_api.hpp"
+#include "exchange/kraken/rest_api.hpp"
 
 #include <gtest/gtest.h>
 #include <string>
 
-using namespace kraken::rest;
+using namespace exchange::kraken::rest;
 
 // ---------------------------------------------------------------------------
 // Public requests — verify path, method, and query parameters.
@@ -143,11 +143,11 @@ TEST(PrivateRequests, GetClosedOrders_Path) {
 
 TEST(PrivateRequests, AddOrder_Path) {
     AddOrderRequest req;
-    req.params.order_type = kraken::OrderType::Limit;
-    req.params.side       = kraken::Side::Buy;
+    req.params.order_type = exchange::OrderType::Limit;
+    req.params.side       = exchange::Side::Buy;
     req.params.symbol     = "XBTUSD";
     req.params.order_qty  = 0.001;
-    req.params.limit_price = kraken::TickPrice::from(30000.0, 4);
+    req.params.limit_price = exchange::kraken::TickPrice::from(30000.0, 4);
     auto http = req.build(make_dummy_creds());
     EXPECT_EQ(http.path, "/0/private/AddOrder");
     EXPECT_EQ(http.method, HttpRequest::Method::POST);

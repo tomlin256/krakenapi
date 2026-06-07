@@ -7,8 +7,8 @@
 // full license information.
 // =============================================================================
 
-#include "kraken_types.hpp"
-#include "kraken_ws_api.hpp"
+#include "exchange/kraken/types.hpp"
+#include "exchange/kraken/ws_api.hpp"
 
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
@@ -20,36 +20,36 @@ using json = nlohmann::json;
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(TickPriceStr, StandardCase) {
-    EXPECT_EQ(kraken::TickPrice::from(309.6217, 4).str(), "309.6217");
+    EXPECT_EQ(exchange::kraken::TickPrice::from(309.6217, 4).str(), "309.6217");
 }
 
 TEST(TickPriceStr, FpNoiseBugRepro) {
     // The bug: 3096217 * 0.0001 in double arithmetic is ~309.621699999...
     // TickPrice must snap this to "309.6217", not "309.621699...".
     const double noisy = 3096217 * 0.0001;
-    EXPECT_EQ(kraken::TickPrice::from(noisy, 4).str(), "309.6217");
+    EXPECT_EQ(exchange::kraken::TickPrice::from(noisy, 4).str(), "309.6217");
 }
 
 TEST(TickPriceStr, TrailingZeroPreserved) {
-    EXPECT_EQ(kraken::TickPrice::from(100.0, 4).str(), "100.0000");
+    EXPECT_EQ(exchange::kraken::TickPrice::from(100.0, 4).str(), "100.0000");
 }
 
 TEST(TickPriceStr, OnDecimalPlace) {
-    EXPECT_EQ(kraken::TickPrice::from(1.5, 1).str(), "1.5");
+    EXPECT_EQ(exchange::kraken::TickPrice::from(1.5, 1).str(), "1.5");
 }
 
 TEST(TickPriceStr, ZeroDecimals) {
-    EXPECT_EQ(kraken::TickPrice::from(42.0, 0).str(), "42");
+    EXPECT_EQ(exchange::kraken::TickPrice::from(42.0, 0).str(), "42");
 }
 
 TEST(TickPriceStr, FinestTickSize) {
     // AKE/USD or similar 8-decimal pair
-    EXPECT_EQ(kraken::TickPrice::from(0.00000001, 8).str(), "0.00000001");
+    EXPECT_EQ(exchange::kraken::TickPrice::from(0.00000001, 8).str(), "0.00000001");
 }
 
 TEST(TickPriceStr, SubTickRounding) {
     // 309.62173 snaps to nearest tick at 4 decimals = 309.6217
-    EXPECT_EQ(kraken::TickPrice::from(309.62173, 4).str(), "309.6217");
+    EXPECT_EQ(exchange::kraken::TickPrice::from(309.62173, 4).str(), "309.6217");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -57,20 +57,20 @@ TEST(TickPriceStr, SubTickRounding) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(TickPriceToJson, EmitsJsonNumber) {
-    const auto tp = kraken::TickPrice::from(309.6217, 4);
+    const auto tp = exchange::kraken::TickPrice::from(309.6217, 4);
     const json j = tp.to_json();
     EXPECT_TRUE(j.is_number());
     EXPECT_EQ(j.dump(), "309.6217");
 }
 
 TEST(TickPriceToJson, AddOrderRequestLimitPriceIsNumber) {
-    kraken::ws::AddOrderRequest req;
-    req.order_type  = kraken::OrderType::Limit;
-    req.side        = kraken::Side::Buy;
+    exchange::kraken::ws::AddOrderRequest req;
+    req.order_type  = exchange::OrderType::Limit;
+    req.side        = exchange::Side::Buy;
     req.order_qty   = 0.001;
     req.symbol      = "TAO/USD";
     req.token       = "tok";
-    req.limit_price = kraken::TickPrice::from(3096217 * 0.0001, 4);
+    req.limit_price = exchange::kraken::TickPrice::from(3096217 * 0.0001, 4);
 
     const json j = req.to_json();
     const auto lp = j["params"]["limit_price"];
@@ -84,8 +84,8 @@ TEST(TickPriceToJson, AddOrderRequestLimitPriceIsNumber) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(TickPriceFromJson, RoundTrip) {
-    const auto original = kraken::TickPrice::from(309.6217, 4);
-    const auto restored = kraken::TickPrice::from_json(original.to_json());
+    const auto original = exchange::kraken::TickPrice::from(309.6217, 4);
+    const auto restored = exchange::kraken::TickPrice::from_json(original.to_json());
     EXPECT_EQ(restored.ticks,    3096217);
     EXPECT_EQ(restored.decimals, 4);
 }
@@ -93,7 +93,7 @@ TEST(TickPriceFromJson, RoundTrip) {
 TEST(TickPriceFromJson, FromJsonNumber) {
     // from_json should also handle a numeric JSON value
     const json num = 309.6217;
-    const auto tp = kraken::TickPrice::from_json(num);
+    const auto tp = exchange::kraken::TickPrice::from_json(num);
     // The decimal count inferred from the number's string form may vary, but
     // str() must round-trip through the same number of decimal digits.
     EXPECT_FALSE(tp.str().empty());

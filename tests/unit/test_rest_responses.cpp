@@ -7,14 +7,14 @@
 // full license information.
 // =============================================================================
 
-#include "kraken_rest_api.hpp"
-#include "kraken_types.hpp"
+#include "exchange/kraken/rest_api.hpp"
+#include "exchange/kraken/types.hpp"
 
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 #include <string>
 
-using namespace kraken::rest;
+using namespace exchange::kraken::rest;
 using json = nlohmann::json;
 
 // ---------------------------------------------------------------------------
@@ -23,7 +23,7 @@ using json = nlohmann::json;
 
 TEST(RestEnvelope, OkResponseSetsOkTrue) {
     auto j = json::parse(R"({"error":[],"result":{"unixtime":1700000000,"rfc1123":"Mon, 14 Nov 2023 00:00:00 +0000"}})");
-    auto resp = kraken::parse_rest_response<ServerTime>(j);
+    auto resp = exchange::kraken::parse_rest_response<ServerTime>(j);
     EXPECT_TRUE(resp.ok);
     EXPECT_TRUE(resp.errors.empty());
     ASSERT_TRUE(resp.result.has_value());
@@ -32,7 +32,7 @@ TEST(RestEnvelope, OkResponseSetsOkTrue) {
 
 TEST(RestEnvelope, ErrorResponseSetsOkFalse) {
     auto j = json::parse(R"({"error":["EGeneral:Invalid arguments"],"result":{}})");
-    auto resp = kraken::parse_rest_response<ServerTime>(j);
+    auto resp = exchange::kraken::parse_rest_response<ServerTime>(j);
     EXPECT_FALSE(resp.ok);
     ASSERT_EQ(resp.errors.size(), 1u);
     EXPECT_EQ(resp.errors[0], "EGeneral:Invalid arguments");
@@ -41,7 +41,7 @@ TEST(RestEnvelope, ErrorResponseSetsOkFalse) {
 
 TEST(RestEnvelope, MultipleErrorsCollected) {
     auto j = json::parse(R"({"error":["EOrder:Insufficient funds","EOrder:Invalid price"]})");
-    auto resp = kraken::parse_rest_response<ServerTime>(j);
+    auto resp = exchange::kraken::parse_rest_response<ServerTime>(j);
     EXPECT_FALSE(resp.ok);
     EXPECT_EQ(resp.errors.size(), 2u);
 }
@@ -190,27 +190,27 @@ TEST(CancelOrderResult, ParsesCount) {
 
 TEST(FeePreferenceParsing, Base) {
     auto j = json::parse(R"({"fee_preference":"base"})");
-    auto p = kraken::OrderParams::from_json(j);
+    auto p = exchange::kraken::OrderParams::from_json(j);
     ASSERT_TRUE(p.fee_preference.has_value());
-    EXPECT_EQ(*p.fee_preference, kraken::FeePreference::Base);
+    EXPECT_EQ(*p.fee_preference, exchange::kraken::FeePreference::Base);
 }
 
 TEST(FeePreferenceParsing, Quote) {
     auto j = json::parse(R"({"fee_preference":"quote"})");
-    auto p = kraken::OrderParams::from_json(j);
+    auto p = exchange::kraken::OrderParams::from_json(j);
     ASSERT_TRUE(p.fee_preference.has_value());
-    EXPECT_EQ(*p.fee_preference, kraken::FeePreference::Quote);
+    EXPECT_EQ(*p.fee_preference, exchange::kraken::FeePreference::Quote);
 }
 
 TEST(FeePreferenceParsing, AbsentFieldLeavesOptionalEmpty) {
     auto j = json::parse(R"({})");
-    auto p = kraken::OrderParams::from_json(j);
+    auto p = exchange::kraken::OrderParams::from_json(j);
     EXPECT_FALSE(p.fee_preference.has_value());
 }
 
 TEST(FeePreferenceParsing, InvalidValueThrows) {
     auto j = json::parse(R"({"fee_preference":"bogus"})");
-    EXPECT_THROW(kraken::OrderParams::from_json(j), std::invalid_argument);
+    EXPECT_THROW(exchange::kraken::OrderParams::from_json(j), std::invalid_argument);
 }
 
 // ---------------------------------------------------------------------------
@@ -219,32 +219,32 @@ TEST(FeePreferenceParsing, InvalidValueThrows) {
 
 TEST(StpTypeParsing, CancelNewest) {
     auto j = json::parse(R"({"order_type":"limit","side":"buy","symbol":"BTC/USD","stp_type":"cancel_newest"})");
-    auto p = kraken::OrderParams::from_json(j);
+    auto p = exchange::kraken::OrderParams::from_json(j);
     ASSERT_TRUE(p.stp_type.has_value());
-    EXPECT_EQ(*p.stp_type, kraken::StpType::CancelNewest);
+    EXPECT_EQ(*p.stp_type, exchange::kraken::StpType::CancelNewest);
 }
 
 TEST(StpTypeParsing, CancelOldest) {
     auto j = json::parse(R"({"order_type":"limit","side":"buy","symbol":"BTC/USD","stp_type":"cancel_oldest"})");
-    auto p = kraken::OrderParams::from_json(j);
+    auto p = exchange::kraken::OrderParams::from_json(j);
     ASSERT_TRUE(p.stp_type.has_value());
-    EXPECT_EQ(*p.stp_type, kraken::StpType::CancelOldest);
+    EXPECT_EQ(*p.stp_type, exchange::kraken::StpType::CancelOldest);
 }
 
 TEST(StpTypeParsing, CancelBoth) {
     auto j = json::parse(R"({"order_type":"limit","side":"buy","symbol":"BTC/USD","stp_type":"cancel_both"})");
-    auto p = kraken::OrderParams::from_json(j);
+    auto p = exchange::kraken::OrderParams::from_json(j);
     ASSERT_TRUE(p.stp_type.has_value());
-    EXPECT_EQ(*p.stp_type, kraken::StpType::CancelBoth);
+    EXPECT_EQ(*p.stp_type, exchange::kraken::StpType::CancelBoth);
 }
 
 TEST(StpTypeParsing, AbsentFieldLeavesOptionalEmpty) {
     auto j = json::parse(R"({"order_type":"limit","side":"buy","symbol":"BTC/USD"})");
-    auto p = kraken::OrderParams::from_json(j);
+    auto p = exchange::kraken::OrderParams::from_json(j);
     EXPECT_FALSE(p.stp_type.has_value());
 }
 
 TEST(StpTypeParsing, InvalidValueThrows) {
     auto j = json::parse(R"({"order_type":"limit","side":"buy","symbol":"BTC/USD","stp_type":"bogus"})");
-    EXPECT_THROW(kraken::OrderParams::from_json(j), std::invalid_argument);
+    EXPECT_THROW(exchange::kraken::OrderParams::from_json(j), std::invalid_argument);
 }

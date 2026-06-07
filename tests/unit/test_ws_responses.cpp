@@ -12,112 +12,112 @@
 // and verifies the resulting struct fields.  This ensures that from_json()
 // implementations stay in sync with the actual wire format.
 
-#include "kraken_ws_api.hpp"
+#include "exchange/kraken/ws_api.hpp"
 #include "ws_client_example_json.hpp"
 
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
-using namespace kraken::ws::test;
+using namespace exchange::kraken::ws::test;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // identify_message — one test per MessageKind covered by the sample constants
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(IdentifyMessage, Ticker) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kTickerSnapshotJson)),
-              kraken::ws::MessageKind::Ticker);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kTickerSnapshotJson)),
+              exchange::kraken::ws::MessageKind::Ticker);
 }
 
 TEST(IdentifyMessage, Book) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kBookSnapshotJson)),
-              kraken::ws::MessageKind::Book);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kBookSnapshotJson)),
+              exchange::kraken::ws::MessageKind::Book);
 }
 
 TEST(IdentifyMessage, Trade) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kTradeUpdateJson)),
-              kraken::ws::MessageKind::Trade);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kTradeUpdateJson)),
+              exchange::kraken::ws::MessageKind::Trade);
 }
 
 TEST(IdentifyMessage, OHLC) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kOhlcUpdateJson)),
-              kraken::ws::MessageKind::OHLC);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kOhlcUpdateJson)),
+              exchange::kraken::ws::MessageKind::OHLC);
 }
 
 TEST(IdentifyMessage, Instrument) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kInstrumentSnapshotJson)),
-              kraken::ws::MessageKind::Instrument);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kInstrumentSnapshotJson)),
+              exchange::kraken::ws::MessageKind::Instrument);
 }
 
 TEST(IdentifyMessage, Status) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kStatusUpdateJson)),
-              kraken::ws::MessageKind::Status);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kStatusUpdateJson)),
+              exchange::kraken::ws::MessageKind::Status);
 }
 
 TEST(IdentifyMessage, Heartbeat) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kHeartbeatJson)),
-              kraken::ws::MessageKind::Heartbeat);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kHeartbeatJson)),
+              exchange::kraken::ws::MessageKind::Heartbeat);
 }
 
 TEST(IdentifyMessage, Executions) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kExecutionsSnapshotJson)),
-              kraken::ws::MessageKind::Executions);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kExecutionsSnapshotJson)),
+              exchange::kraken::ws::MessageKind::Executions);
 }
 
 TEST(IdentifyMessage, Balances) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kBalancesSnapshotJson)),
-              kraken::ws::MessageKind::Balances);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kBalancesSnapshotJson)),
+              exchange::kraken::ws::MessageKind::Balances);
 }
 
 TEST(IdentifyMessage, Pong) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kPongJson)),
-              kraken::ws::MessageKind::Pong);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kPongJson)),
+              exchange::kraken::ws::MessageKind::Pong);
 }
 
 TEST(IdentifyMessage, SubscribeResponse) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kSubscribeResponseJson)),
-              kraken::ws::MessageKind::SubscribeResponse);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kSubscribeResponseJson)),
+              exchange::kraken::ws::MessageKind::SubscribeResponse);
 }
 
 TEST(IdentifyMessage, AddOrderResponse) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kAddOrderResponseJson)),
-              kraken::ws::MessageKind::AddOrderResponse);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kAddOrderResponseJson)),
+              exchange::kraken::ws::MessageKind::AddOrderResponse);
 }
 
 TEST(IdentifyMessage, AmendOrderResponse) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kAmendOrderResponseJson)),
-              kraken::ws::MessageKind::AmendOrderResponse);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kAmendOrderResponseJson)),
+              exchange::kraken::ws::MessageKind::AmendOrderResponse);
 }
 
 TEST(IdentifyMessage, CancelOrderResponse) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kCancelOrderResponseJson)),
-              kraken::ws::MessageKind::CancelOrderResponse);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kCancelOrderResponseJson)),
+              exchange::kraken::ws::MessageKind::CancelOrderResponse);
 }
 
 TEST(IdentifyMessage, CancelAllResponse) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kCancelAllResponseJson)),
-              kraken::ws::MessageKind::CancelAllResponse);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kCancelAllResponseJson)),
+              exchange::kraken::ws::MessageKind::CancelAllResponse);
 }
 
 TEST(IdentifyMessage, CancelOnDisconnectResponse) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kCancelOnDisconnectResponseJson)),
-              kraken::ws::MessageKind::CancelOnDisconnectResponse);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kCancelOnDisconnectResponseJson)),
+              exchange::kraken::ws::MessageKind::CancelOnDisconnectResponse);
 }
 
 TEST(IdentifyMessage, BatchAddResponse) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kBatchAddResponseJson)),
-              kraken::ws::MessageKind::BatchAddResponse);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kBatchAddResponseJson)),
+              exchange::kraken::ws::MessageKind::BatchAddResponse);
 }
 
 TEST(IdentifyMessage, BatchCancelResponse) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kBatchCancelResponseJson)),
-              kraken::ws::MessageKind::BatchCancelResponse);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kBatchCancelResponseJson)),
+              exchange::kraken::ws::MessageKind::BatchCancelResponse);
 }
 
 TEST(IdentifyMessage, EditOrderResponse) {
-    EXPECT_EQ(kraken::ws::identify_message(json::parse(kEditOrderResponseJson)),
-              kraken::ws::MessageKind::EditOrderResponse);
+    EXPECT_EQ(exchange::kraken::ws::identify_message(json::parse(kEditOrderResponseJson)),
+              exchange::kraken::ws::MessageKind::EditOrderResponse);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -125,7 +125,7 @@ TEST(IdentifyMessage, EditOrderResponse) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParseStatusMessage, FieldsFromSampleJson) {
-    auto m = kraken::ws::StatusMessage::from_json(json::parse(kStatusUpdateJson));
+    auto m = exchange::kraken::ws::StatusMessage::from_json(json::parse(kStatusUpdateJson));
     EXPECT_EQ(m.channel, "status");
     EXPECT_EQ(m.type, "update");
     EXPECT_EQ(m.system, "online");
@@ -137,7 +137,7 @@ TEST(ParseStatusMessage, FieldsFromSampleJson) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParseSubscribeResponse, FieldsFromSampleJson) {
-    auto r = kraken::ws::SubscribeResponse::from_json(json::parse(kSubscribeResponseJson));
+    auto r = exchange::kraken::ws::SubscribeResponse::from_json(json::parse(kSubscribeResponseJson));
     EXPECT_EQ(r.method, "subscribe");
     EXPECT_TRUE(r.success);
     // No req_id — the outbound subscribe request did not include one.
@@ -155,7 +155,7 @@ TEST(ParseSubscribeResponse, FieldsFromSampleJson) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParseTickerMessage, FieldsFromSampleJson) {
-    auto m = kraken::ws::TickerMessage::from_json(json::parse(kTickerSnapshotJson));
+    auto m = exchange::kraken::ws::TickerMessage::from_json(json::parse(kTickerSnapshotJson));
     EXPECT_EQ(m.channel, "ticker");
     EXPECT_EQ(m.type, "snapshot");
     ASSERT_EQ(m.data.size(), 1u);
@@ -179,7 +179,7 @@ TEST(ParseTickerMessage, FieldsFromSampleJson) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParseBookMessage, FieldsFromSampleJson) {
-    auto m = kraken::ws::BookMessage::from_json(json::parse(kBookSnapshotJson));
+    auto m = exchange::kraken::ws::BookMessage::from_json(json::parse(kBookSnapshotJson));
     EXPECT_EQ(m.channel, "book");
     EXPECT_EQ(m.type, "snapshot");
     ASSERT_EQ(m.data.size(), 1u);
@@ -200,7 +200,7 @@ TEST(ParseBookMessage, FieldsFromSampleJson) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParseTradeMessage, FieldsFromSampleJson) {
-    auto m = kraken::ws::TradeMessage::from_json(json::parse(kTradeUpdateJson));
+    auto m = exchange::kraken::ws::TradeMessage::from_json(json::parse(kTradeUpdateJson));
     EXPECT_EQ(m.channel, "trade");
     EXPECT_EQ(m.type, "update");
     ASSERT_EQ(m.data.size(), 1u);
@@ -219,7 +219,7 @@ TEST(ParseTradeMessage, FieldsFromSampleJson) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParseOHLCMessage, FieldsFromSampleJson) {
-    auto m = kraken::ws::OHLCMessage::from_json(json::parse(kOhlcUpdateJson));
+    auto m = exchange::kraken::ws::OHLCMessage::from_json(json::parse(kOhlcUpdateJson));
     EXPECT_EQ(m.channel, "ohlc");
     EXPECT_EQ(m.type, "update");
     ASSERT_EQ(m.data.size(), 1u);
@@ -243,7 +243,7 @@ TEST(ParseOHLCMessage, FieldsFromSampleJson) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParseInstrumentMessage, FieldsFromSampleJson) {
-    auto m = kraken::ws::InstrumentMessage::from_json(json::parse(kInstrumentSnapshotJson));
+    auto m = exchange::kraken::ws::InstrumentMessage::from_json(json::parse(kInstrumentSnapshotJson));
     EXPECT_EQ(m.channel, "instrument");
     EXPECT_EQ(m.type, "snapshot");
 
@@ -292,7 +292,7 @@ TEST(ParseInstrumentMessage, FieldsFromSampleJson) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParseExecutionsMessage, FieldsFromSampleJson) {
-    auto m = kraken::ws::ExecutionsMessage::from_json(json::parse(kExecutionsSnapshotJson));
+    auto m = exchange::kraken::ws::ExecutionsMessage::from_json(json::parse(kExecutionsSnapshotJson));
     EXPECT_EQ(m.channel, "executions");
     EXPECT_EQ(m.type, "snapshot");
     ASSERT_EQ(m.data.size(), 1u);
@@ -331,7 +331,7 @@ TEST(ParseExecutionsMessage, FieldsFromSampleJson) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParseBalancesMessage, FieldsFromSampleJson) {
-    auto m = kraken::ws::BalancesMessage::from_json(json::parse(kBalancesSnapshotJson));
+    auto m = exchange::kraken::ws::BalancesMessage::from_json(json::parse(kBalancesSnapshotJson));
     EXPECT_EQ(m.channel, "balances");
     EXPECT_EQ(m.type, "snapshot");
     ASSERT_EQ(m.data.size(), 2u);
@@ -348,7 +348,7 @@ TEST(ParseBalancesMessage, FieldsFromSampleJson) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParsePongMessage, FieldsFromSampleJson) {
-    auto m = kraken::ws::PongMessage::from_json(json::parse(kPongJson));
+    auto m = exchange::kraken::ws::PongMessage::from_json(json::parse(kPongJson));
     EXPECT_EQ(m.method, "pong");
     ASSERT_TRUE(m.req_id.has_value());
     EXPECT_EQ(m.req_id.value(), 42);
@@ -359,7 +359,7 @@ TEST(ParsePongMessage, FieldsFromSampleJson) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParseAddOrderResponse, FieldsFromSampleJson) {
-    auto r = kraken::ws::AddOrderResponse::from_json(json::parse(kAddOrderResponseJson));
+    auto r = exchange::kraken::ws::AddOrderResponse::from_json(json::parse(kAddOrderResponseJson));
     EXPECT_EQ(r.method, "add_order");
     EXPECT_TRUE(r.success);
     ASSERT_TRUE(r.req_id.has_value());
@@ -377,7 +377,7 @@ TEST(ParseAddOrderResponse, FieldsFromSampleJson) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParseAmendOrderResponse, FieldsFromSampleJson) {
-    auto r = kraken::ws::AmendOrderResponse::from_json(json::parse(kAmendOrderResponseJson));
+    auto r = exchange::kraken::ws::AmendOrderResponse::from_json(json::parse(kAmendOrderResponseJson));
     EXPECT_EQ(r.method, "amend_order");
     EXPECT_TRUE(r.success);
     ASSERT_TRUE(r.req_id.has_value());
@@ -393,7 +393,7 @@ TEST(ParseAmendOrderResponse, FieldsFromSampleJson) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParseCancelOrderResponse, FieldsFromSampleJson) {
-    auto r = kraken::ws::CancelOrderResponse::from_json(json::parse(kCancelOrderResponseJson));
+    auto r = exchange::kraken::ws::CancelOrderResponse::from_json(json::parse(kCancelOrderResponseJson));
     EXPECT_EQ(r.method, "cancel_order");
     EXPECT_TRUE(r.success);
     ASSERT_TRUE(r.req_id.has_value());
@@ -409,7 +409,7 @@ TEST(ParseCancelOrderResponse, FieldsFromSampleJson) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParseCancelAllResponse, FieldsFromSampleJson) {
-    auto r = kraken::ws::CancelAllResponse::from_json(json::parse(kCancelAllResponseJson));
+    auto r = exchange::kraken::ws::CancelAllResponse::from_json(json::parse(kCancelAllResponseJson));
     EXPECT_EQ(r.method, "cancel_all");
     EXPECT_TRUE(r.success);
     ASSERT_TRUE(r.req_id.has_value());
@@ -423,7 +423,7 @@ TEST(ParseCancelAllResponse, FieldsFromSampleJson) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParseCancelOnDisconnectResponse, FieldsFromSampleJson) {
-    auto r = kraken::ws::CancelOnDisconnectResponse::from_json(
+    auto r = exchange::kraken::ws::CancelOnDisconnectResponse::from_json(
         json::parse(kCancelOnDisconnectResponseJson));
     EXPECT_EQ(r.method, "cancel_after");
     EXPECT_TRUE(r.success);
@@ -440,7 +440,7 @@ TEST(ParseCancelOnDisconnectResponse, FieldsFromSampleJson) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParseBatchAddResponse, FieldsFromSampleJson) {
-    auto r = kraken::ws::BatchAddResponse::from_json(json::parse(kBatchAddResponseJson));
+    auto r = exchange::kraken::ws::BatchAddResponse::from_json(json::parse(kBatchAddResponseJson));
     EXPECT_EQ(r.method, "batch_add");
     EXPECT_TRUE(r.success);
     ASSERT_TRUE(r.req_id.has_value());
@@ -460,7 +460,7 @@ TEST(ParseBatchAddResponse, FieldsFromSampleJson) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParseBatchCancelResponse, FieldsFromSampleJson) {
-    auto r = kraken::ws::BatchCancelResponse::from_json(json::parse(kBatchCancelResponseJson));
+    auto r = exchange::kraken::ws::BatchCancelResponse::from_json(json::parse(kBatchCancelResponseJson));
     EXPECT_EQ(r.method, "batch_cancel");
     EXPECT_TRUE(r.success);
     ASSERT_TRUE(r.req_id.has_value());
@@ -474,7 +474,7 @@ TEST(ParseBatchCancelResponse, FieldsFromSampleJson) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ParseEditOrderResponse, FieldsFromSampleJson) {
-    auto r = kraken::ws::EditOrderResponse::from_json(json::parse(kEditOrderResponseJson));
+    auto r = exchange::kraken::ws::EditOrderResponse::from_json(json::parse(kEditOrderResponseJson));
     EXPECT_EQ(r.method, "edit_order");
     EXPECT_TRUE(r.success);
     ASSERT_TRUE(r.req_id.has_value());

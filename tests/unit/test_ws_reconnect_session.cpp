@@ -7,7 +7,7 @@
 // full license information.
 // =============================================================================
 
-#include "ws_reconnect_session.hpp"
+#include "exchange/common/reconnect_session.hpp"
 
 #include <gtest/gtest.h>
 
@@ -16,7 +16,7 @@
 #include <stdexcept>
 #include <thread>
 
-using namespace kraken::ws;
+using namespace exchange::ws;
 using namespace std::chrono_literals;
 
 // ── Test helpers ──────────────────────────────────────────────────────────────

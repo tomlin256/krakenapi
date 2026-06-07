@@ -7,12 +7,12 @@
 // full license information.
 // =============================================================================
 
-#include "kraken_rest_client.hpp"
+#include "exchange/kraken/rest_client.hpp"
 
 #include <gtest/gtest.h>
 #include <string>
 
-using namespace kraken::rest;
+using namespace exchange::kraken::rest;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -122,11 +122,11 @@ TEST(KrakenRestClient, PrivateExecute_AddOrder) {
     });
 
     AddOrderRequest req;
-    req.params.order_type  = kraken::OrderType::Limit;
-    req.params.side        = kraken::Side::Buy;
+    req.params.order_type  = exchange::OrderType::Limit;
+    req.params.side        = exchange::Side::Buy;
     req.params.symbol      = "XBTUSD";
     req.params.order_qty   = 0.001;
-    req.params.limit_price = kraken::TickPrice::from(30000.0, 4);
+    req.params.limit_price = exchange::kraken::TickPrice::from(30000.0, 4);
 
     auto resp = client.execute(req, dummy_creds());
     ASSERT_TRUE(resp.ok);

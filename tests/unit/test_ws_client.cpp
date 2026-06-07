@@ -13,7 +13,7 @@
 //   - Inject inbound server frames (conn->inject_message(...))
 //   - Simulate connection open/close (conn->fire_open() / fire_close())
 
-#include "kraken_ws_client.hpp"
+#include "exchange/kraken/ws_client.hpp"
 
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
@@ -31,7 +31,7 @@ using namespace std::chrono_literals;
 // MockWsConnection
 // ─────────────────────────────────────────────────────────────────────────────
 
-class MockWsConnection : public kraken::ws::IWsConnection {
+class MockWsConnection : public exchange::ws::IWsConnection {
 public:
     std::vector<std::string> sent_messages;
 
@@ -68,12 +68,12 @@ private:
 // Test factory: creates a client backed by a MockWsConnection, already "open"
 // ─────────────────────────────────────────────────────────────────────────────
 
-static std::pair<std::shared_ptr<kraken::ws::KrakenWsClient>,
+static std::pair<std::shared_ptr<exchange::kraken::ws::KrakenWsClient>,
                  std::shared_ptr<MockWsConnection>>
 make_test_client() {
     auto conn   = std::make_shared<MockWsConnection>();
-    // make_ws_client wires kraken_frame_descriptor and calls init() internally.
-    auto client = kraken::ws::make_ws_client(conn);
+    // Pass kraken_frame_descriptor explicitly; make_exchange_ws_client() calls init() internally.
+    auto client = exchange::ws::make_exchange_ws_client(conn, exchange::kraken::ws::kraken_frame_descriptor);
     conn->fire_open();   // simulate immediate connection
     return {client, conn};
 }
@@ -143,43 +143,43 @@ static std::string make_ticker_push(const std::string& symbol = "BTC/USD",
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(TypedWsRequest, ResponseTypeAliases) {
-    static_assert(std::is_same_v<kraken::ws::AddOrderRequest::response_type,
-                                 kraken::ws::AddOrderResponse>);
-    static_assert(std::is_same_v<kraken::ws::AmendOrderRequest::response_type,
-                                 kraken::ws::AmendOrderResponse>);
-    static_assert(std::is_same_v<kraken::ws::CancelOrderRequest::response_type,
-                                 kraken::ws::CancelOrderResponse>);
-    static_assert(std::is_same_v<kraken::ws::CancelAllRequest::response_type,
-                                 kraken::ws::CancelAllResponse>);
-    static_assert(std::is_same_v<kraken::ws::CancelOnDisconnectRequest::response_type,
-                                 kraken::ws::CancelOnDisconnectResponse>);
-    static_assert(std::is_same_v<kraken::ws::BatchAddRequest::response_type,
-                                 kraken::ws::BatchAddResponse>);
-    static_assert(std::is_same_v<kraken::ws::BatchCancelRequest::response_type,
-                                 kraken::ws::BatchCancelResponse>);
-    static_assert(std::is_same_v<kraken::ws::EditOrderRequest::response_type,
-                                 kraken::ws::EditOrderResponse>);
-    static_assert(std::is_same_v<kraken::ws::PingRequest::response_type,
-                                 kraken::ws::PongMessage>);
+    static_assert(std::is_same_v<exchange::kraken::ws::AddOrderRequest::response_type,
+                                 exchange::kraken::ws::AddOrderResponse>);
+    static_assert(std::is_same_v<exchange::kraken::ws::AmendOrderRequest::response_type,
+                                 exchange::kraken::ws::AmendOrderResponse>);
+    static_assert(std::is_same_v<exchange::kraken::ws::CancelOrderRequest::response_type,
+                                 exchange::kraken::ws::CancelOrderResponse>);
+    static_assert(std::is_same_v<exchange::kraken::ws::CancelAllRequest::response_type,
+                                 exchange::kraken::ws::CancelAllResponse>);
+    static_assert(std::is_same_v<exchange::kraken::ws::CancelOnDisconnectRequest::response_type,
+                                 exchange::kraken::ws::CancelOnDisconnectResponse>);
+    static_assert(std::is_same_v<exchange::kraken::ws::BatchAddRequest::response_type,
+                                 exchange::kraken::ws::BatchAddResponse>);
+    static_assert(std::is_same_v<exchange::kraken::ws::BatchCancelRequest::response_type,
+                                 exchange::kraken::ws::BatchCancelResponse>);
+    static_assert(std::is_same_v<exchange::kraken::ws::EditOrderRequest::response_type,
+                                 exchange::kraken::ws::EditOrderResponse>);
+    static_assert(std::is_same_v<exchange::kraken::ws::PingRequest::response_type,
+                                 exchange::kraken::ws::PongMessage>);
     SUCCEED();  // all static_asserts passed
 }
 
 TEST(TypedSubscribeRequest, PushAndResponseTypes) {
-    static_assert(std::is_same_v<kraken::ws::TickerSubscribeRequest::push_type,
-                                 kraken::ws::TickerMessage>);
-    static_assert(std::is_same_v<kraken::ws::TickerSubscribeRequest::response_type,
-                                 kraken::ws::SubscribeResponse>);
+    static_assert(std::is_same_v<exchange::kraken::ws::TickerSubscribeRequest::push_type,
+                                 exchange::kraken::ws::TickerMessage>);
+    static_assert(std::is_same_v<exchange::kraken::ws::TickerSubscribeRequest::response_type,
+                                 exchange::kraken::ws::SubscribeResponse>);
 
-    static_assert(std::is_same_v<kraken::ws::BookSubscribeRequest::push_type,
-                                 kraken::ws::BookMessage>);
-    static_assert(std::is_same_v<kraken::ws::OHLCSubscribeRequest::push_type,
-                                 kraken::ws::OHLCMessage>);
-    static_assert(std::is_same_v<kraken::ws::TradeSubscribeRequest::push_type,
-                                 kraken::ws::TradeMessage>);
-    static_assert(std::is_same_v<kraken::ws::ExecutionsSubscribeRequest::push_type,
-                                 kraken::ws::ExecutionsMessage>);
-    static_assert(std::is_same_v<kraken::ws::BalancesSubscribeRequest::push_type,
-                                 kraken::ws::BalancesMessage>);
+    static_assert(std::is_same_v<exchange::kraken::ws::BookSubscribeRequest::push_type,
+                                 exchange::kraken::ws::BookMessage>);
+    static_assert(std::is_same_v<exchange::kraken::ws::OHLCSubscribeRequest::push_type,
+                                 exchange::kraken::ws::OHLCMessage>);
+    static_assert(std::is_same_v<exchange::kraken::ws::TradeSubscribeRequest::push_type,
+                                 exchange::kraken::ws::TradeMessage>);
+    static_assert(std::is_same_v<exchange::kraken::ws::ExecutionsSubscribeRequest::push_type,
+                                 exchange::kraken::ws::ExecutionsMessage>);
+    static_assert(std::is_same_v<exchange::kraken::ws::BalancesSubscribeRequest::push_type,
+                                 exchange::kraken::ws::BalancesMessage>);
     SUCCEED();
 }
 
@@ -190,13 +190,13 @@ TEST(TypedSubscribeRequest, PushAndResponseTypes) {
 TEST(ExecuteAsync, SendsRequestWithInjectedReqId) {
     auto [client, conn] = make_test_client();
 
-    kraken::ws::AddOrderRequest req;
-    req.order_type = kraken::OrderType::Limit;
-    req.side       = kraken::Side::Buy;
+    exchange::kraken::ws::AddOrderRequest req;
+    req.order_type = exchange::OrderType::Limit;
+    req.side       = exchange::Side::Buy;
     req.order_qty  = 0.001;
     req.symbol     = "BTC/USD";
     req.token      = "tok";
-    req.limit_price = kraken::TickPrice::from(30000.0, 1);
+    req.limit_price = exchange::kraken::TickPrice::from(30000.0, 1);
 
     auto fut = client->execute_async(req);
 
@@ -214,9 +214,9 @@ TEST(ExecuteAsync, SendsRequestWithInjectedReqId) {
 TEST(ExecuteAsync, ResolvesOnMatchingSuccessResponse) {
     auto [client, conn] = make_test_client();
 
-    kraken::ws::AddOrderRequest req;
-    req.order_type  = kraken::OrderType::Market;
-    req.side        = kraken::Side::Sell;
+    exchange::kraken::ws::AddOrderRequest req;
+    req.order_type  = exchange::OrderType::Market;
+    req.side        = exchange::Side::Sell;
     req.order_qty   = 0.1;
     req.symbol      = "BTC/USD";
     req.token       = "tok";
@@ -235,13 +235,13 @@ TEST(ExecuteAsync, ResolvesOnMatchingSuccessResponse) {
 TEST(ExecuteAsync, ResolvesOnErrorResponse) {
     auto [client, conn] = make_test_client();
 
-    kraken::ws::AddOrderRequest req;
-    req.order_type = kraken::OrderType::Limit;
-    req.side       = kraken::Side::Buy;
+    exchange::kraken::ws::AddOrderRequest req;
+    req.order_type = exchange::OrderType::Limit;
+    req.side       = exchange::Side::Buy;
     req.order_qty  = 0.001;
     req.symbol     = "BTC/USD";
     req.token      = "tok";
-    req.limit_price = kraken::TickPrice::from(1.0, 1);
+    req.limit_price = exchange::kraken::TickPrice::from(1.0, 1);
 
     auto fut = client->execute_async(req);
     int64_t id = json::parse(conn->sent_messages[0])["req_id"].get<int64_t>();
@@ -257,16 +257,16 @@ TEST(ExecuteAsync, ResolvesOnErrorResponse) {
 TEST(ExecuteAsync, TwoRequestsInFlightResolvedInReverseOrder) {
     auto [client, conn] = make_test_client();
 
-    kraken::ws::AddOrderRequest req1;
-    req1.order_type = kraken::OrderType::Limit;
-    req1.side       = kraken::Side::Buy;
+    exchange::kraken::ws::AddOrderRequest req1;
+    req1.order_type = exchange::OrderType::Limit;
+    req1.side       = exchange::Side::Buy;
     req1.order_qty  = 0.001;
     req1.symbol     = "BTC/USD";
     req1.token      = "tok";
-    req1.limit_price = kraken::TickPrice::from(30000.0, 1);
+    req1.limit_price = exchange::kraken::TickPrice::from(30000.0, 1);
 
-    kraken::ws::AddOrderRequest req2 = req1;
-    req2.limit_price = kraken::TickPrice::from(31000.0, 1);
+    exchange::kraken::ws::AddOrderRequest req2 = req1;
+    req2.limit_price = exchange::kraken::TickPrice::from(31000.0, 1);
 
     auto fut1 = client->execute_async(req1);
     auto fut2 = client->execute_async(req2);
@@ -295,13 +295,13 @@ TEST(Execute, BlocksUntilResponse) {
     auto [client, conn] = make_test_client();
     auto& conn_ref = conn;
 
-    kraken::ws::AddOrderRequest req;
-    req.order_type  = kraken::OrderType::Limit;
-    req.side        = kraken::Side::Buy;
+    exchange::kraken::ws::AddOrderRequest req;
+    req.order_type  = exchange::OrderType::Limit;
+    req.side        = exchange::Side::Buy;
     req.order_qty   = 0.001;
     req.symbol      = "BTC/USD";
     req.token       = "tok";
-    req.limit_price  = kraken::TickPrice::from(30000.0, 1);
+    req.limit_price  = exchange::kraken::TickPrice::from(30000.0, 1);
 
     // Inject the response from a separate thread after a short delay.
     std::thread injector([&] {
@@ -320,13 +320,13 @@ TEST(Execute, BlocksUntilResponse) {
 TEST(Execute, TimesOutAndReturnsError) {
     auto [client, conn] = make_test_client();
 
-    kraken::ws::AddOrderRequest req;
-    req.order_type  = kraken::OrderType::Limit;
-    req.side        = kraken::Side::Buy;
+    exchange::kraken::ws::AddOrderRequest req;
+    req.order_type  = exchange::OrderType::Limit;
+    req.side        = exchange::Side::Buy;
     req.order_qty   = 0.001;
     req.symbol      = "BTC/USD";
     req.token       = "tok";
-    req.limit_price  = kraken::TickPrice::from(30000.0, 1);
+    req.limit_price  = exchange::kraken::TickPrice::from(30000.0, 1);
 
     // No response injected → should time out.
     auto resp = client->execute(req, 50ms);
@@ -342,14 +342,14 @@ TEST(Execute, TimesOutAndReturnsError) {
 TEST(Subscribe, PushCallbackNotFiredBeforeAck) {
     auto [client, conn] = make_test_client();
 
-    kraken::ws::TickerSubscribeRequest sub_req;
+    exchange::kraken::ws::TickerSubscribeRequest sub_req;
     sub_req.symbols = std::vector<std::string>{"BTC/USD"};
 
     std::atomic<int> push_count{0};
 
     auto fut = client->subscribe_async(
         sub_req,
-        [&](const kraken::ws::TickerMessage&) { ++push_count; }
+        [&](const exchange::kraken::ws::TickerMessage&) { ++push_count; }
     );
 
     // Inject push data BEFORE the ack – callback must not fire.
@@ -368,7 +368,7 @@ TEST(Subscribe, PushCallbackNotFiredBeforeAck) {
 TEST(Subscribe, SuccessfulAckThenPushData) {
     auto [client, conn] = make_test_client();
 
-    kraken::ws::TickerSubscribeRequest sub_req;
+    exchange::kraken::ws::TickerSubscribeRequest sub_req;
     sub_req.symbols = std::vector<std::string>{"BTC/USD"};
 
     std::atomic<int>    push_count{0};
@@ -376,7 +376,7 @@ TEST(Subscribe, SuccessfulAckThenPushData) {
 
     auto fut = client->subscribe_async(
         sub_req,
-        [&](const kraken::ws::TickerMessage& msg) {
+        [&](const exchange::kraken::ws::TickerMessage& msg) {
             ++push_count;
             if (!msg.data.empty()) last_bid.store(msg.data[0].bid);
         }
@@ -401,14 +401,14 @@ TEST(Subscribe, SuccessfulAckThenPushData) {
 TEST(Subscribe, FailedAckPushCallbackNeverFires) {
     auto [client, conn] = make_test_client();
 
-    kraken::ws::TickerSubscribeRequest sub_req;
+    exchange::kraken::ws::TickerSubscribeRequest sub_req;
     sub_req.symbols = std::vector<std::string>{"BTC/USD"};
 
     std::atomic<int> push_count{0};
 
     auto fut = client->subscribe_async(
         sub_req,
-        [&](const kraken::ws::TickerMessage&) { ++push_count; }
+        [&](const exchange::kraken::ws::TickerMessage&) { ++push_count; }
     );
 
     int64_t id = json::parse(conn->sent_messages[0])["req_id"].get<int64_t>();
@@ -426,10 +426,10 @@ TEST(Subscribe, FailedAckPushCallbackNeverFires) {
 TEST(Subscribe, HandleIsInactiveAfterFailedAck) {
     auto [client, conn] = make_test_client();
 
-    kraken::ws::TickerSubscribeRequest sub_req;
+    exchange::kraken::ws::TickerSubscribeRequest sub_req;
 
     auto fut = client->subscribe_async(
-        sub_req, [](const kraken::ws::TickerMessage&) {}
+        sub_req, [](const exchange::kraken::ws::TickerMessage&) {}
     );
 
     int64_t id = json::parse(conn->sent_messages[0])["req_id"].get<int64_t>();
@@ -442,10 +442,10 @@ TEST(Subscribe, HandleIsInactiveAfterFailedAck) {
 TEST(Subscribe, HandleIsActiveAfterSuccessfulAck) {
     auto [client, conn] = make_test_client();
 
-    kraken::ws::TickerSubscribeRequest sub_req;
+    exchange::kraken::ws::TickerSubscribeRequest sub_req;
 
     auto fut = client->subscribe_async(
-        sub_req, [](const kraken::ws::TickerMessage&) {}
+        sub_req, [](const exchange::kraken::ws::TickerMessage&) {}
     );
 
     int64_t id = json::parse(conn->sent_messages[0])["req_id"].get<int64_t>();
@@ -462,13 +462,13 @@ TEST(Subscribe, HandleIsActiveAfterSuccessfulAck) {
 TEST(Cancel, RemovesPushCallback) {
     auto [client, conn] = make_test_client();
 
-    kraken::ws::TickerSubscribeRequest sub_req;
+    exchange::kraken::ws::TickerSubscribeRequest sub_req;
 
     std::atomic<int> push_count{0};
 
     auto fut = client->subscribe_async(
         sub_req,
-        [&](const kraken::ws::TickerMessage&) { ++push_count; }
+        [&](const exchange::kraken::ws::TickerMessage&) { ++push_count; }
     );
 
     int64_t id = json::parse(conn->sent_messages[0])["req_id"].get<int64_t>();
@@ -491,11 +491,11 @@ TEST(Cancel, RemovesPushCallback) {
 TEST(Cancel, SendsUnsubscribeRequest) {
     auto [client, conn] = make_test_client();
 
-    kraken::ws::TickerSubscribeRequest sub_req;
+    exchange::kraken::ws::TickerSubscribeRequest sub_req;
     sub_req.symbols = std::vector<std::string>{"BTC/USD"};
 
     auto fut = client->subscribe_async(
-        sub_req, [](const kraken::ws::TickerMessage&) {}
+        sub_req, [](const exchange::kraken::ws::TickerMessage&) {}
     );
 
     int64_t id = json::parse(conn->sent_messages[0])["req_id"].get<int64_t>();
@@ -515,10 +515,10 @@ TEST(Cancel, SendsUnsubscribeRequest) {
 TEST(Cancel, IsIdempotent) {
     auto [client, conn] = make_test_client();
 
-    kraken::ws::TickerSubscribeRequest sub_req;
+    exchange::kraken::ws::TickerSubscribeRequest sub_req;
 
     auto fut = client->subscribe_async(
-        sub_req, [](const kraken::ws::TickerMessage&) {}
+        sub_req, [](const exchange::kraken::ws::TickerMessage&) {}
     );
 
     int64_t id = json::parse(conn->sent_messages[0])["req_id"].get<int64_t>();
@@ -540,16 +540,16 @@ TEST(Cancel, IsIdempotent) {
 
 TEST(PreConnectionQueue, MessagesQueuedBeforeOpen) {
     auto conn   = std::make_shared<MockWsConnection>();
-    auto client = kraken::ws::make_ws_client(conn);  // calls init(); does NOT connect
+    auto client = exchange::ws::make_exchange_ws_client(conn, exchange::kraken::ws::kraken_frame_descriptor);  // calls init(); does NOT connect
     // Deliberately NOT calling conn->fire_open() yet.
 
-    kraken::ws::AddOrderRequest req;
-    req.order_type  = kraken::OrderType::Limit;
-    req.side        = kraken::Side::Buy;
+    exchange::kraken::ws::AddOrderRequest req;
+    req.order_type  = exchange::OrderType::Limit;
+    req.side        = exchange::Side::Buy;
     req.order_qty   = 0.001;
     req.symbol      = "BTC/USD";
     req.token       = "tok";
-    req.limit_price  = kraken::TickPrice::from(30000.0, 1);
+    req.limit_price  = exchange::kraken::TickPrice::from(30000.0, 1);
 
     auto fut = client->execute_async(req);
 
@@ -568,18 +568,18 @@ TEST(PreConnectionQueue, MessagesQueuedBeforeOpen) {
 
 TEST(PreConnectionQueue, FlushedInOrder) {
     auto conn   = std::make_shared<MockWsConnection>();
-    auto client = kraken::ws::make_ws_client(conn);  // calls init(); does NOT connect
+    auto client = exchange::ws::make_exchange_ws_client(conn, exchange::kraken::ws::kraken_frame_descriptor);  // calls init(); does NOT connect
 
-    kraken::ws::AddOrderRequest req1;
-    req1.order_type = kraken::OrderType::Limit;
-    req1.side       = kraken::Side::Buy;
+    exchange::kraken::ws::AddOrderRequest req1;
+    req1.order_type = exchange::OrderType::Limit;
+    req1.side       = exchange::Side::Buy;
     req1.order_qty  = 0.001;
     req1.symbol     = "BTC/USD";
     req1.token      = "tok";
-    req1.limit_price = kraken::TickPrice::from(30000.0, 1);
+    req1.limit_price = exchange::kraken::TickPrice::from(30000.0, 1);
 
-    kraken::ws::AddOrderRequest req2 = req1;
-    req2.limit_price = kraken::TickPrice::from(31000.0, 1);
+    exchange::kraken::ws::AddOrderRequest req2 = req1;
+    req2.limit_price = exchange::kraken::TickPrice::from(31000.0, 1);
 
     auto fut1 = client->execute_async(req1);
     auto fut2 = client->execute_async(req2);
@@ -611,13 +611,13 @@ TEST(PreConnectionQueue, DirectSendWhenAlreadyConnected) {
     // make_test_client fires open immediately, so sends go directly.
     auto [client, conn] = make_test_client();
 
-    kraken::ws::AddOrderRequest req;
-    req.order_type  = kraken::OrderType::Limit;
-    req.side        = kraken::Side::Buy;
+    exchange::kraken::ws::AddOrderRequest req;
+    req.order_type  = exchange::OrderType::Limit;
+    req.side        = exchange::Side::Buy;
     req.order_qty   = 0.001;
     req.symbol      = "BTC/USD";
     req.token       = "tok";
-    req.limit_price  = kraken::TickPrice::from(30000.0, 1);
+    req.limit_price  = exchange::kraken::TickPrice::from(30000.0, 1);
 
     auto fut = client->execute_async(req);
 
@@ -634,28 +634,28 @@ TEST(PreConnectionQueue, DirectSendWhenAlreadyConnected) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(TypedSubscribeRequest, ChannelIsBoundToType) {
-    static_assert(kraken::ws::TickerSubscribeRequest::channel_value     == kraken::ws::SubscribeChannel::Ticker);
-    static_assert(kraken::ws::BookSubscribeRequest::channel_value       == kraken::ws::SubscribeChannel::Book);
-    static_assert(kraken::ws::TradeSubscribeRequest::channel_value      == kraken::ws::SubscribeChannel::Trade);
-    static_assert(kraken::ws::OHLCSubscribeRequest::channel_value       == kraken::ws::SubscribeChannel::OHLC);
-    static_assert(kraken::ws::InstrumentSubscribeRequest::channel_value == kraken::ws::SubscribeChannel::Instrument);
-    static_assert(kraken::ws::ExecutionsSubscribeRequest::channel_value == kraken::ws::SubscribeChannel::Executions);
-    static_assert(kraken::ws::BalancesSubscribeRequest::channel_value   == kraken::ws::SubscribeChannel::Balances);
+    static_assert(exchange::kraken::ws::TickerSubscribeRequest::channel_value     == exchange::kraken::ws::SubscribeChannel::Ticker);
+    static_assert(exchange::kraken::ws::BookSubscribeRequest::channel_value       == exchange::kraken::ws::SubscribeChannel::Book);
+    static_assert(exchange::kraken::ws::TradeSubscribeRequest::channel_value      == exchange::kraken::ws::SubscribeChannel::Trade);
+    static_assert(exchange::kraken::ws::OHLCSubscribeRequest::channel_value       == exchange::kraken::ws::SubscribeChannel::OHLC);
+    static_assert(exchange::kraken::ws::InstrumentSubscribeRequest::channel_value == exchange::kraken::ws::SubscribeChannel::Instrument);
+    static_assert(exchange::kraken::ws::ExecutionsSubscribeRequest::channel_value == exchange::kraken::ws::SubscribeChannel::Executions);
+    static_assert(exchange::kraken::ws::BalancesSubscribeRequest::channel_value   == exchange::kraken::ws::SubscribeChannel::Balances);
     SUCCEED();
 }
 
 TEST(TypedSubscribeRequest, DefaultConstructorSetsChannelField) {
-    EXPECT_EQ(kraken::ws::TickerSubscribeRequest{}.channel,     kraken::ws::SubscribeChannel::Ticker);
-    EXPECT_EQ(kraken::ws::BookSubscribeRequest{}.channel,       kraken::ws::SubscribeChannel::Book);
-    EXPECT_EQ(kraken::ws::TradeSubscribeRequest{}.channel,      kraken::ws::SubscribeChannel::Trade);
-    EXPECT_EQ(kraken::ws::OHLCSubscribeRequest{}.channel,       kraken::ws::SubscribeChannel::OHLC);
-    EXPECT_EQ(kraken::ws::InstrumentSubscribeRequest{}.channel, kraken::ws::SubscribeChannel::Instrument);
-    EXPECT_EQ(kraken::ws::ExecutionsSubscribeRequest{}.channel, kraken::ws::SubscribeChannel::Executions);
-    EXPECT_EQ(kraken::ws::BalancesSubscribeRequest{}.channel,   kraken::ws::SubscribeChannel::Balances);
+    EXPECT_EQ(exchange::kraken::ws::TickerSubscribeRequest{}.channel,     exchange::kraken::ws::SubscribeChannel::Ticker);
+    EXPECT_EQ(exchange::kraken::ws::BookSubscribeRequest{}.channel,       exchange::kraken::ws::SubscribeChannel::Book);
+    EXPECT_EQ(exchange::kraken::ws::TradeSubscribeRequest{}.channel,      exchange::kraken::ws::SubscribeChannel::Trade);
+    EXPECT_EQ(exchange::kraken::ws::OHLCSubscribeRequest{}.channel,       exchange::kraken::ws::SubscribeChannel::OHLC);
+    EXPECT_EQ(exchange::kraken::ws::InstrumentSubscribeRequest{}.channel, exchange::kraken::ws::SubscribeChannel::Instrument);
+    EXPECT_EQ(exchange::kraken::ws::ExecutionsSubscribeRequest{}.channel, exchange::kraken::ws::SubscribeChannel::Executions);
+    EXPECT_EQ(exchange::kraken::ws::BalancesSubscribeRequest{}.channel,   exchange::kraken::ws::SubscribeChannel::Balances);
 }
 
 TEST(TypedSubscribeRequest, ToJsonContainsCorrectChannel) {
-    kraken::ws::TickerSubscribeRequest req;
+    exchange::kraken::ws::TickerSubscribeRequest req;
     req.symbols = std::vector<std::string>{"BTC/USD"};
     // No manual channel assignment — channel is set by the constructor.
     auto j = req.to_json();
@@ -667,7 +667,7 @@ TEST(TypedSubscribeRequest, ToJsonContainsCorrectChannel) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // A recording error handler that captures every call for inspection.
-class RecordingErrorHandler : public kraken::ws::IWsErrorHandler {
+class RecordingErrorHandler : public exchange::ws::IWsErrorHandler {
 public:
     struct Call { std::string raw; std::string what; };
     std::vector<Call>        calls;
@@ -684,12 +684,13 @@ public:
 };
 
 // Helper: create a client with a RecordingErrorHandler already open.
-static std::pair<std::shared_ptr<kraken::ws::KrakenWsClient>,
+static std::pair<std::shared_ptr<exchange::kraken::ws::KrakenWsClient>,
                  std::shared_ptr<MockWsConnection>>
-make_client_with_handler(std::shared_ptr<kraken::ws::IWsErrorHandler> handler) {
+make_client_with_handler(std::shared_ptr<exchange::ws::IWsErrorHandler> handler) {
     auto conn   = std::make_shared<MockWsConnection>();
-    auto client = kraken::ws::make_ws_client(
-        std::static_pointer_cast<kraken::ws::IWsConnection>(conn),
+    auto client = exchange::ws::make_exchange_ws_client(
+        std::static_pointer_cast<exchange::ws::IWsConnection>(conn),
+        exchange::kraken::ws::kraken_frame_descriptor,
         std::move(handler));
     conn->fire_open();
     return {client, conn};
@@ -734,9 +735,9 @@ TEST(WsErrorHandler, NotInvokedOnValidPushFrame) {
     auto [client, conn] = make_client_with_handler(handler);
 
     // Subscribe so the push callback is installed.
-    kraken::ws::TickerSubscribeRequest sub_req;
+    exchange::kraken::ws::TickerSubscribeRequest sub_req;
     sub_req.symbols = std::vector<std::string>{"BTC/USD"};
-    auto fut = client->subscribe_async(sub_req, [](const kraken::ws::TickerMessage&) {});
+    auto fut = client->subscribe_async(sub_req, [](const exchange::kraken::ws::TickerMessage&) {});
     int64_t id = json::parse(conn->sent_messages[0])["req_id"].get<int64_t>();
     conn->inject_message(make_subscribe_ack(id));
     fut.get();
@@ -748,7 +749,7 @@ TEST(WsErrorHandler, NotInvokedOnValidPushFrame) {
 
 TEST(WsErrorHandler, RateLimitedHandlerCanBeConstructedWithCustomInterval) {
     // Verify custom interval compiles and runs without crashing.
-    auto handler = std::make_shared<kraken::ws::RateLimitedWsErrorHandler>(
+    auto handler = std::make_shared<exchange::kraken::ws::RateLimitedWsErrorHandler>(
         std::chrono::milliseconds{100});
     auto [client, conn] = make_client_with_handler(handler);
 
@@ -761,8 +762,9 @@ TEST(WsErrorHandler, RateLimitedHandlerCanBeConstructedWithCustomInterval) {
 TEST(WsErrorHandler, DefaultHandlerUsedWhenNoneProvided) {
     // When no handler is passed, make_ws_client must not crash on bad input.
     auto conn   = std::make_shared<MockWsConnection>();
-    auto client = kraken::ws::make_ws_client(
-        std::static_pointer_cast<kraken::ws::IWsConnection>(conn));
+    auto client = exchange::ws::make_exchange_ws_client(
+        std::static_pointer_cast<exchange::ws::IWsConnection>(conn),
+        exchange::kraken::ws::kraken_frame_descriptor);
     conn->fire_open();
 
     // Should not throw or crash — default RateLimitedWsErrorHandler handles it.
@@ -808,8 +810,9 @@ TEST(ConnectionError, DoesNotAffectMalformedFrameTracking) {
 
 TEST(ConnectionError, DefaultHandlerDoesNotCrashOnError) {
     auto conn   = std::make_shared<MockWsConnection>();
-    auto client = kraken::ws::make_ws_client(
-        std::static_pointer_cast<kraken::ws::IWsConnection>(conn));
+    auto client = exchange::ws::make_exchange_ws_client(
+        std::static_pointer_cast<exchange::ws::IWsConnection>(conn),
+        exchange::kraken::ws::kraken_frame_descriptor);
     conn->fire_open();
 
     EXPECT_NO_THROW(conn->fire_error("Protocol violation"));

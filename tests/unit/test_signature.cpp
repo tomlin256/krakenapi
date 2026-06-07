@@ -7,14 +7,14 @@
 // full license information.
 // =============================================================================
 //
-// Proves that Credentials::sign() (kraken_rest_api.hpp) produces the same
+// Proves that Credentials::sign() (exchange/kraken/rest_api.hpp) produces the same
 // API-Sign header value as KAPI::signature() (kapi.cpp) for identical inputs.
 //
 // If any test here fails, the two signing implementations diverge and the
 // new client will be rejected by Kraken with an invalid-signature error.
 
 #include "kapi.hpp"
-#include "kraken_rest_api.hpp"
+#include "exchange/kraken/rest_api.hpp"
 
 #include <gtest/gtest.h>
 
@@ -48,7 +48,7 @@ static std::string new_sign(const std::string& secret,
                              const std::string& nonce,
                              const std::string& postdata)
 {
-    kraken::rest::Credentials creds{"dummy-key", secret};
+    exchange::kraken::rest::Credentials creds{"dummy-key", secret};
     return creds.sign(path, nonce, postdata);
 }
 
