@@ -21,7 +21,7 @@
 This file is the architecture overview and step plan. Two companion docs hold the detail that the steps depend on:
 
 - **[001-appendix-binance-message-formats.md](001-appendix-binance-message-formats.md)** — every Binance REST and WebSocket message captured verbatim from the live API docs, annotated with field types and the dispatch routing key. This is the source material for the test fixtures (the Binance analog of `tests/unit/ws_client_example_json.hpp`).
-- **[001-appendix-testing-strategy.md](001-appendix-testing-strategy.md)** — the test approach mirrored from the existing Kraken suite: captured-frame fixture headers, `from_json` parse tests asserting every field, request-build tests, `identify_message` tests, and mock-performer / `MockWsConnection` end-to-end tests. Lists every new Binance test file and what it covers.
+- **[001-appendix-testing-strategy.md](001-appendix-testing-strategy.md)** — the test approach mirrored from the existing Kraken suite: captured-frame fixture headers, `from_json` parse tests asserting every field, request-build tests, `identify_message`/frame-descriptor dispatch tests, and mock-performer / `MockWsConnection` end-to-end tests. Lists every new Binance test file and what it covers.
 - **[001-appendix-migration-guide.md](001-appendix-migration-guide.md)** — how existing `krakenapi` callers move from the `kraken::` / `kraken_*.hpp` surface to the new `exchange::…` / `exchange/…` layout: include-path and namespace mapping tables, function renames, test-harness migration, and worked before/after diffs.
 - **[001-appendix-compat-shim.md](001-appendix-compat-shim.md)** — the **shipped** deprecated compatibility shim that lets pre-refactor code compile and run with zero edits (transparent forwarding headers + namespace shim with factory forwarders), its deprecation signalling, CMake opt-out, transparency tests, and the client adoption workflow (drop in → verify → migrate at leisure → flip the shim off).
 
@@ -37,7 +37,7 @@ The current library bakes Kraken-specific names into every structural layer:
 The scaffold underneath — `TypedPublicRequest<R>`, `RestResponse<T>`, `IWsConnection`, the dispatch loop in `KrakenWsClient`, `SubscriptionHandle` — is fully exchange-agnostic. Extracting it as a shared layer lets a Binance (or any future) adapter reuse the entire machinery and only supply:
 
 1. Per-exchange request/response structs (field mapping + JSON serialisation)
-2. A per-exchange `identify_message()` function (JSON frame → dispatch kind)
+2. A per-exchange frame-descriptor function — Kraken's is `kraken_frame_descriptor`, returning `FrameDescriptor` — that `ExchangeWsClient` binds as its `MessageIdentifier` to route inbound frames (see §A's naming note: this is *not* called `identify_message`, which is a separate, optional classifier)
 3. A per-exchange auth adapter (signing + header injection)
 
 ---
@@ -50,8 +50,12 @@ include/
     common/
       rest.hpp            # TypedPublicRequest<R>, TypedPrivateRequest<R>,
                           #   RestResponse<T>, HttpRequest, IRestAuth
-      ws.hpp              # IWsConnection, WsResponse<T>, SubscriptionHandle,
-                          #   SubscribeResponse, BaseWsResponse, MessageFrame
+      ws.hpp              # IWsConnection, IWsErrorHandler, WsResponse<T>,
+                          #   SubscriptionHandle, BaseWsResponse, WsRequestBase,
+                          #   TypedWsRequest<R>, FrameDescriptor, FrameKind,
+                          #   MessageIdentifier — NOT SubscribeResponse (that's
+                          #   Kraken's own ack type; see §A2) or MessageFrame
+                          #   (never built; superseded by FrameDescriptor)
       ws_client.hpp       # ExchangeWsClient<MsgId> — exchange-agnostic dispatch
       ws_client.inl       # Template bodies (included by ws_client.hpp)
       ix_ws_connection.hpp# IxWsConnection — generic ixwebsocket IWsConnection impl
@@ -66,30 +70,39 @@ include/
                           #   FeePreference, TickPrice, OrderParams, Triggers,
                           #   Conditional, OrderDescription, OrderInfo, etc.
       rest_api.hpp        # All Kraken REST request/response structs
-      ws_api.hpp          # All Kraken WS request/response structs + identify_message
-      rest_client.hpp     # KrakenRestClient (wraps exchange::rest::GenericRestClient
-                          #   with KrakenAuth)
-      ws_client.hpp       # PUBLIC_WS_URL/PRIVATE_WS_URL consts + make_kraken_ws_client()
-                          #   (thin wrapper over common make_exchange_ws_client)
+      ws_api.hpp          # All Kraken WS request/response structs +
+                          #   identify_message / kraken_frame_descriptor
+      rest_client.hpp     # KrakenRestClient — standalone, templated execute();
+                          #   signs directly via Credentials::sign() (does not
+                          #   route through IRestAuth — see Step 2 corrections)
+      ws_client.hpp       # KrakenWsClient alias, PUBLIC_WS_URL/PRIVATE_WS_URL
+                          #   consts + make_kraken_ws_client() — binds
+                          #   kraken_frame_descriptor over common make_exchange_ws_client
     binance/
       auth.hpp            # BinanceCredentials {api_key, secret_key, Algorithm}
                           #   Algorithm: HmacSha256 | Rsa | Ed25519
       types.hpp           # Binance-specific types and enums
       rest_api.hpp        # Binance REST request/response structs
-      ws_api.hpp          # Binance WebSocket API request/response structs + identify
-      ws_streams.hpp      # Binance market stream types + identify_message
+      ws_api.hpp          # Binance WebSocket API request/response structs +
+                          #   binance_ws_api_frame_descriptor
+      ws_streams.hpp      # Binance market stream types +
+                          #   binance_stream_frame_descriptor
                           #   (listen-key user streams deferred)
       rest_client.hpp     # BinanceRestClient
       ws_client.hpp       # STREAM_URL/WS_API_URL consts + make_binance_stream_client()
-                          #   / make_binance_ws_api_client() factories
+                          #   / make_binance_ws_api_client() factories — both expected
+                          #   to be inline header-only wrappers, like Kraken's
 src/
+  exchange/common/
+    ws_client.cpp         # ExchangeWsClient non-template impl — exchange-agnostic.
+                          #   The ONLY WS .cpp either adapter needs: KrakenWsClient
+                          #   is a bare alias whose factory is inline (no .cpp of its
+                          #   own), and Binance is expected to follow the same shape.
   kraken/
     rest_client.cpp       # was kraken_rest_client.cpp
-    ws_client.cpp         # was kraken_ws_client.cpp
     types.cpp             # was kraken_types.cpp
   binance/
     rest_client.cpp       # New
-    ws_client.cpp         # New
 tests/
   unit/
     (existing Kraken tests, updated for new namespaces/headers)
@@ -111,6 +124,8 @@ tests/
 
 > Fixture headers and the full test matrix are detailed in [001-appendix-testing-strategy.md](001-appendix-testing-strategy.md); their captured JSON comes from [001-appendix-binance-message-formats.md](001-appendix-binance-message-formats.md).
 
+**Naming corrections folded into this layout** (the original draft got both wrong): Kraken's actual `MessageIdentifier` function is `kraken_frame_descriptor`, *not* `identify_message` — the latter is a separate, optional, richer caller-facing classifier Kraken also happens to provide (returns `MessageKind`, for code that bypasses the typed client; see §A's naming note for the full distinction). Binance's analogues should follow the proven `<exchange>_frame_descriptor` naming. Likewise, there is no `kraken/ws_client.cpp` — `KrakenWsClient` is a bare type alias and its factory is `inline`, so the only WS `.cpp` in the tree is the exchange-agnostic `exchange/common/ws_client.cpp`; budget for `binance/ws_client.cpp` only if Binance's two factories end up needing genuinely non-template code (unlikely, given Kraken needed none).
+
 ### Namespace layout after migration
 
 | Namespace | Contains |
@@ -120,7 +135,7 @@ tests/
 | `exchange::ws::` | IWsConnection, **IxWsConnection** (generic transport), **WsReconnectSession**, WsResponse<T>, SubscriptionHandle, ExchangeWsClient, WsRequestBase, TypedWsRequest<R>, BaseWsResponse, `make_exchange_ws_client()` |
 | `exchange::kraken::` | Kraken-specific enums, TickPrice, OrderParams, Triggers, Conditional, OrderInfo, etc. |
 | `exchange::kraken::rest::` | All Kraken REST req/resp types, Credentials, KrakenRestClient |
-| `exchange::kraken::ws::` | All Kraken WS req/resp types, SubscribeChannel, WsCredentials, `identify_message`, URL consts, `make_kraken_ws_client()` |
+| `exchange::kraken::ws::` | All Kraken WS req/resp types, SubscribeChannel, WsCredentials, `identify_message` + `kraken_frame_descriptor` (the `MessageIdentifier` — see §A's naming note), URL consts, `make_kraken_ws_client()` |
 | `exchange::binance::` | Binance-specific types |
 | `exchange::binance::rest::` | All Binance REST req/resp types, BinanceCredentials, BinanceRestClient |
 | `exchange::binance::ws::` | Binance WS API types, BinanceWsClient |
@@ -134,7 +149,7 @@ tests/
 
 ### A. `ExchangeWsClient` — runtime-parameterised dispatch
 
-The entire `KrakenWsClient` dispatch loop (pending-handler map, subscription-callback map, pre-connection queue, `SubscriptionHandle`, thread safety) is exchange-agnostic. Only `identify_message(const json&)` differs. The refactored client is:
+The entire `KrakenWsClient` dispatch loop (pending-handler map, subscription-callback map, pre-connection queue, `SubscriptionHandle`, thread safety) is exchange-agnostic. Only the `MessageIdentifier` — the per-exchange `const json& → FrameDescriptor` function bound at construction — differs; Kraken's is `kraken_frame_descriptor` (see the naming note below — `identify_message` is something else entirely). The refactored client is:
 
 ```cpp
 // exchange/common/ws_client.hpp
@@ -166,26 +181,33 @@ public:
 } // namespace exchange::ws
 ```
 
-Each exchange provides its own `identify_message` function and wraps `ExchangeWsClient` in a thin type alias or factory:
+Each exchange provides its own `MessageIdentifier` function and wraps `ExchangeWsClient` in a thin type alias + factory.
+
+> **Naming note (corrects the original draft of this section)**: the `MessageIdentifier` is *not* called `identify_message`. As built, Kraken names it `kraken_frame_descriptor` — `const json& → FrameDescriptor`, the function actually bound into `ExchangeWsClient`. `identify_message` is a *second*, independent, optional function Kraken also provides: `const json& → MessageKind`, a richer caller-facing classifier for code that bypasses `KrakenWsClient` and dispatches raw frames itself (see [CLAUDE.md § low-level dispatch](../../CLAUDE.md#websocket-message-dispatch-low-level)). The two serve different audiences and answer different questions — `kraken_frame_descriptor` is what every adapter *must* supply; `identify_message`/`MessageKind` is a convenience Kraken happens to also offer. Follow `kraken_frame_descriptor` as the naming pattern for `binance_frame_descriptor` (or `binance_stream_frame_descriptor` / `binance_ws_api_frame_descriptor` if Binance's two WS protocols need distinct ones):
 
 ```cpp
 // exchange/kraken/ws_api.hpp
 namespace exchange::kraken::ws {
-    exchange::ws::FrameDescriptor identify_message(const json& j);
+    exchange::ws::FrameDescriptor kraken_frame_descriptor(const json& j);
 }
 
-// exchange/kraken/ix_ws_connection.hpp
-inline std::shared_ptr<exchange::ws::ExchangeWsClient>
-make_kraken_ws_client(const std::string& url) {
-    auto conn = std::make_shared<IxWsConnection>(url);
-    return exchange::ws::make_exchange_ws_client(conn,
-               exchange::kraken::ws::identify_message);
+// exchange/kraken/ws_client.hpp  (NOT ix_ws_connection.hpp — that file doesn't
+// exist per-exchange; IxWsConnection is purely a common-layer transport, §E)
+using KrakenWsClient = exchange::ws::ExchangeWsClient;
+
+inline std::shared_ptr<KrakenWsClient>
+make_kraken_ws_client(std::shared_ptr<IWsConnection>   conn,
+                      std::shared_ptr<IWsErrorHandler> error_handler = nullptr) {
+    return exchange::ws::make_exchange_ws_client(std::move(conn), kraken_frame_descriptor,
+                                                  std::move(error_handler));
 }
 ```
 
+(`IWsErrorHandler` is an optional error-surfacing strategy added during implementation — every `make_*_ws_client` factory threads it through as a defaulted trailing parameter; see §E.)
+
 **Why `correlation_id` is a `std::string`, not `int64_t`** — Kraken correlates replies by an integer `req_id`; Binance's WebSocket API correlates by an `id` that may be an integer *or* a string (their docs show UUID strings). Keying the internal `pending_` map on `std::string` covers both: the Kraken adapter stringifies its generated `int64_t` req_id before sending and the wire format still emits it as a JSON integer; the Binance adapter uses its `id` directly. The correlation key is internal-only — it never dictates the wire type.
 
-**Why `route_key` instead of `channel`** — Kraken routes push frames by a `"channel"` field (`"ticker"`, `"book"`). Binance combined streams route by a `"stream"` field (`"btcusdt@aggTrade"`), and raw single-stream connections carry only an event-type `"e"` field. `route_key` is whatever string the subscribe request registered the callback under; each exchange's `identify_message` extracts the matching key from an inbound frame. The `subscriptions_` map and `SubscriptionHandle` are otherwise unchanged.
+**Why `route_key` instead of `channel`** — Kraken routes push frames by a `"channel"` field (`"ticker"`, `"book"`). Binance combined streams route by a `"stream"` field (`"btcusdt@aggTrade"`), and raw single-stream connections carry only an event-type `"e"` field. `route_key` is whatever string the subscribe request registered the callback under; each exchange's `MessageIdentifier`/frame-descriptor function extracts the matching key from an inbound frame. The `subscriptions_` map and `SubscriptionHandle` are otherwise unchanged.
 
 The concrete `correlation_id` / `route_key` derivation for every Binance frame is tabulated in [001-appendix-binance-message-formats.md](001-appendix-binance-message-formats.md).
 
@@ -318,10 +340,11 @@ Net effect: `TypedWsRequest<R>` moves to `exchange::ws::` unchanged; `TypedSubsc
 namespace exchange::rest {
 
 struct HttpRequest {
-    std::string method;
+    enum class Method { GET, POST, DELETE };   // as built — not a bare std::string
+    Method      method{Method::GET};
     std::string path;
-    std::string query;
-    std::string body;
+    std::string query;   // GET: URL-encoded query string
+    std::string body;    // POST/DELETE: URL-encoded or JSON body
     std::map<std::string, std::string> headers;
 };
 
@@ -334,8 +357,8 @@ struct IRestAuth {
 } // namespace exchange::rest
 ```
 
-`KrakenAuth` implements `IRestAuth` with the existing HMAC-SHA512 scheme.
-`BinanceAuth` implements `IRestAuth` with HMAC-SHA256 (or RSA/Ed25519), injecting `X-MBX-APIKEY`, `timestamp`, `recvWindow`, and `signature`.
+**Correction (discovered post-hoc — see Step 2's corrections below)**: no `KrakenAuth` type exists or was built. `KrakenRestClient` signs directly via `Credentials::sign()`, never routing through `IRestAuth` — that interface remains a *defined-but-unused* extension point in `exchange::rest::`.
+`BinanceAuth` implements `IRestAuth` with HMAC-SHA256 (or RSA/Ed25519), injecting `X-MBX-APIKEY`, `timestamp`, `recvWindow`, and `signature` — and would be `IRestAuth`'s **first real implementor**, if Binance's Step 3 follows this design.
 
 ### C. `RestResponse<T>` — common error envelope
 
@@ -371,7 +394,7 @@ The Kraken parse helper `parse_rest_response<T>()` moves to `exchange::kraken::r
 Binance has two distinct WebSocket protocols:
 
 1. **WebSocket API** (`wss://ws-api.binance.com/ws-api/v3`) — bidirectional trading (same req/response pattern as Kraken WS). Uses `ExchangeWsClient`.
-2. **WebSocket Streams** (`wss://stream.binance.com/stream`) — market data / user data push only. Subscribes by URL path or `SUBSCRIBE` method. Also uses `ExchangeWsClient` but with a Binance-stream-specific `identify_message`.
+2. **WebSocket Streams** (`wss://stream.binance.com/stream`) — market data / user data push only. Subscribes by URL path or `SUBSCRIBE` method. Also uses `ExchangeWsClient` but with a Binance-stream-specific `MessageIdentifier` (`binance_stream_frame_descriptor` — see §A's naming note for why this is *not* called `identify_message`).
 
 Both are instances of `ExchangeWsClient` with different identifiers and connection URLs.
 
@@ -399,7 +422,7 @@ make_exchange_ws_client(const std::string&               url,
 }
 ```
 
-Each exchange then supplies a one-line wrapper that binds its own `identify_message` and URL constant (`make_kraken_ws_client`, `make_binance_stream_client`, `make_binance_ws_api_client`).
+Each exchange then supplies a one-line wrapper that binds its own `MessageIdentifier`/frame-descriptor function and URL constant (`make_kraken_ws_client`, `make_binance_stream_client`, `make_binance_ws_api_client`).
 
 **The genuine per-exchange seams are narrow and data-shaped, not logic-shaped:**
 
@@ -407,7 +430,7 @@ Each exchange then supplies a one-line wrapper that binds its own `identify_mess
 |---|---|---|---|
 | Endpoint URLs | `PUBLIC_WS_URL`, `PRIVATE_WS_URL` | `STREAM_URL`, `WS_API_URL` | per-exchange `ws_client.hpp` consts |
 | Client factory | `make_kraken_ws_client` | `make_binance_stream_client` / `…ws_api_client` | per-exchange `ws_client.hpp` |
-| Frame routing | `identify_message` (channel/req_id) | `identify_message` (stream/id) | per-exchange `ws_api.hpp` / `ws_streams.hpp` |
+| Frame routing | `kraken_frame_descriptor` (channel/req_id) | `binance_frame_descriptor` (stream/id) | per-exchange `ws_api.hpp` / `ws_streams.hpp` |
 | Keepalive | app-level `{"channel":"heartbeat"}` frame (informational; already classified as `MessageKind::Heartbeat`) | RFC 6455 protocol ping → ixwebsocket auto-pongs within the 60 s window | transport (ixwebsocket) handles both for free |
 | Reconnect trigger | on socket close | on socket close **and** Binance's mandatory ~24 h server-side disconnect | same `WsReconnectSession`; Binance just disconnects more often |
 | Resubscribe-on-reconnect | re-send Kraken subscribe frames | re-send `SUBSCRIBE` for each stream | caller's `ConnectFn` (per-exchange, supplied at the call site) |
@@ -444,21 +467,25 @@ if(NOT KRAKENAPI_BUILD_KRAKEN AND NOT KRAKENAPI_BUILD_BINANCE)
 endif()
 ```
 
-**`src/CMakeLists.txt` structure** — the common scaffold is a pure INTERFACE target (always present); each exchange is its own static library guarded by its flag:
+**`src/CMakeLists.txt` structure** — ~~the common scaffold is a pure INTERFACE target~~
+
+> **Correction (architectural — discovered post-Step-1)**: `exchange_common` **cannot** be header-only `INTERFACE`. `ExchangeWsClient`'s non-template methods are real compiled object code living in `src/exchange/common/ws_client.cpp` — already built today, folded directly into `krakenapi`'s sources (see `src/CMakeLists.txt` as it stands now). It needs `nlohmann_json` transitively but, notably, *not* OpenSSL/libcurl. So `exchange_common` must be `STATIC` and compile that file; Step 8 is what extracts it from `krakenapi` into its own target. Each exchange is still its own static library guarded by its flag, now linking `exchange_common PUBLIC`:
 
 ```cmake
-# Always present — header-only common scaffold
-add_library(exchange_common INTERFACE)
-target_include_directories(exchange_common INTERFACE
+# Always present — compiles ExchangeWsClient's exchange-agnostic non-template methods
+add_library(exchange_common STATIC
+    exchange/common/ws_client.cpp
+)
+target_include_directories(exchange_common PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
+target_link_libraries(exchange_common PUBLIC nlohmann_json::nlohmann_json)
 add_library(krakenapi::common ALIAS exchange_common)
 
 if(KRAKENAPI_BUILD_KRAKEN)
     add_library(krakenapi STATIC
         kraken/rest_client.cpp
-        kraken/ws_client.cpp
         kraken/types.cpp
     )
     target_link_libraries(krakenapi
@@ -471,7 +498,9 @@ endif()
 if(KRAKENAPI_BUILD_BINANCE)
     add_library(binanceapi STATIC
         binance/rest_client.cpp
-        binance/ws_client.cpp
+        # binance/ws_client.cpp only if Step 6/7 end up needing genuinely
+        # non-template Binance WS code — Kraken needed none (KrakenWsClient
+        # is a bare alias; make_kraken_ws_client is inline), so budget for none.
     )
     target_link_libraries(binanceapi
         PUBLIC  exchange_common
@@ -529,7 +558,7 @@ endif()
 
 | Step | What the guard enables |
 |---|---|
-| 1 | No guard — `exchange_common` INTERFACE target is always built |
+| 1 | No guard — `exchange_common` **STATIC** target (compiles `exchange/common/ws_client.cpp`) is always built |
 | 2–2b | `KRAKENAPI_BUILD_KRAKEN` guards the Kraken library, all Kraken tests, Kraken examples, and the compat shim |
 | 3–7 | `KRAKENAPI_BUILD_BINANCE` guards all Binance library work, tests, and examples |
 | 8 | Wires all guards together; validates dependency rules at configure time |
@@ -540,41 +569,31 @@ Turning `KRAKENAPI_BUILD_TESTS=OFF` suppresses all tests and examples regardless
 
 ## Steps
 
-### Step 1 — Create common scaffold headers (no logic change)
+### Step 1 — Create common scaffold headers (no logic change) ✅ *done*
 
-**Done when**: New headers exist; existing code compiles after `#include` path update.
+Created `include/exchange/common/{rest,ws,ws_client.hpp+.inl,ix_ws_connection,reconnect_session,types}.hpp` — the exchange-agnostic scaffold (`TypedPublicRequest<R>`/`TypedPrivateRequest<R>`/`RestResponse<T>`/`HttpRequest`/`IRestAuth`, `IWsConnection`/`IWsErrorHandler`/`WsResponse<T>`/`SubscriptionHandle`/`BaseWsResponse`/`WsRequestBase`/`TypedWsRequest<R>`/`FrameDescriptor`/`FrameKind`/`MessageIdentifier`, `ExchangeWsClient`, `IxWsConnection`, `WsReconnectSession`, and the canonical `Side`/`OrderType`/`TimeInForce`/`OrderStatus` enums) — moved into `exchange::`/`exchange::rest::`/`exchange::ws::`. `IWsErrorHandler`/`RateLimitedWsErrorHandler` were added beyond the original scope as an optional error-surfacing strategy (every `make_*_ws_client` factory now threads a defaulted `error_handler` parameter — see the corrected §A code sample). Old `kraken_*.hpp` paths became thin re-export shims so existing code and tests kept compiling unchanged.
 
-- Create `include/exchange/common/rest.hpp` — copy `TypedPublicRequest<R>`, `TypedPrivateRequest<R>`, `RestResponse<T>`, `HttpRequest`, `IRestAuth` (stub) from `kraken_rest_api.hpp`/`kraken_rest_client.hpp`. Namespace: `exchange::rest::`.
-- Create `include/exchange/common/ws.hpp` — copy `IWsConnection`, `WsResponse<T>`, `SubscriptionHandle`, `BaseWsResponse`, and the request-side scaffold `WsRequestBase` + `TypedWsRequest<R>` (see §A2) from `kraken_ws_client.hpp`/`kraken_ws_api.hpp`. Namespace: `exchange::ws::`. Document the subscribe-request concept (`push_type`, `response_type`, `route_key()`, `to_json()`, `unsubscribe_json()`) as a comment here — it is structural, not a base class.
-- Create `include/exchange/common/ws_client.hpp` + `.inl` — `ExchangeWsClient` taking `MessageIdentifier`. `subscribe_async` calls `req.route_key()` / `req.unsubscribe_json()` and routes the ack through `detail::make_ws_response(Ack::from_json(j))` (no `to_string(channel)` / hand-built `UnsubscribeRequest` / direct `ack.success` read). Namespace: `exchange::ws::`.
-- Create `include/exchange/common/ix_ws_connection.hpp` — move `IxWsConnection` here verbatim (it has no Kraken logic; see §E), namespace `exchange::ws::`, and add the generic `make_exchange_ws_client(url, identifier, error_handler)` factory.
-- Create `include/exchange/common/reconnect_session.hpp` (+ `.inl`) — move `WsReconnectSession` here verbatim (generic machinery; see §E), namespace `exchange::ws::`.
-- Create `include/exchange/common/types.hpp` — `Side`, `OrderType`, `TimeInForce`, `OrderStatus` (extracted from `kraken_types.hpp`). Namespace: `exchange::`.
-- No files deleted yet; the existing `kraken_ws_client.hpp`, `kraken_ix_ws_connection.hpp`, and `ws_reconnect_session.hpp` become thin re-export shims (`using exchange::ws::IxWsConnection;` etc.) so current code and tests keep compiling unchanged.
-- **Tests**: Full build + all existing tests pass. No behaviour change.
+**Done**: full build + all existing tests passed, no behaviour change. See [CLAUDE.md § Namespace layout](../../CLAUDE.md#namespace-layout) for the as-built result.
 
-### Step 2 — Migrate Kraken to `exchange/kraken/` namespaces
+### Step 2 — Migrate Kraken to `exchange/kraken/` namespaces ✅ *done*
 
-**Done when**: All Kraken code lives under `exchange::kraken::*`; all tests pass.
+Created `include/exchange/kraken/{auth,types,rest_api,ws_api,rest_client,ws_client}.hpp` under `exchange::kraken::`/`::rest::`/`::ws::` and updated `src/kraken/*.cpp`. The WS request scaffold was adapted to the generalised §A2 contract — method-call requests now inherit `exchange::ws::TypedWsRequest<R>`, and `TypedSubscribeRequest<PushMsg, Ch>` gained `route_key()`/`unsubscribe_json()`. The old `include/kraken_*.hpp` paths were earmarked to become deprecated compatibility forwarders in Step 2b rather than being deleted.
 
-- Create `include/exchange/kraken/auth.hpp` — move `Credentials`, `sign()`, `make_nonce()`, crypto helpers. Namespace: `exchange::kraken::rest::`.
-- Create `include/exchange/kraken/types.hpp` — Kraken-specific types (PriceType, TriggerReference, StpType, FeePreference, TickPrice, OrderParams, Triggers, Conditional, OrderDescription, OrderInfo, TradeInfo, LedgerEntry). Namespace: `exchange::kraken::`.
-- Create `include/exchange/kraken/rest_api.hpp` — all REST req/resp structs, now using `exchange::kraken::rest::` namespace.
-- Create `include/exchange/kraken/ws_api.hpp` — all WS req/resp structs, `exchange::kraken::ws::`. Adapt the WS request scaffold to the generalised contract (§A2): method-call requests inherit `exchange::ws::TypedWsRequest<R>` (their per-struct `req_id` slot now comes from `WsRequestBase`); `TypedSubscribeRequest<PushMsg, Ch>` gains `route_key()` (`return to_string(channel)`) and `unsubscribe_json()` (builds the existing `UnsubscribeRequest`). `SubscribeResponse` keeps `success`; verify `make_ws_response(SubscribeResponse)` derives `ok` from it.
-- Create `include/exchange/kraken/rest_client.hpp` — `KrakenRestClient` wraps `GenericRestClient` + `KrakenAuth : IRestAuth`.
-- In `exchange::kraken::rest` and `exchange::kraken::ws`, re-export the common scaffold types each builds on (`using exchange::rest::RestResponse; using exchange::rest::HttpRequest;` and `using exchange::ws::WsResponse; using exchange::ws::SubscriptionHandle; using exchange::ws::ExchangeWsClient;`). This keeps `exchange::kraken::rest::RestResponse`-style references resolving and makes the migration-guide compatibility shim work (see [001-appendix-migration-guide.md](001-appendix-migration-guide.md)).
-- Create `include/exchange/kraken/ws_client.hpp` — Kraken WS endpoint constants (`PUBLIC_WS_URL`, `PRIVATE_WS_URL`) plus a one-line `make_kraken_ws_client(url, error_handler)` that calls the common `make_exchange_ws_client(url, kraken::ws::identify_message, …)`. No `IxWsConnection`/`WsReconnectSession` copy here — those are the common headers from Step 1, reused as-is.
-- Update `src/kraken/*.cpp` to use new headers/namespaces.
-- Replace the Step 1 re-export shims with their final form: the old `include/kraken_*.hpp` paths become the **deprecated compatibility forwarders** (built in Step 2b), not deletions. The library's own tests/examples migrate to the new `exchange::…` names in this step; the old paths exist only for external callers.
-- Update `tests/unit/` and `tests/examples/` includes and namespace references to the new API.
-- **Tests**: Full build + all unit tests pass. Examples compile against the new API.
+**Two corrections to this step's original text, discovered post-hoc:**
+
+1. **Test/example migration did *not* happen here**, despite the original "done when" calling for it. [Plan 002's audit](002-step-2b-compat-shim.md) found *zero* `exchange::kraken::` references anywhere in `tests/` immediately after this step landed — every unit test and example was still on `kraken::`. That migration was deferred to, and completed in, **Step 2b Phase 1** (commit `a6b82e3`).
+2. **`KrakenRestClient` did not become a thin wrapper.** The plan called for it to "wrap `exchange::rest::GenericRestClient` with `KrakenAuth : IRestAuth`" — neither type exists anywhere in the tree. `KrakenRestClient` kept its pre-refactor shape: a standalone class with templated `execute()` that signs directly via `Credentials::sign()`. `IRestAuth` remains a *defined-but-unused* extension point in `exchange::rest::` — if Binance's Step 3 follows §B's design, it will be the **first** adapter to actually implement it.
+
+**Done**: full build + all unit tests passed; examples compiled against the new headers and namespaces (their *own* migration to those namespaces came later — see correction 1).
 
 ### Step 2b — Ship the Kraken backwards-compatibility shim
 
 **Done when**: a verbatim pre-refactor translation unit compiles and runs unchanged with the shim on; `-DKRAKENAPI_BUILD_COMPAT_SHIM=OFF` makes the old paths disappear. Full design: [001-appendix-compat-shim.md](001-appendix-compat-shim.md).
 
 - Add `option(KRAKENAPI_BUILD_COMPAT_SHIM … ON)`; when ON, the `krakenapi::krakenapi` install rules also install the shim headers (no client CMake change needed).
-- Create `include/kraken_compat.hpp` — the namespace shim: reopens `namespace kraken { … }` with `using`-directives for the bulk re-exports, targeted `using` for generic bases, a `[[deprecated]]` `KrakenWsClient` alias, and **two `[[deprecated]]` `make_ws_client` forwarders** (URL form → `make_kraken_ws_client`; managed/mock-connection form → `make_exchange_ws_client(conn, identify_message)`). Real namespaces are required here so the forwarder functions are legal — this is what lets the shipped shim cover the factory renames that the guide's alias-only shim cannot.
+- Create `include/kraken_compat.hpp` — the namespace shim: reopens `namespace kraken { … }` with `using`-directives for the bulk re-exports, targeted `using` for generic bases, and a `[[deprecated]]` `KrakenWsClient` alias. Real namespaces are required here so forwarder functions are legal — this is what lets the shipped shim cover factory renames that the guide's alias-only shim cannot.
+
+  > **Correction — `make_ws_client` forwarders, as shipped**: this bullet originally claimed *both* `[[deprecated]] make_ws_client` overloads live in `kraken_compat.hpp`, with the connection-based one calling `make_exchange_ws_client(conn, identify_message)` directly. Neither holds. There are still two forwarders, but transport linkage forces them into **two different files**: the *connection-based* overload lives here in `kraken_compat.hpp` and **delegates** to `make_kraken_ws_client(conn, error_handler)`; the *URL-based* overload needs `IxWsConnection`/ixwebsocket (this header doesn't link it — it's reachable from pure-REST entry points) and instead lives in `kraken_ix_ws_connection.hpp`, delegating to `make_exchange_ws_client(url, kraken_frame_descriptor, error_handler)`. Both delegate to the real entry points rather than re-deriving them ("so the shim cannot drift from real behaviour" — a comment in the shipped code), and both correctly name the `MessageIdentifier` `kraken_frame_descriptor` — *not* `identify_message` (§A's naming note). Full rationale: [001-appendix-compat-shim.md](001-appendix-compat-shim.md).
 - Create the forwarding headers at the original paths (`kraken_types.hpp`, `kraken_rest_api.hpp`, `kraken_rest_client.hpp`, `kraken_ws_api.hpp`, `kraken_ws_client.hpp`, `kraken_ix_ws_connection.hpp`, `ws_reconnect_session.hpp`) — each a `#pragma message` (guarded by `KRAKENAPI_SUPPRESS_DEPRECATION`) + include of the new header + include of `kraken_compat.hpp`.
 - **Tests**:
   - `tests/compat/` — keep the **unmodified** pre-refactor `rest_client_example.cpp` and `ws_client_example.cpp` (old includes + `kraken::` names); compile them against the shim (compile-proof of an intact surface).
@@ -663,14 +682,14 @@ Endpoints to implement:
 **Done when**: `BinanceStreamClient` subscribes to ticker and trade streams; unit-tested with `MockWsConnection`.
 
 - Create `include/exchange/binance/ws_streams.hpp`:
-  - `BinanceStreamIdentifier` — `identify_message()` for stream frames. Use the **combined-stream** endpoint (`wss://stream.binance.com/stream`) so multiple streams share one connection; every push frame is then wrapped as `{"stream":"btcusdt@aggTrade","data":{…}}`. The `route_key` is the `"stream"` value; the subscribe-ack `{"result":null,"id":N}` is a `MethodResponse` with `correlation_id = id`.
+  - `binance_stream_frame_descriptor(const json&) -> exchange::ws::FrameDescriptor` — the streams' `MessageIdentifier`, named per the `kraken_frame_descriptor` pattern (§A's naming note — this is *not* `identify_message`, which is Kraken's separate, optional, richer caller-facing classifier; Binance may or may not also want one of those, but the frame descriptor is the non-negotiable piece). Use the **combined-stream** endpoint (`wss://stream.binance.com/stream`) so multiple streams share one connection; every push frame is then wrapped as `{"stream":"btcusdt@aggTrade","data":{…}}`. The `route_key` is the `"stream"` value; the subscribe-ack `{"result":null,"id":N}` is a `MethodResponse` with `correlation_id = id`.
   - Push message types: `BinanceAggTradeEvent`, `BinanceTradeEvent`, `BinanceTickerEvent` (`24hrTicker`), `BinanceMiniTickerEvent`, `BinanceKlineEvent`, `BinanceBookTickerEvent`, `BinanceDepthUpdateEvent` (diff) + `BinancePartialDepth` (snapshot).
   - **Format specifics**: push payloads use **terse single-letter keys** (`e`=event, `E`=event-time-ms, `s`=symbol, `p`=price, `q`=qty, `k`=kline-object, …) — `from_json` maps these explicitly. Numbers are strings; times are int-ms. Kline data is nested under `k`.
   - `TypedStreamSubscribeRequest<PushMsg>` (§A2) — stores the `"<symbol>@<stream>"` string; `route_key()` returns it; `to_json()`/`unsubscribe_json()` emit `{"method":"SUBSCRIBE|UNSUBSCRIBE","params":[stream],"id":req_id}`. `response_type = BinanceStreamAck` (parses `{"result":null,"id":N}`; `make_ws_response` derives `ok` from result-present / no-error). Per-stream aliases: `BinanceAggTradeSubscribe`, `BinanceTradeSubscribe`, `BinanceKlineSubscribe`, etc.
   - The subscribe ack carries **no stream echo**, so `SubscriptionHandle` remembers the `route_key` from the request — the generic client already supports this (the handle stores its own key), so no client change is needed.
-- `make_binance_stream_client(url)` factory — one-liner over the common `make_exchange_ws_client(url, BinanceStreamIdentifier)`. No new transport or reconnect code: `IxWsConnection` and `WsReconnectSession` are reused unchanged from `exchange/common/` (see §E). ixwebsocket auto-pongs Binance's 20 s server pings; `WsReconnectSession` handles the mandatory ~24 h reconnect, with the resubscribe set supplied by the caller's `ConnectFn`.
+- `make_binance_stream_client(url)` factory — one-liner over the common `make_exchange_ws_client(url, binance_stream_frame_descriptor)`, mirroring `make_kraken_ws_client`'s shape exactly (including the `error_handler` parameter — see §A's corrected code sample). No new transport or reconnect code: `IxWsConnection` and `WsReconnectSession` are reused unchanged from `exchange/common/` (see §E). ixwebsocket auto-pongs Binance's 20 s server pings; `WsReconnectSession` handles the mandatory ~24 h reconnect, with the resubscribe set supplied by the caller's `ConnectFn`.
 - Create `tests/unit/binance_ws_stream_example_json.hpp` — captured push frames + subscribe ack (the direct analog of `ws_client_example_json.hpp`).
-- Create `tests/unit/test_binance_ws_client.cpp` — `identify_message` tests (one per event type), `from_json` field assertions, and `MockWsConnection` subscribe-lifecycle tests (fire_open → subscribe ack by id → inject push frame → callback fires → cancel).
+- Create `tests/unit/test_binance_ws_client.cpp` — `binance_stream_frame_descriptor` dispatch tests (`FrameDescriptor::kind`/`correlation_id`/`route_key` assertions, one per event type — the `kraken_frame_descriptor` test pattern), `from_json` field assertions, and `MockWsConnection` subscribe-lifecycle tests (fire_open → subscribe ack by id → inject push frame → callback fires → cancel).
 - Add `tests/examples/binance/binance_ws_client_example.cpp` — the direct analog of `tests/examples/kraken/ws_client_example.cpp`: a CLI11 app with one subcommand per stream (`aggtrade <symbol>`, `trade <symbol>`, `kline <symbol> --interval 1m`, `ticker <symbol>`, `miniticker <symbol>`, `bookticker <symbol>`, `depth <symbol> [--levels N]`), each `run_*()` creating a client via `make_binance_stream_client(STREAM_URL)`, subscribing with the typed `TypedStreamSubscribeRequest` + a push callback that logs frames, then unsubscribing via the handle. Mirror the Kraken example's **connection-reuse demo** with the Binance-natural equivalent: subscribe to *several streams on one client* over the single combined-stream connection (e.g. `aggTrade` + `bookTicker` for the same symbol), showing multiple active `SubscriptionHandle`s sharing one socket. Public streams only — no credentials. Links `binanceapi ixwebsocket spdlog::spdlog CLI11::CLI11 example_backward`.
 - **Tests**: All unit tests pass.
 
@@ -681,10 +700,10 @@ Endpoints to implement:
 - Create `include/exchange/binance/ws_api.hpp`:
   - `BinanceWsCredentials` — per-request signing: `apiKey` + `signature` + `timestamp` inside `params` (the logon-session flow is deferred). Reuses `BinanceAuth`'s HMAC-SHA256 over the sorted `params`.
   - Request/response pairs, each inheriting `exchange::ws::TypedWsRequest<R>` (§A2) with its own `to_json()` rendering `req_id` as the top-level `"id"`: `BinanceWsNewOrderRequest → BinanceWsNewOrderResponse` (`method:"order.place"`), `BinanceWsCancelOrderRequest → BinanceWsCancelOrderResponse` (`method:"order.cancel"`), `BinanceWsPingRequest → BinanceWsPongMessage` (`method:"ping"`).
-  - **Format specifics**: request is `{"id":"<uuid|int>","method":"…","params":{…}}`; success reply `{"id":…,"status":200,"result":{…},"rateLimits":[…]}`; error reply `{"id":…,"status":400,"error":{"code":-2010,"msg":"…"}}`. `BinanceWsIdentifier` classifies every reply as a `MethodResponse` with `correlation_id = stringify(id)` — there is no `channel`/push concept on the WS API endpoint. `ok` is derived from `status < 400`; on error, populate `WsResponse::error` from `error.msg`.
+  - **Format specifics**: request is `{"id":"<uuid|int>","method":"…","params":{…}}`; success reply `{"id":…,"status":200,"result":{…},"rateLimits":[…]}`; error reply `{"id":…,"status":400,"error":{"code":-2010,"msg":"…"}}`. `binance_ws_api_frame_descriptor` (the WS-API `MessageIdentifier`, named per §A's `kraken_frame_descriptor` pattern) classifies every reply as a `MethodResponse` with `correlation_id = stringify(id)` — there is no `channel`/push concept on the WS API endpoint. `ok` is derived from `status < 400`; on error, populate `WsResponse::error` from `error.msg`.
   - The `id` is generated as an `int64_t` and stringified (the generic client's `correlation_id` is already a string), matching the Kraken adapter's approach.
 - `make_binance_ws_api_client(url)` factory (endpoint `wss://ws-api.binance.com/ws-api/v3`) — again a one-liner over the common `make_exchange_ws_client`; transport/reconnect reused from `exchange/common/` (§E).
-- Create `tests/unit/binance_ws_api_example_json.hpp` fixtures (success + error replies) and add `identify_message` + `from_json` + `MockWsConnection` execute-lifecycle tests to `test_binance_ws_client.cpp`.
+- Create `tests/unit/binance_ws_api_example_json.hpp` fixtures (success + error replies) and add `binance_ws_api_frame_descriptor` + `from_json` + `MockWsConnection` execute-lifecycle tests to `test_binance_ws_client.cpp`.
 - **Tests**: All unit tests pass.
 
 ### Step 8 — CMake, build validation, final cleanup
@@ -696,9 +715,9 @@ Endpoints to implement:
   - Ensure `add_subdirectory(src)` is present (the existing `add_subdirectory(tests)` is unchanged and picks up the exchange guards from there).
   - The `find_package(OpenSSL REQUIRED)` and `find_package(CURL REQUIRED)` calls stay unconditional — both exchange libs need them, and CMake's package cache makes duplicate `find_package` free.
 - **`src/CMakeLists.txt`** — replace the existing single `krakenapi` library definition with the three-target structure from §F:
-  - `exchange_common` INTERFACE target (always present; provides the `include/exchange/common/` headers to all dependents via `$<BUILD_INTERFACE:…>`).
-  - `krakenapi` STATIC target inside `if(KRAKENAPI_BUILD_KRAKEN)`, using the renamed source paths (`kraken/rest_client.cpp`, `kraken/ws_client.cpp`, `kraken/types.cpp`). OpenSSL and libcurl are `PRIVATE`.
-  - `binanceapi` STATIC target inside `if(KRAKENAPI_BUILD_BINANCE)`, using `binance/rest_client.cpp`, `binance/ws_client.cpp`. Same `PRIVATE` link pattern.
+  - `exchange_common` **STATIC** target (always present — see §F's correction: it compiles `exchange/common/ws_client.cpp`, the one piece of exchange-agnostic non-template `ExchangeWsClient` code, and provides the `include/exchange/common/` headers to all dependents via `$<BUILD_INTERFACE:…>`). This is a genuine *extraction*: that file is compiled directly into `krakenapi` today (check `src/CMakeLists.txt` — its `add_library(krakenapi STATIC …)` already lists `exchange/common/ws_client.cpp`); Step 8 is what moves it out.
+  - `krakenapi` STATIC target inside `if(KRAKENAPI_BUILD_KRAKEN)` — **sheds** `exchange/common/ws_client.cpp` (now supplied via the `exchange_common PUBLIC` link instead) and keeps just its own `kraken/rest_client.cpp` + `kraken/types.cpp`. There is no `kraken/ws_client.cpp` to rename — `KrakenWsClient` is a bare `using` alias for `ExchangeWsClient` with an `inline` factory, contributing zero non-template code (see the corrected proposed layout). OpenSSL and libcurl stay `PRIVATE`.
+  - `binanceapi` STATIC target inside `if(KRAKENAPI_BUILD_BINANCE)`, using `binance/rest_client.cpp` — and `binance/ws_client.cpp` *only if* Steps 6/7 turn out to need genuinely non-template Binance WS code. Default expectation, by analogy with Kraken, is that they won't (both factories should be `inline` one-liners over `make_exchange_ws_client`). Same `PUBLIC exchange_common` / `PRIVATE` OpenSSL+libcurl link pattern as `krakenapi`.
   - Neither exchange library links the other — they are peers that both depend on `exchange_common`.
 - **`tests/CMakeLists.txt`** — restructure test and example targets to use the nested guard layout from §F:
   - Move all existing Kraken test and example targets inside `if(KRAKENAPI_BUILD_KRAKEN)`. No logic changes — just wrap the existing definitions.
@@ -752,7 +771,7 @@ Each item lists the files to create and the Binance file to use as the reference
 | 3 | REST request/response structs | `include/exchange/<name>/rest_api.hpp` | `exchange/binance/rest_api.hpp` |
 | 4 | REST client | `include/exchange/<name>/rest_client.hpp`, `src/<name>/rest_client.cpp` | `exchange/binance/rest_client.hpp`, `src/binance/rest_client.cpp` |
 | 5 | REST fixture header + unit tests | `tests/unit/<name>_rest_example_json.hpp`, `test_<name>_auth.cpp`, `test_<name>_rest_requests.cpp`, `test_<name>_rest_responses.cpp` | `binance_rest_example_json.hpp`, `test_binance_auth.cpp`, `test_binance_rest_*.cpp` |
-| 6 | WS request/response structs + `identify_message` | `include/exchange/<name>/ws_api.hpp` (and `ws_streams.hpp` if the exchange has separate stream and trading WS protocols) | `exchange/binance/ws_api.hpp`, `exchange/binance/ws_streams.hpp` |
+| 6 | WS request/response structs + `<name>_frame_descriptor` (the `MessageIdentifier` `ExchangeWsClient` requires; `identify_message`/`MessageKind` is an *optional* richer caller-facing classifier layered on top for code that bypasses the typed client — Kraken provides one, but it is not a hard requirement; see §A's naming note) | `include/exchange/<name>/ws_api.hpp` (and `ws_streams.hpp` if the exchange has separate stream and trading WS protocols) | `exchange/kraken/ws_api.hpp` (`kraken_frame_descriptor` + `identify_message` — the canonical naming reference), `exchange/binance/ws_api.hpp`, `exchange/binance/ws_streams.hpp` |
 | 7 | WS client header + factory | `include/exchange/<name>/ws_client.hpp` | `exchange/binance/ws_client.hpp` |
 | 8 | WS source | `src/<name>/ws_client.cpp` (non-template methods, if any) | `src/binance/ws_client.cpp` |
 | 9 | WS fixture header + unit tests | `tests/unit/<name>_ws_example_json.hpp`, `test_<name>_ws_client.cpp` | `binance_ws_stream_example_json.hpp`, `test_binance_ws_client.cpp` |
@@ -794,7 +813,7 @@ The agent declares the integration complete only when:
 | Binance HMAC-SHA256 signing: query + body concatenation differs subtly from Kraken | Medium | Step 3 includes a known-good test vector from Binance docs. |
 | Binance RSA/Ed25519 signing omitted from plan | Low (intentional) | HMAC-SHA256 covers the common case; RSA/Ed25519 can be added later with the same `IRestAuth` extension point. |
 | Binance WebSocket authentication: logon-flow vs. per-request signing | Medium | Step 7 implements per-request API-key approach first; logon session deferred. |
-| `ExchangeWsClient` shares dispatch for both Kraken and Binance — bugs are shared | Low | The dispatch logic is the same for both; exchange-specific bugs will be in `identify_message()`, which is isolated. |
+| `ExchangeWsClient` shares dispatch for both Kraken and Binance — bugs are shared | Low | The dispatch logic is the same for both; exchange-specific bugs are isolated to each adapter's `MessageIdentifier` function (`kraken_frame_descriptor` / `binance_frame_descriptor` — *not* `identify_message`, a separate optional caller-facing classifier; see §A's naming note). |
 | Binance timestamp (`ms` vs `μs`) requires careful serialisation | Low | Wrap in `BinanceAuth::sign()` using milliseconds by default; add `microseconds` flag later. |
 
 ### Assumptions
@@ -803,7 +822,7 @@ The agent declares the integration complete only when:
 2. Binance `recvWindow` defaults to 5000 ms and is not exposed on every request struct — callers can set it on `BinanceCredentials`.
 3. Binance user data streams (listen key mechanism) are out of scope for this plan; only named market streams and the WS API are covered.
 4. Example programs link against ixwebsocket for real connections; unit tests remain fully mock-based.
-5. Three CMake targets are produced: `krakenapi::common` (INTERFACE, always present), `krakenapi::krakenapi` (`libkrakenapi.a`, gated on `KRAKENAPI_BUILD_KRAKEN`), and `krakenapi::binanceapi` (`libbinanceapi.a`, gated on `KRAKENAPI_BUILD_BINANCE`). All flags default to `ON`. The repo name stays `krakenapi` for now.
+5. Three CMake targets are produced: `krakenapi::common` (**STATIC**, not header-only `INTERFACE` — see §F's correction; it compiles `exchange/common/ws_client.cpp`, the one piece of exchange-agnostic non-template `ExchangeWsClient` code — always present), `krakenapi::krakenapi` (`libkrakenapi.a`, gated on `KRAKENAPI_BUILD_KRAKEN`), and `krakenapi::binanceapi` (`libbinanceapi.a`, gated on `KRAKENAPI_BUILD_BINANCE`). All flags default to `ON`. The repo name stays `krakenapi` for now.
 
 ### Deferred items
 
