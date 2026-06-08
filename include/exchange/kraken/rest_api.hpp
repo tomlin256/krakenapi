@@ -52,15 +52,13 @@ protected:
         std::string nonce_str = std::to_string(make_nonce());
         params["nonce"] = nonce_str;
         std::string body = detail::build_form_body(params);
-        std::string sign = creds.sign(uri_path, nonce_str, body);
 
         HttpRequest req;
         req.method = HttpRequest::Method::POST;
         req.path   = uri_path;
         req.body   = body;
         req.headers["Content-Type"] = "application/x-www-form-urlencoded";
-        req.headers["API-Key"]      = creds.api_key;
-        req.headers["API-Sign"]     = sign;
+        KrakenAuth{creds}.sign(req);
         return req;
     }
 };
@@ -885,15 +883,13 @@ struct AddOrderBatchRequest : TypedPrivateRequest<AddOrderBatchResult> {
         if (deadline) req_body["deadline"] = *deadline;
 
         std::string body_str = req_body.dump();
-        std::string sign     = creds.sign("/0/private/AddOrderBatch", nonce_str, body_str);
 
         HttpRequest r;
         r.method = HttpRequest::Method::POST;
         r.path   = "/0/private/AddOrderBatch";
         r.body   = body_str;
         r.headers["Content-Type"] = "application/json";
-        r.headers["API-Key"]      = creds.api_key;
-        r.headers["API-Sign"]     = sign;
+        KrakenAuth{creds}.sign(r);
         return r;
     }
 };
@@ -1050,15 +1046,13 @@ struct CancelOrderBatchRequest : TypedPrivateRequest<CancelOrderBatchResult> {
         req["nonce"]  = nonce_str;
         req["orders"] = orders;
         std::string body_str = req.dump();
-        std::string sign     = creds.sign("/0/private/CancelOrderBatch", nonce_str, body_str);
 
         HttpRequest r;
         r.method = HttpRequest::Method::POST;
         r.path   = "/0/private/CancelOrderBatch";
         r.body   = body_str;
         r.headers["Content-Type"] = "application/json";
-        r.headers["API-Key"]      = creds.api_key;
-        r.headers["API-Sign"]     = sign;
+        KrakenAuth{creds}.sign(r);
         return r;
     }
 };

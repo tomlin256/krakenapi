@@ -43,8 +43,11 @@ struct HttpRequest {
 struct IRestAuth {
     virtual ~IRestAuth() = default;
 
-    // Called once per request before it is dispatched.
-    // Implementations inject nonce, timestamp, signature, and auth headers.
+    // Called once per request before it is dispatched. Injects auth headers
+    // (API key, signature) into req. Whether the nonce/timestamp is injected
+    // here or embedded in the body by build() is exchange-specific: Kraken
+    // embeds the nonce during build() and signs here; Binance (Step 4) injects
+    // timestamp here.
     virtual void sign(HttpRequest& req) const = 0;
 };
 

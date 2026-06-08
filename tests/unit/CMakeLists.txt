@@ -3,6 +3,7 @@ add_executable(kraken_unit_tests
     test_rest_responses.cpp
     test_client.cpp
     test_signature.cpp
+    test_kraken_auth.cpp
 )
 
 target_link_libraries(kraken_unit_tests

@@ -10,16 +10,19 @@
 #pragma once
 
 // exchange/kraken/auth.hpp
-// Kraken REST authentication: Credentials, signing helpers, nonce, and
-// crypto utilities (base64, SHA-256, HMAC-SHA-512, URL encoding).
+// Kraken REST authentication: Credentials, KrakenAuth (IRestAuth implementor),
+// nonce generator, and supporting crypto utilities.
 //
 // Namespace: exchange::kraken::rest
+
+#include "exchange/common/rest.hpp"
 
 #include <chrono>
 #include <cstdint>
 #include <fstream>
 #include <iomanip>
 #include <map>
+#include <nlohmann/json.hpp>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -174,6 +177,45 @@ struct Credentials {
         std::string mac            = hmac_sha512(decoded_secret, message);
         return base64_encode(reinterpret_cast<const unsigned char*>(mac.data()), mac.size());
     }
+};
+
+// ── IRestAuth implementor ─────────────────────────────────────────────────────
+//
+// KrakenAuth wraps Credentials and implements IRestAuth::sign().
+//
+// Design note (Option 2, Step 3): PrivateRequest::build() constructs the
+// complete request body — including the nonce field — before calling sign().
+// sign() therefore extracts the nonce from the already-built body rather than
+// injecting it. This keeps build() shapes stable and confines all header
+// injection to a single chokepoint.
+//
+// Two body formats are supported:
+//   application/x-www-form-urlencoded — nonce= appears as the first key-value pair
+//   application/json                  — nonce is a top-level string field
+struct KrakenAuth : exchange::rest::IRestAuth {
+    explicit KrakenAuth(Credentials creds) : creds_(std::move(creds)) {}
+
+    void sign(exchange::rest::HttpRequest& req) const override {
+        std::string nonce_str;
+        auto ct = req.headers.find("Content-Type");
+        if (ct != req.headers.end() && ct->second == "application/json") {
+            nonce_str = nlohmann::json::parse(req.body).at("nonce").get<std::string>();
+        } else {
+            const std::string prefix = "nonce=";
+            auto pos = req.body.find(prefix);
+            if (pos != std::string::npos) {
+                pos += prefix.size();
+                auto end = req.body.find('&', pos);
+                nonce_str = req.body.substr(
+                    pos, end == std::string::npos ? std::string::npos : end - pos);
+            }
+        }
+        req.headers["API-Key"]  = creds_.api_key;
+        req.headers["API-Sign"] = creds_.sign(req.path, nonce_str, req.body);
+    }
+
+private:
+    Credentials creds_;
 };
 
 } // namespace exchange::kraken::rest
