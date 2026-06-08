@@ -602,7 +602,7 @@ Created `include/exchange/kraken/{auth,types,rest_api,ws_api,rest_client,ws_clie
   - `tests/unit/test_compat_shim.cpp` — behavioural: a public REST round-trip via `make_test_client` through `kraken::rest::…`; a WS subscribe via `MockWsConnection` through `kraken::ws::make_ws_client(conn)` (exercises the forwarder), asserting the callback fires with a `kraken::ws::TickerMessage`; a `static_assert` that `make_ws_client(url)` resolves. Built with `-DKRAKENAPI_SUPPRESS_DEPRECATION`.
   - All gated on `KRAKENAPI_BUILD_COMPAT_SHIM=ON`. Full build + `ctest` green; then a clean configure with the option **OFF** builds the library + new-API tests with the old paths absent.
 
-### Step 3 — Make `KrakenRestClient` conform to the `IRestAuth` architecture
+### Step 3 — Make `KrakenRestClient` conform to the `IRestAuth` architecture ✅ *done*
 
 **Done when**: every Kraken private-request signing path routes through `KrakenAuth : exchange::rest::IRestAuth` — no `creds.sign(...)` call remains inline anywhere in `rest_api.hpp` — and `test_signature.cpp`, `test_client.cpp`, and `test_rest_requests.cpp` all pass **unchanged**, proving the refactor reproduces the pre-refactor wire format byte-for-byte. A new equivalence test pins `KrakenAuth::sign` against the legacy direct-`Credentials::sign()` path the same way `test_signature.cpp` already pins `Credentials::sign()` against the legacy `KAPI` reference.
 
@@ -620,6 +620,10 @@ Created `include/exchange/kraken/{auth,types,rest_api,ws_api,rest_client,ws_clie
   - `test_signature.cpp` and `test_client.cpp` must continue to pass **unchanged** — they already pin Kraken's HMAC-SHA512 output byte-for-byte against the legacy `KAPI` reference and exercise `execute()` end-to-end; any drift in wire output fails them immediately.
   - `test_rest_requests.cpp` must continue to pass unchanged — it asserts every private request's path/method/body/headers, so any change in how `KrakenAuth::sign` assembles the final `HttpRequest` surfaces here first.
   - Add a `KrakenAuth` equivalence test (extend `test_signature.cpp`, or add `test_kraken_auth.cpp`) asserting `KrakenAuth{creds}.sign(http)` produces an identical `API-Sign`/`API-Key`/body to the pre-refactor direct-`Credentials::sign()` path for the same input — the same "new path matches the trusted reference byte-for-byte" pattern `test_signature.cpp` already uses, just with the now-legacy direct-signing path as the new reference instead of `KAPI`.
+
+**Open question resolved (Option 2)**: `build()` shapes are unchanged — each still constructs the complete nonce-embedded body. Only the three inline `creds.sign(...)` + header-injection sites (one in `make_private_request`, one each in `AddOrderBatchRequest::build` and `CancelOrderBatchRequest::build`) were replaced with `KrakenAuth{creds}.sign(req)`. `KrakenAuth::sign` reads the nonce back from the already-built body (checking `Content-Type` to select form-encoded vs. JSON extraction), delegates to `Credentials::sign`, and injects `API-Key`/`API-Sign`. `IRestAuth::sign`'s doc comment was updated to reflect the actual contract: nonce injection is exchange-specific — Kraken embeds it in `build()`, Binance (Step 4) will inject it in `sign()`. 8 new tests in `test_kraken_auth.cpp` assert byte-identical output to the direct `Credentials::sign()` path for both body formats.
+
+**Done**: full build + all 169 tests passed (161 pre-existing, 8 new `KrakenAuth` tests); no changes to existing test or client public API.
 
 ### Step 4 — Add Binance authentication and REST client
 
