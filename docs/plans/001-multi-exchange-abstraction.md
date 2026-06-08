@@ -12,7 +12,7 @@
 > git checkout -b feature/multi-exchange-abstraction
 > ```
 >
-> Commit at the completion of every step (and at meaningful sub-step checkpoints within longer steps). Each commit should leave the build and tests green. These commits are not just safety checkpoints — they are the source of reference diffs that will be used when writing the agent onboarding guide in Step 9. A sparse commit history makes that guide impossible to write well.
+> Commit at the completion of every step (and at meaningful sub-step checkpoints within longer steps). Each commit should leave the build and tests green. These commits are not just safety checkpoints — they are the source of reference diffs that will be used when writing the agent onboarding guide in Step 10. A sparse commit history makes that guide impossible to write well.
 
 ---
 
@@ -74,7 +74,9 @@ include/
                           #   identify_message / kraken_frame_descriptor
       rest_client.hpp     # KrakenRestClient — standalone, templated execute();
                           #   signs directly via Credentials::sign() (does not
-                          #   route through IRestAuth — see Step 2 corrections)
+                          #   route through IRestAuth — see Step 2 corrections;
+                          #   closed by Step 3, which makes KrakenAuth its
+                          #   first implementor)
       ws_client.hpp       # KrakenWsClient alias, PUBLIC_WS_URL/PRIVATE_WS_URL
                           #   consts + make_kraken_ws_client() — binds
                           #   kraken_frame_descriptor over common make_exchange_ws_client
@@ -357,8 +359,8 @@ struct IRestAuth {
 } // namespace exchange::rest
 ```
 
-**Correction (discovered post-hoc — see Step 2's corrections below)**: no `KrakenAuth` type exists or was built. `KrakenRestClient` signs directly via `Credentials::sign()`, never routing through `IRestAuth` — that interface remains a *defined-but-unused* extension point in `exchange::rest::`.
-`BinanceAuth` implements `IRestAuth` with HMAC-SHA256 (or RSA/Ed25519), injecting `X-MBX-APIKEY`, `timestamp`, `recvWindow`, and `signature` — and would be `IRestAuth`'s **first real implementor**, if Binance's Step 3 follows this design.
+**Correction (discovered post-hoc — see Step 2's corrections below)**: at the time Step 2 shipped, no `KrakenAuth` type existed — `KrakenRestClient` signed directly via `Credentials::sign()`, never routing through `IRestAuth`, leaving that interface a *defined-but-unused* extension point in `exchange::rest::`. **Step 3** closes this gap by building `KrakenAuth : IRestAuth` and proving the interface against Kraken's real HMAC-SHA512+nonce scheme — making it `IRestAuth`'s **first** real implementor, ahead of (not behind) Binance.
+`BinanceAuth` implements `IRestAuth` with HMAC-SHA256 (or RSA/Ed25519), injecting `X-MBX-APIKEY`, `timestamp`, `recvWindow`, and `signature` — and becomes `IRestAuth`'s **second** implementor in Step 4, inheriting whatever shape Step 3 settles on rather than defining it from scratch.
 
 ### C. `RestResponse<T>` — common error envelope
 
@@ -469,7 +471,7 @@ endif()
 
 **`src/CMakeLists.txt` structure** — ~~the common scaffold is a pure INTERFACE target~~
 
-> **Correction (architectural — discovered post-Step-1)**: `exchange_common` **cannot** be header-only `INTERFACE`. `ExchangeWsClient`'s non-template methods are real compiled object code living in `src/exchange/common/ws_client.cpp` — already built today, folded directly into `krakenapi`'s sources (see `src/CMakeLists.txt` as it stands now). It needs `nlohmann_json` transitively but, notably, *not* OpenSSL/libcurl. So `exchange_common` must be `STATIC` and compile that file; Step 8 is what extracts it from `krakenapi` into its own target. Each exchange is still its own static library guarded by its flag, now linking `exchange_common PUBLIC`:
+> **Correction (architectural — discovered post-Step-1)**: `exchange_common` **cannot** be header-only `INTERFACE`. `ExchangeWsClient`'s non-template methods are real compiled object code living in `src/exchange/common/ws_client.cpp` — already built today, folded directly into `krakenapi`'s sources (see `src/CMakeLists.txt` as it stands now). It needs `nlohmann_json` transitively but, notably, *not* OpenSSL/libcurl. So `exchange_common` must be `STATIC` and compile that file; Step 9 is what extracts it from `krakenapi` into its own target. Each exchange is still its own static library guarded by its flag, now linking `exchange_common PUBLIC`:
 
 ```cmake
 # Always present — compiles ExchangeWsClient's exchange-agnostic non-template methods
@@ -498,7 +500,7 @@ endif()
 if(KRAKENAPI_BUILD_BINANCE)
     add_library(binanceapi STATIC
         binance/rest_client.cpp
-        # binance/ws_client.cpp only if Step 6/7 end up needing genuinely
+        # binance/ws_client.cpp only if Step 7/8 end up needing genuinely
         # non-template Binance WS code — Kraken needed none (KrakenWsClient
         # is a bare alias; make_kraken_ws_client is inline), so budget for none.
     )
@@ -559,9 +561,9 @@ endif()
 | Step | What the guard enables |
 |---|---|
 | 1 | No guard — `exchange_common` **STATIC** target (compiles `exchange/common/ws_client.cpp`) is always built |
-| 2–2b | `KRAKENAPI_BUILD_KRAKEN` guards the Kraken library, all Kraken tests, Kraken examples, and the compat shim |
-| 3–7 | `KRAKENAPI_BUILD_BINANCE` guards all Binance library work, tests, and examples |
-| 8 | Wires all guards together; validates dependency rules at configure time |
+| 2–2b, 3 | `KRAKENAPI_BUILD_KRAKEN` guards the Kraken library, all Kraken tests, Kraken examples, and the compat shim — Step 3's `IRestAuth` conformance work touches only Kraken sources, so it sits squarely inside this guard |
+| 4–8 | `KRAKENAPI_BUILD_BINANCE` guards all Binance library work, tests, and examples |
+| 9 | Wires all guards together; validates dependency rules at configure time |
 
 Turning `KRAKENAPI_BUILD_TESTS=OFF` suppresses all tests and examples regardless of exchange flags. Exchange flags only gate library targets and their dependent tests/examples — they are orthogonal to `KRAKENAPI_BUILD_TESTS`.
 
@@ -582,7 +584,7 @@ Created `include/exchange/kraken/{auth,types,rest_api,ws_api,rest_client,ws_clie
 **Two corrections to this step's original text, discovered post-hoc:**
 
 1. **Test/example migration did *not* happen here**, despite the original "done when" calling for it. [Plan 002's audit](002-step-2b-compat-shim.md) found *zero* `exchange::kraken::` references anywhere in `tests/` immediately after this step landed — every unit test and example was still on `kraken::`. That migration was deferred to, and completed in, **Step 2b Phase 1** (commit `a6b82e3`).
-2. **`KrakenRestClient` did not become a thin wrapper.** The plan called for it to "wrap `exchange::rest::GenericRestClient` with `KrakenAuth : IRestAuth`" — neither type exists anywhere in the tree. `KrakenRestClient` kept its pre-refactor shape: a standalone class with templated `execute()` that signs directly via `Credentials::sign()`. `IRestAuth` remains a *defined-but-unused* extension point in `exchange::rest::` — if Binance's Step 3 follows §B's design, it will be the **first** adapter to actually implement it.
+2. **`KrakenRestClient` did not become a thin wrapper.** The plan called for it to "wrap `exchange::rest::GenericRestClient` with `KrakenAuth : IRestAuth`" — neither type exists anywhere in the tree. `KrakenRestClient` kept its pre-refactor shape: a standalone class with templated `execute()` that signs directly via `Credentials::sign()`, and every one of its ~28 private `build(const Credentials&)` overrides calls `creds.sign(...)` itself (26 through the shared `PrivateRequest::make_private_request()` chokepoint, 2 — `AddOrderBatchRequest`/`CancelOrderBatchRequest` — inline, because their bodies are JSON rather than form-encoded). `IRestAuth` remained a *defined-but-unused* extension point in `exchange::rest::`. **Closing this gap — and deciding whether `GenericRestClient` is even the right shape, given §C's finding that Kraken's and Binance's response envelopes differ structurally — is now Step 3**, scheduled deliberately *before* Binance work so `IRestAuth` is proven against a real, already-pinned-down signing scheme first. Kraken becomes `IRestAuth`'s first implementor; Binance (Step 4) is its second.
 
 **Done**: full build + all unit tests passed; examples compiled against the new headers and namespaces (their *own* migration to those namespaces came later — see correction 1).
 
@@ -600,7 +602,26 @@ Created `include/exchange/kraken/{auth,types,rest_api,ws_api,rest_client,ws_clie
   - `tests/unit/test_compat_shim.cpp` — behavioural: a public REST round-trip via `make_test_client` through `kraken::rest::…`; a WS subscribe via `MockWsConnection` through `kraken::ws::make_ws_client(conn)` (exercises the forwarder), asserting the callback fires with a `kraken::ws::TickerMessage`; a `static_assert` that `make_ws_client(url)` resolves. Built with `-DKRAKENAPI_SUPPRESS_DEPRECATION`.
   - All gated on `KRAKENAPI_BUILD_COMPAT_SHIM=ON`. Full build + `ctest` green; then a clean configure with the option **OFF** builds the library + new-API tests with the old paths absent.
 
-### Step 3 — Add Binance authentication and REST client
+### Step 3 — Make `KrakenRestClient` conform to the `IRestAuth` architecture
+
+**Done when**: every Kraken private-request signing path routes through `KrakenAuth : exchange::rest::IRestAuth` — no `creds.sign(...)` call remains inline anywhere in `rest_api.hpp` — and `test_signature.cpp`, `test_client.cpp`, and `test_rest_requests.cpp` all pass **unchanged**, proving the refactor reproduces the pre-refactor wire format byte-for-byte. A new equivalence test pins `KrakenAuth::sign` against the legacy direct-`Credentials::sign()` path the same way `test_signature.cpp` already pins `Credentials::sign()` against the legacy `KAPI` reference.
+
+**Why this comes before any Binance work**: Step 2's correction above is blunt about the gap — `IRestAuth` is a *defined-but-unused* extension point, designed to fit Binance's shape (HMAC-SHA256, timestamp injected alongside an already-built request) and never exercised against Kraken's structurally different one (HMAC-SHA512, where the nonce is simultaneously a standalone signing input *and* a field embedded in the signed body itself). If that single-mutation-point contract turns out not to fit Kraken, discovering it now — with `test_signature.cpp` already pinning the correct byte-for-byte output as a regression net, and only one well-understood adapter depending on the interface — is far cheaper than discovering it after Binance's entire REST layer has been built on top of an interface shaped by guesswork.
+
+- Add `KrakenAuth : exchange::rest::IRestAuth` to `exchange/kraken/auth.hpp`, wrapping a `Credentials` and implementing `void sign(HttpRequest& req) const override`.
+- **The crux, and the step's central open question** — resolve it explicitly and document the choice inline next to `KrakenAuth::sign`, because it will directly shape `BinanceAuth` in Step 4:
+  Kraken's scheme requires the *raw nonce string* both as a standalone input to the digest (`HMAC(path + SHA256(nonce_str + body))`) **and** as a `nonce=<value>` field inside that same `body` — a tighter coupling between "anti-replay token" and "wire body" than `IRestAuth::sign`'s doc comment ("injects nonce, timestamp, signature, and auth headers" into an already-built request) anticipates. Worse, two of the ~28 private endpoints (`AddOrderBatchRequest`, `CancelOrderBatchRequest`) use **JSON** bodies rather than form-encoded ones, so "inject `nonce=` into the body" isn't even a single string operation. Pick one of:
+  1. `KrakenAuth::sign` generates the nonce *and* injects it into `req.body` for both shapes (form-encoded prepend vs. JSON-key merge) — keeps `build()` uniform and nonce-free, but couples the auth strategy to body encoding, which smells like it's reaching past its stated job.
+  2. `build()` keeps constructing the complete, nonce-embedded body exactly as `make_private_request` does today, and *only* the signature/header computation moves into `KrakenAuth::sign` — a narrower change, but means `IRestAuth::sign`'s "injects nonce" promise turns out to be Binance-shaped rather than universal; update the doc comment in `exchange/common/rest.hpp` to describe what the interface actually guarantees once two real adapters have answered that question, rather than what it was guessed to guarantee with zero.
+- Refactor the signing chokepoint(s) so the actual `creds.sign(...)` call and `API-Key`/`API-Sign`/`Content-Type` header injection live in `KrakenAuth::sign` — called once by `KrakenRestClient::execute(req, creds)` — rather than duplicated across call sites as they are today: `PrivateRequest::make_private_request()` (the shared helper ~26 of the ~28 private `build(const Credentials&)` overrides already route through) plus the two JSON-bodied outliers that bypass it and sign inline. Whether `PrivateRequest::build` keeps taking `const Credentials&` or collapses to the bare `build() const` shape `PublicRequest` already has (matching `exchange::rest::TypedPublicRequest<R>`'s single-`build()` contract) falls out of which option above is chosen.
+- Leave `RestResponse<T>`/`parse_rest_response`, the public-request path, and WebSocket auth (`WsCredentials` — a different mechanism entirely: a session token fetched once over REST and passed inside WS request `params`, not a per-request `IRestAuth` signer) untouched. This step is scoped to private REST signing only.
+- **`GenericRestClient` extraction is deliberately out of scope.** The original Step 2 text proposed wrapping one, but no detailed design for it exists anywhere in this plan, and §C already documents that Kraken's and Binance's response envelopes are *shaped differently* — wrapping envelope vs. bare body, error-array vs. `code`/`msg`, always-200 vs. real HTTP status codes that the parser must see. Conjuring a shared transport-plus-parsing base into existence now, before Binance proves what (if anything) is genuinely common beyond `IRestAuth` itself, is exactly the kind of speculative abstraction the project avoids. If Step 5 (Binance REST) shows the transport loop really is identical modulo auth and envelope-parsing, that is the moment to extract one — generalising from two real implementations instead of one plus a guess.
+- **Tests**:
+  - `test_signature.cpp` and `test_client.cpp` must continue to pass **unchanged** — they already pin Kraken's HMAC-SHA512 output byte-for-byte against the legacy `KAPI` reference and exercise `execute()` end-to-end; any drift in wire output fails them immediately.
+  - `test_rest_requests.cpp` must continue to pass unchanged — it asserts every private request's path/method/body/headers, so any change in how `KrakenAuth::sign` assembles the final `HttpRequest` surfaces here first.
+  - Add a `KrakenAuth` equivalence test (extend `test_signature.cpp`, or add `test_kraken_auth.cpp`) asserting `KrakenAuth{creds}.sign(http)` produces an identical `API-Sign`/`API-Key`/body to the pre-refactor direct-`Credentials::sign()` path for the same input — the same "new path matches the trusted reference byte-for-byte" pattern `test_signature.cpp` already uses, just with the now-legacy direct-signing path as the new reference instead of `KAPI`.
+
+### Step 4 — Add Binance authentication and REST client
 
 **Done when**: `BinanceRestClient` executes public requests; auth signs private requests correctly; unit tests verify signatures.
 
@@ -608,7 +629,7 @@ Created `include/exchange/kraken/{auth,types,rest_api,ws_api,rest_client,ws_clie
   - `enum class BinanceSignAlgorithm { HmacSha256, Rsa, Ed25519 }`.
   - `struct BinanceCredentials { api_key, secret_key, BinanceSignAlgorithm, recv_window_ms=5000 }`.
   - `BinanceAuth : IRestAuth` — injects `X-MBX-APIKEY` header, appends `timestamp` (+ `recvWindow`) to the query/body, computes the signature over the **entire** `query_string + body` concatenation, and appends `&signature=<sig>`.
-  - HMAC-SHA256 signing in Step 3; RSA/Ed25519 deferred (see Deferred items).
+  - HMAC-SHA256 signing in Step 4; RSA/Ed25519 deferred (see Deferred items).
 - **Signing differences from Kraken** (these are the easy-to-get-wrong bits — call them out in the test):
   | | Kraken | Binance HMAC |
   |---|---|---|
@@ -622,7 +643,7 @@ Created `include/exchange/kraken/{auth,types,rest_api,ws_api,rest_client,ws_clie
 - Create `tests/unit/test_binance_auth.cpp` — verify HMAC-SHA256 hex signature against Binance's published worked example (the SPOT `order` example in *REST API → SIGNED endpoint examples*, which gives a known key/secret/params → expected signature). This is the Binance analog of `test_signature.cpp`.
 - **Tests**: New tests pass; all Kraken tests still pass.
 
-### Step 4 — Binance REST public endpoints
+### Step 5 — Binance REST public endpoints
 
 **Done when**: Market data endpoints are implemented and unit-tested with mock HTTP performers.
 
@@ -651,7 +672,7 @@ Endpoints to implement (in `include/exchange/binance/rest_api.hpp`):
 - Add `tests/examples/binance/binance_rest_client_example.cpp` — the direct analog of `tests/examples/kraken/rest_client_example.cpp`: a CLI11 app with one subcommand per public endpoint (`ping`, `time`, `exchangeinfo`, `ticker [--symbols …]`, `book <symbol> [--limit N]`, `klines <symbol> --interval 1m`, `trades <symbol> [--limit N]`), each `run_*(BinanceRestClient&, args)` executing the typed request and logging the parsed fields via spdlog. `main()` mirrors the Kraken example: `curl_global_init` → construct `BinanceRestClient` → dispatch by subcommand → `curl_global_cleanup`. Public endpoints only — no credentials. Links `binanceapi spdlog::spdlog CLI11::CLI11 example_backward`.
 - **Tests**: All unit tests pass; example compiles and runs against live Binance (no credentials needed).
 
-### Step 5 — Binance REST private (account + trading) endpoints
+### Step 6 — Binance REST private (account + trading) endpoints
 
 **Done when**: Account and order endpoints implemented and unit-tested.
 
@@ -672,12 +693,12 @@ Endpoints to implement:
 - **Format specifics**:
   - `POST /api/v3/order` has three response shapes selected by the `newOrderRespType` param: **ACK** (ids only), **RESULT** (+ fill status), **FULL** (+ `fills[]` array). `BinanceNewOrderResponse` carries all fields as `std::optional` and a `fills` vector that is empty unless FULL. Default for LIMIT/MARKET is FULL.
   - `DELETE /api/v3/openOrders` returns a **JSON array** of cancelled-order objects; `myTrades`, `openOrders`, `allOrders` likewise return arrays.
-  - Order fields reuse the string-number + int-ms-timestamp conventions from Step 4.
+  - Order fields reuse the string-number + int-ms-timestamp conventions from Step 5.
 - Create `tests/unit/binance_account_example_json.hpp` fixtures (account, order ACK/RESULT/FULL, cancel, openOrders, myTrades) — captured from the appendix.
 - Unit tests use `make_test_client()` (same injected-performer pattern as `test_client.cpp`): assert the signed request path/query and that `from_json` parses each fixture. Signing correctness is already covered by `test_binance_auth.cpp`.
 - **Tests**: All unit tests pass.
 
-### Step 6 — Binance WebSocket market streams
+### Step 7 — Binance WebSocket market streams
 
 **Done when**: `BinanceStreamClient` subscribes to ticker and trade streams; unit-tested with `MockWsConnection`.
 
@@ -693,7 +714,7 @@ Endpoints to implement:
 - Add `tests/examples/binance/binance_ws_client_example.cpp` — the direct analog of `tests/examples/kraken/ws_client_example.cpp`: a CLI11 app with one subcommand per stream (`aggtrade <symbol>`, `trade <symbol>`, `kline <symbol> --interval 1m`, `ticker <symbol>`, `miniticker <symbol>`, `bookticker <symbol>`, `depth <symbol> [--levels N]`), each `run_*()` creating a client via `make_binance_stream_client(STREAM_URL)`, subscribing with the typed `TypedStreamSubscribeRequest` + a push callback that logs frames, then unsubscribing via the handle. Mirror the Kraken example's **connection-reuse demo** with the Binance-natural equivalent: subscribe to *several streams on one client* over the single combined-stream connection (e.g. `aggTrade` + `bookTicker` for the same symbol), showing multiple active `SubscriptionHandle`s sharing one socket. Public streams only — no credentials. Links `binanceapi ixwebsocket spdlog::spdlog CLI11::CLI11 example_backward`.
 - **Tests**: All unit tests pass.
 
-### Step 7 — Binance WebSocket API (bidirectional trading)
+### Step 8 — Binance WebSocket API (bidirectional trading)
 
 **Done when**: `BinanceWsClient` can place and cancel orders over WebSocket.
 
@@ -706,7 +727,7 @@ Endpoints to implement:
 - Create `tests/unit/binance_ws_api_example_json.hpp` fixtures (success + error replies) and add `binance_ws_api_frame_descriptor` + `from_json` + `MockWsConnection` execute-lifecycle tests to `test_binance_ws_client.cpp`.
 - **Tests**: All unit tests pass.
 
-### Step 8 — CMake, build validation, final cleanup
+### Step 9 — CMake, build validation, final cleanup
 
 **Done when**: Full build from clean with all tests passing; examples compile; CI-equivalent local check.
 
@@ -715,7 +736,7 @@ Endpoints to implement:
   - Ensure `add_subdirectory(src)` is present (the existing `add_subdirectory(tests)` is unchanged and picks up the exchange guards from there).
   - The `find_package(OpenSSL REQUIRED)` and `find_package(CURL REQUIRED)` calls stay unconditional — both exchange libs need them, and CMake's package cache makes duplicate `find_package` free.
 - **`src/CMakeLists.txt`** — replace the existing single `krakenapi` library definition with the three-target structure from §F:
-  - `exchange_common` **STATIC** target (always present — see §F's correction: it compiles `exchange/common/ws_client.cpp`, the one piece of exchange-agnostic non-template `ExchangeWsClient` code, and provides the `include/exchange/common/` headers to all dependents via `$<BUILD_INTERFACE:…>`). This is a genuine *extraction*: that file is compiled directly into `krakenapi` today (check `src/CMakeLists.txt` — its `add_library(krakenapi STATIC …)` already lists `exchange/common/ws_client.cpp`); Step 8 is what moves it out.
+  - `exchange_common` **STATIC** target (always present — see §F's correction: it compiles `exchange/common/ws_client.cpp`, the one piece of exchange-agnostic non-template `ExchangeWsClient` code, and provides the `include/exchange/common/` headers to all dependents via `$<BUILD_INTERFACE:…>`). This is a genuine *extraction*: that file is compiled directly into `krakenapi` today (check `src/CMakeLists.txt` — its `add_library(krakenapi STATIC …)` already lists `exchange/common/ws_client.cpp`); Step 9 is what moves it out.
   - `krakenapi` STATIC target inside `if(KRAKENAPI_BUILD_KRAKEN)` — **sheds** `exchange/common/ws_client.cpp` (now supplied via the `exchange_common PUBLIC` link instead) and keeps just its own `kraken/rest_client.cpp` + `kraken/types.cpp`. There is no `kraken/ws_client.cpp` to rename — `KrakenWsClient` is a bare `using` alias for `ExchangeWsClient` with an `inline` factory, contributing zero non-template code (see the corrected proposed layout). OpenSSL and libcurl stay `PRIVATE`.
   - `binanceapi` STATIC target inside `if(KRAKENAPI_BUILD_BINANCE)`, using `binance/rest_client.cpp` — and `binance/ws_client.cpp` *only if* Steps 6/7 turn out to need genuinely non-template Binance WS code. Default expectation, by analogy with Kraken, is that they won't (both factories should be `inline` one-liners over `make_exchange_ws_client`). Same `PUBLIC exchange_common` / `PRIVATE` OpenSSL+libcurl link pattern as `krakenapi`.
   - Neither exchange library links the other — they are peers that both depend on `exchange_common`.
@@ -735,9 +756,9 @@ Endpoints to implement:
 - Update `CLAUDE.md` to reflect new namespace layout, file structure, and patterns.
 - Update `README.md` and link the migration guide ([001-appendix-migration-guide.md](001-appendix-migration-guide.md)) from the release notes so existing callers find it. Confirm the `exchange::kraken::*` re-exports from Step 2 are present so the guide's compatibility shim actually compiles.
 
-### Step 9 — Write the agent onboarding guide for new exchanges
+### Step 10 — Write the agent onboarding guide for new exchanges
 
-**Prerequisite**: Step 8 complete — Binance is a working, tested reference implementation with a clean per-step commit history on the feature branch.
+**Prerequisite**: Step 9 complete — Binance is a working, tested reference implementation with a clean per-step commit history on the feature branch.
 
 **Done when**: `docs/agent-add-exchange.md` exists and is verified against the Binance adapter: every checklist item has a concrete Binance counterpart that can be pointed to as a working example, and the reference diffs cited in the guide resolve to real commits on the feature branch.
 
@@ -810,9 +831,10 @@ The agent declares the integration complete only when:
 |---|---|---|
 | Breaking existing consumers of `kraken_*.hpp` headers | High (intentional) | This is a deliberate breaking change; callers update once. No legacy forwarding headers. |
 | `ExchangeWsClient` template complexity makes errors harder to read | Medium | Keep `MessageIdentifier` as a runtime `std::function`, not a template param — avoids template error cascades. |
-| Binance HMAC-SHA256 signing: query + body concatenation differs subtly from Kraken | Medium | Step 3 includes a known-good test vector from Binance docs. |
+| `IRestAuth::sign(HttpRequest&)`'s single-mutation contract was designed to Binance's shape and never validated against Kraken's structurally different one (nonce embedded in *both* the signed digest and the wire body, across two different body encodings) | Medium | Step 3 retrofits Kraken onto `IRestAuth` *first*, with `test_signature.cpp`/`test_client.cpp` already pinning correct byte-for-byte output as a regression net — so a bad-fit interface is caught and reshaped while only one (well-understood) adapter depends on it, not after Binance's REST layer is built on top. |
+| Binance HMAC-SHA256 signing: query + body concatenation differs subtly from Kraken | Medium | Step 4 includes a known-good test vector from Binance docs. |
 | Binance RSA/Ed25519 signing omitted from plan | Low (intentional) | HMAC-SHA256 covers the common case; RSA/Ed25519 can be added later with the same `IRestAuth` extension point. |
-| Binance WebSocket authentication: logon-flow vs. per-request signing | Medium | Step 7 implements per-request API-key approach first; logon session deferred. |
+| Binance WebSocket authentication: logon-flow vs. per-request signing | Medium | Step 8 implements per-request API-key approach first; logon session deferred. |
 | `ExchangeWsClient` shares dispatch for both Kraken and Binance — bugs are shared | Low | The dispatch logic is the same for both; exchange-specific bugs are isolated to each adapter's `MessageIdentifier` function (`kraken_frame_descriptor` / `binance_frame_descriptor` — *not* `identify_message`, a separate optional caller-facing classifier; see §A's naming note). |
 | Binance timestamp (`ms` vs `μs`) requires careful serialisation | Low | Wrap in `BinanceAuth::sign()` using milliseconds by default; add `microseconds` flag later. |
 
@@ -826,6 +848,6 @@ The agent declares the integration complete only when:
 
 ### Deferred items
 
-**RSA and Ed25519 signing for Binance** — Binance supports three signature algorithms. HMAC-SHA256 is the most common and is implemented in Step 3. RSA (PKCS#8 private key, SHA-256 digest) and Ed25519 are alternatives that Binance recommends for higher-security or high-throughput use cases; Ed25519 is the fastest. Both are supported by the `IRestAuth` extension point already in the design — adding them later means implementing a new `BinanceAuth` subclass and wiring `BinanceSignAlgorithm::Rsa` / `::Ed25519` in `BinanceCredentials`. No structural changes required.
+**RSA and Ed25519 signing for Binance** — Binance supports three signature algorithms. HMAC-SHA256 is the most common and is implemented in Step 4. RSA (PKCS#8 private key, SHA-256 digest) and Ed25519 are alternatives that Binance recommends for higher-security or high-throughput use cases; Ed25519 is the fastest. Both are supported by the `IRestAuth` extension point already in the design — adding them later means implementing a new `BinanceAuth` subclass and wiring `BinanceSignAlgorithm::Rsa` / `::Ed25519` in `BinanceCredentials`. No structural changes required.
 
 **Binance user data streams (listen key mechanism)** — Binance supports a real-time feed of account events (order fills, balance changes, position updates) delivered over WebSocket. Unlike market streams, access requires first calling a REST endpoint (`POST /api/v3/userDataStream`) to obtain a short-lived *listen key*, then connecting to a stream URL of the form `wss://stream.binance.com/ws/<listenKey>`. The key must be kept alive via periodic `PUT` pings (every 30 minutes) and can be closed with `DELETE`. This is structurally distinct from the WS API (bidirectional trading) and named market streams, and requires a small session-management wrapper around the listen key lifecycle. Deferred to a follow-on plan; the `IWsConnection` and `ExchangeWsClient` plumbing already supports it.
