@@ -11,3 +11,17 @@ target_include_directories(krakenapi PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 target_link_libraries(krakenapi CURL::libcurl OpenSSL::SSL nlohmann_json::nlohmann_json)
+
+#-------------------------------------------------------------------------------
+# Binance exchange adapter (Step 4+)
+#-------------------------------------------------------------------------------
+
+add_library(binanceapi STATIC
+    binance/rest_client.cpp
+)
+add_library(krakenapi::binanceapi ALIAS binanceapi)
+target_include_directories(binanceapi PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
+    $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(binanceapi CURL::libcurl OpenSSL::SSL nlohmann_json::nlohmann_json)

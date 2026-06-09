@@ -57,3 +57,11 @@ target_include_directories(test_ws_reconnect_session PRIVATE
 )
 target_link_libraries(test_ws_reconnect_session GTest::gtest_main)
 gtest_discover_tests(test_ws_reconnect_session)
+
+#-------------------------------------------------------------------------------
+# Binance auth + REST infrastructure unit tests (Step 4)
+#-------------------------------------------------------------------------------
+
+add_executable(test_binance_auth test_binance_auth.cpp)
+target_link_libraries(test_binance_auth binanceapi GTest::gtest_main)
+gtest_discover_tests(test_binance_auth)

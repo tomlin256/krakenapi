@@ -625,7 +625,7 @@ Created `include/exchange/kraken/{auth,types,rest_api,ws_api,rest_client,ws_clie
 
 **Done**: full build + all 169 tests passed (161 pre-existing, 8 new `KrakenAuth` tests); no changes to existing test or client public API.
 
-### Step 4 — Add Binance authentication and REST client
+### Step 4 — Add Binance authentication and REST client ✅ *done*
 
 **Done when**: `BinanceRestClient` executes public requests; auth signs private requests correctly; unit tests verify signatures.
 
@@ -646,6 +646,20 @@ Created `include/exchange/kraken/{auth,types,rest_api,ws_api,rest_client,ws_clie
 - Create `include/exchange/binance/rest_client.hpp` + `src/binance/rest_client.cpp` — `BinanceRestClient`, mirrors `KrakenRestClient` interface. Default base URL: `https://api.binance.com`. The HTTP performer must return the response **status code** as well as the body (see envelope section C).
 - Create `tests/unit/test_binance_auth.cpp` — verify HMAC-SHA256 hex signature against Binance's published worked example (the SPOT `order` example in *REST API → SIGNED endpoint examples*, which gives a known key/secret/params → expected signature). This is the Binance analog of `test_signature.cpp`.
 - **Tests**: New tests pass; all Kraken tests still pass.
+
+**HMAC test vector verified**: `echo -n "<params>" | openssl dgst -sha256 -hmac "<secret>"` confirms that `detail::to_hex(detail::hmac_sha256(secret, total_params))` matches OpenSSL's output byte-for-byte. The expected value in `test_binance_auth.cpp` (`20a0e317...`) is independently confirmed; the value sometimes cited in older Binance docs (`c8db...`) is for a different parameter set and is not correct for these inputs.
+
+**Signing differences proven by tests** (each covered by a dedicated assertion):
+- Digest: HMAC-SHA256 (confirmed by `HmacSha256HexMatchesPublishedVector` against OpenSSL-verified vector)
+- Output encoding: lowercase hex (asserted by `ToHex_IsLowercase`)
+- Anti-replay: timestamp injected in `sign()`, not in `build()` (asserted by GET and POST injection tests)
+- Key material: raw UTF-8 bytes — no base64 decoding (implicit in all crypto tests)
+
+**Design note — `ClockFn` injectable clock**: `BinanceAuth` accepts a `std::function<int64_t()>` clock parameter so unit tests can inject a fixed timestamp. The constructor default is a real millisecond-resolution system clock. This is what makes the GET/POST injection tests deterministic without any mocking framework.
+
+**`BinanceRestClient` performer signature** differs from `KrakenRestClient`: the performer returns `std::pair<int, std::string>` (HTTP status + body) rather than just the body, because Binance uses real HTTP status codes to signal errors (unlike Kraken, which always returns 200 and an error array). `parse_binance_response<T>()` reads both to derive `RestResponse::ok`.
+
+**Done**: full build + all 179 tests passed (169 pre-existing, 10 new Binance auth tests); no changes to existing test or client public API. Files added: `include/exchange/binance/auth.hpp`, `include/exchange/binance/rest_api.hpp`, `include/exchange/binance/rest_client.hpp`, `src/binance/rest_client.cpp`, `tests/unit/test_binance_auth.cpp`; updated `src/CMakeLists.txt` and `tests/unit/CMakeLists.txt`.
 
 ### Step 5 — Binance REST public endpoints
 
