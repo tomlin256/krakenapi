@@ -22,8 +22,11 @@
 
 #include "exchange/common/rest.hpp"
 
+#include <cstdint>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace exchange::binance::rest {
 
@@ -81,5 +84,109 @@ parse_binance_response(int http_status, const json& j) {
     }
     return resp;
 }
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+namespace detail {
+
+// Builds the percent-encoded query value Binance expects for multi-symbol
+// requests, e.g. ["BTCUSDT","ETHBTC"] -> "%5B%22BTCUSDT%22%2C%22ETHBTC%22%5D".
+// Hand-escapes only `[`, `]`, `"`, `,` — sufficient because real Binance
+// symbols are uppercase alphanumeric and need no other escaping. This is not
+// a general-purpose URL encoder and is not shared with Kraken's
+// detail::url_encode.
+inline std::string symbols_query_value(const std::vector<std::string>& symbols) {
+    std::string out = "%5B";
+    for (size_t i = 0; i < symbols.size(); ++i) {
+        if (i) out += "%2C";
+        out += "%22";
+        out += symbols[i];
+        out += "%22";
+    }
+    out += "%5D";
+    return out;
+}
+
+} // namespace detail
+
+// ── GET /api/v3/ping ─────────────────────────────────────────────────────────
+
+struct BinancePing {
+    static BinancePing from_json(const json&) { return {}; }
+};
+
+struct BinancePingRequest : TypedPublicRequest<BinancePing> {
+    HttpRequest build() const override {
+        HttpRequest r;
+        r.method = HttpRequest::Method::GET;
+        r.path   = "/api/v3/ping";
+        return r;
+    }
+};
+
+// ── GET /api/v3/time ─────────────────────────────────────────────────────────
+
+struct BinanceServerTime {
+    int64_t server_time{0};
+    static BinanceServerTime from_json(const json& j) {
+        BinanceServerTime t;
+        t.server_time = j.value("serverTime", int64_t{0});
+        return t;
+    }
+};
+
+struct BinanceServerTimeRequest : TypedPublicRequest<BinanceServerTime> {
+    HttpRequest build() const override {
+        HttpRequest r;
+        r.method = HttpRequest::Method::GET;
+        r.path   = "/api/v3/time";
+        return r;
+    }
+};
+
+// ── GET /api/v3/ticker/price ─────────────────────────────────────────────────
+
+struct BinanceTickerPriceEntry {
+    std::string symbol;
+    double      price{0.0};
+    static BinanceTickerPriceEntry from_json(const json& j) {
+        BinanceTickerPriceEntry e;
+        e.symbol = j.value("symbol", "");
+        e.price  = std::stod(j.value("price", "0"));
+        return e;
+    }
+};
+
+struct BinanceTickerPrice {
+    std::vector<BinanceTickerPriceEntry> entries;
+    static BinanceTickerPrice from_json(const json& j) {
+        BinanceTickerPrice t;
+        if (j.is_array()) {
+            for (const auto& el : j)
+                t.entries.push_back(BinanceTickerPriceEntry::from_json(el));
+        } else {
+            t.entries.push_back(BinanceTickerPriceEntry::from_json(j));
+        }
+        return t;
+    }
+};
+
+struct BinanceTickerPriceRequest : TypedPublicRequest<BinanceTickerPrice> {
+    std::optional<std::string>              symbol;
+    std::optional<std::vector<std::string>> symbols;
+
+    // Prefers `symbol` if set, else `symbols`, else neither.
+    HttpRequest build() const override {
+        HttpRequest r;
+        r.method = HttpRequest::Method::GET;
+        r.path   = "/api/v3/ticker/price";
+        if (symbol) {
+            r.query = "symbol=" + *symbol;
+        } else if (symbols && !symbols->empty()) {
+            r.query = "symbols=" + detail::symbols_query_value(*symbols);
+        }
+        return r;
+    }
+};
 
 } // namespace exchange::binance::rest

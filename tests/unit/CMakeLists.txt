@@ -65,3 +65,15 @@ gtest_discover_tests(test_ws_reconnect_session)
 add_executable(test_binance_auth test_binance_auth.cpp)
 target_link_libraries(test_binance_auth binanceapi GTest::gtest_main)
 gtest_discover_tests(test_binance_auth)
+
+#-------------------------------------------------------------------------------
+# Binance REST public market-data unit tests (Step 5.1)
+#-------------------------------------------------------------------------------
+
+add_executable(test_binance_rest_requests test_binance_rest_requests.cpp)
+target_link_libraries(test_binance_rest_requests binanceapi GTest::gtest_main)
+gtest_discover_tests(test_binance_rest_requests)
+
+add_executable(test_binance_rest_responses test_binance_rest_responses.cpp)
+target_link_libraries(test_binance_rest_responses binanceapi GTest::gtest_main)
+gtest_discover_tests(test_binance_rest_responses)
