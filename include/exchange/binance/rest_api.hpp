@@ -189,4 +189,97 @@ struct BinanceTickerPriceRequest : TypedPublicRequest<BinanceTickerPrice> {
     }
 };
 
+// ── GET /api/v3/depth ────────────────────────────────────────────────────────
+
+struct BinanceBookLevel {
+    double price{0.0};
+    double quantity{0.0};
+    // Parses a positional 2-element row: ["price","qty"].
+    static BinanceBookLevel from_json(const json& row) {
+        BinanceBookLevel l;
+        l.price    = std::stod(row.at(0).get<std::string>());
+        l.quantity = std::stod(row.at(1).get<std::string>());
+        return l;
+    }
+};
+
+struct BinanceOrderBook {
+    int64_t                       last_update_id{0};
+    std::vector<BinanceBookLevel> bids;
+    std::vector<BinanceBookLevel> asks;
+    static BinanceOrderBook from_json(const json& j) {
+        BinanceOrderBook b;
+        b.last_update_id = j.value("lastUpdateId", int64_t{0});
+        if (j.contains("bids"))
+            for (const auto& row : j["bids"])
+                b.bids.push_back(BinanceBookLevel::from_json(row));
+        if (j.contains("asks"))
+            for (const auto& row : j["asks"])
+                b.asks.push_back(BinanceBookLevel::from_json(row));
+        return b;
+    }
+};
+
+struct BinanceOrderBookRequest : TypedPublicRequest<BinanceOrderBook> {
+    std::string        symbol;
+    std::optional<int> limit;
+
+    HttpRequest build() const override {
+        HttpRequest r;
+        r.method = HttpRequest::Method::GET;
+        r.path   = "/api/v3/depth";
+        r.query  = "symbol=" + symbol;
+        if (limit) r.query += "&limit=" + std::to_string(*limit);
+        return r;
+    }
+};
+
+// ── GET /api/v3/trades ───────────────────────────────────────────────────────
+
+struct BinanceTrade {
+    int64_t id{0};
+    double  price{0.0};
+    double  qty{0.0};
+    double  quote_qty{0.0};
+    int64_t time{0};
+    bool    is_buyer_maker{false};
+    bool    is_best_match{false};
+    static BinanceTrade from_json(const json& j) {
+        BinanceTrade t;
+        t.id             = j.value("id", int64_t{0});
+        t.price          = std::stod(j.value("price", "0"));
+        t.qty            = std::stod(j.value("qty", "0"));
+        t.quote_qty      = std::stod(j.value("quoteQty", "0"));
+        t.time           = j.value("time", int64_t{0});
+        t.is_buyer_maker = j.value("isBuyerMaker", false);
+        t.is_best_match  = j.value("isBestMatch", false);
+        return t;
+    }
+};
+
+struct BinanceTradesResult {
+    std::vector<BinanceTrade> trades;
+    // Top-level array response.
+    static BinanceTradesResult from_json(const json& j) {
+        BinanceTradesResult r;
+        for (const auto& el : j)
+            r.trades.push_back(BinanceTrade::from_json(el));
+        return r;
+    }
+};
+
+struct BinanceRecentTradesRequest : TypedPublicRequest<BinanceTradesResult> {
+    std::string        symbol;
+    std::optional<int> limit;
+
+    HttpRequest build() const override {
+        HttpRequest r;
+        r.method = HttpRequest::Method::GET;
+        r.path   = "/api/v3/trades";
+        r.query  = "symbol=" + symbol;
+        if (limit) r.query += "&limit=" + std::to_string(*limit);
+        return r;
+    }
+};
+
 } // namespace exchange::binance::rest

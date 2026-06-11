@@ -50,6 +50,37 @@ TEST(BinanceRestResponses, TickerPrice_Array) {
     EXPECT_DOUBLE_EQ(t.entries[1].price, 0.07734100);
 }
 
+TEST(BinanceRestResponses, OrderBook_FromJson) {
+    auto j = json::parse(fixtures::kDepthJson);
+    auto b = BinanceOrderBook::from_json(j);
+    EXPECT_EQ(b.last_update_id, 1027024LL);
+    ASSERT_EQ(b.bids.size(), 1u);
+    EXPECT_DOUBLE_EQ(b.bids[0].price, 4.0);
+    EXPECT_DOUBLE_EQ(b.bids[0].quantity, 431.0);
+    ASSERT_EQ(b.asks.size(), 1u);
+    EXPECT_DOUBLE_EQ(b.asks[0].price, 4.000002);
+    EXPECT_DOUBLE_EQ(b.asks[0].quantity, 12.0);
+}
+
+TEST(BinanceRestResponses, Trades_FromJson) {
+    auto j = json::parse(fixtures::kTradesJson);
+    auto r = BinanceTradesResult::from_json(j);
+    ASSERT_EQ(r.trades.size(), 1u);
+    const auto& t = r.trades[0];
+    EXPECT_EQ(t.id, 28457LL);
+    EXPECT_DOUBLE_EQ(t.price, 4.00000100);
+    EXPECT_DOUBLE_EQ(t.qty, 12.0);
+    EXPECT_DOUBLE_EQ(t.quote_qty, 48.000012);
+    EXPECT_EQ(t.time, 1499865549590LL);
+    EXPECT_TRUE(t.is_buyer_maker);
+    EXPECT_TRUE(t.is_best_match);
+}
+
+TEST(BinanceRestResponses, Trades_EmptyArray) {
+    auto r = BinanceTradesResult::from_json(json::array());
+    EXPECT_TRUE(r.trades.empty());
+}
+
 // ---------------------------------------------------------------------------
 // parse_binance_response envelope
 // ---------------------------------------------------------------------------

@@ -65,3 +65,37 @@ TEST(BinancePublicRequests, TickerPrice_SymbolPreferredOverSymbols) {
     auto http = req.build();
     EXPECT_EQ(http.query, "symbol=BTCUSDT");
 }
+
+TEST(BinancePublicRequests, OrderBook_SymbolOnly) {
+    BinanceOrderBookRequest req;
+    req.symbol = "BTCUSDT";
+    auto http = req.build();
+    EXPECT_EQ(http.path, "/api/v3/depth");
+    EXPECT_EQ(http.method, HttpRequest::Method::GET);
+    EXPECT_EQ(http.query, "symbol=BTCUSDT");
+}
+
+TEST(BinancePublicRequests, OrderBook_WithLimit) {
+    BinanceOrderBookRequest req;
+    req.symbol = "BTCUSDT";
+    req.limit  = 50;
+    auto http = req.build();
+    EXPECT_EQ(http.query, "symbol=BTCUSDT&limit=50");
+}
+
+TEST(BinancePublicRequests, RecentTrades_SymbolOnly) {
+    BinanceRecentTradesRequest req;
+    req.symbol = "BTCUSDT";
+    auto http = req.build();
+    EXPECT_EQ(http.path, "/api/v3/trades");
+    EXPECT_EQ(http.method, HttpRequest::Method::GET);
+    EXPECT_EQ(http.query, "symbol=BTCUSDT");
+}
+
+TEST(BinancePublicRequests, RecentTrades_WithLimit) {
+    BinanceRecentTradesRequest req;
+    req.symbol = "BTCUSDT";
+    req.limit  = 10;
+    auto http = req.build();
+    EXPECT_EQ(http.query, "symbol=BTCUSDT&limit=10");
+}
