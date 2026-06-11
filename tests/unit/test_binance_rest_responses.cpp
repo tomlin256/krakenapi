@@ -81,6 +81,24 @@ TEST(BinanceRestResponses, Trades_EmptyArray) {
     EXPECT_TRUE(r.trades.empty());
 }
 
+TEST(BinanceRestResponses, Klines_FromJson) {
+    auto j = json::parse(fixtures::kKlinesJson);
+    auto r = BinanceKlinesResult::from_json(j);
+    ASSERT_EQ(r.klines.size(), 1u);
+    const auto& k = r.klines[0];
+    EXPECT_EQ(k.open_time, 1499040000000LL);
+    EXPECT_DOUBLE_EQ(k.open, 0.01634790);
+    EXPECT_DOUBLE_EQ(k.high, 0.80000000);
+    EXPECT_DOUBLE_EQ(k.low, 0.01575800);
+    EXPECT_DOUBLE_EQ(k.close, 0.01577100);
+    EXPECT_DOUBLE_EQ(k.volume, 148976.11427815);
+    EXPECT_EQ(k.close_time, 1499644799999LL);
+    EXPECT_DOUBLE_EQ(k.quote_asset_volume, 2434.19055334);
+    EXPECT_EQ(k.num_trades, 308LL);
+    EXPECT_DOUBLE_EQ(k.taker_buy_base_volume, 1756.87402397);
+    EXPECT_DOUBLE_EQ(k.taker_buy_quote_volume, 28.46694368);
+}
+
 // ---------------------------------------------------------------------------
 // parse_binance_response envelope
 // ---------------------------------------------------------------------------

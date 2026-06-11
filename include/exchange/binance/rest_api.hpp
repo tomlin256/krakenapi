@@ -282,4 +282,66 @@ struct BinanceRecentTradesRequest : TypedPublicRequest<BinanceTradesResult> {
     }
 };
 
+// ── GET /api/v3/klines ───────────────────────────────────────────────────────
+
+struct BinanceKline {
+    int64_t open_time{0};
+    double  open{0.0};
+    double  high{0.0};
+    double  low{0.0};
+    double  close{0.0};
+    double  volume{0.0};
+    int64_t close_time{0};
+    double  quote_asset_volume{0.0};
+    int64_t num_trades{0};
+    double  taker_buy_base_volume{0.0};
+    double  taker_buy_quote_volume{0.0};
+    // Parses a 12-element positional row; field 11 ("ignore") is dropped.
+    static BinanceKline from_json(const json& row) {
+        BinanceKline k;
+        k.open_time              = row.at(0).get<int64_t>();
+        k.open                   = std::stod(row.at(1).get<std::string>());
+        k.high                   = std::stod(row.at(2).get<std::string>());
+        k.low                    = std::stod(row.at(3).get<std::string>());
+        k.close                  = std::stod(row.at(4).get<std::string>());
+        k.volume                 = std::stod(row.at(5).get<std::string>());
+        k.close_time             = row.at(6).get<int64_t>();
+        k.quote_asset_volume     = std::stod(row.at(7).get<std::string>());
+        k.num_trades             = row.at(8).get<int64_t>();
+        k.taker_buy_base_volume  = std::stod(row.at(9).get<std::string>());
+        k.taker_buy_quote_volume = std::stod(row.at(10).get<std::string>());
+        return k;
+    }
+};
+
+struct BinanceKlinesResult {
+    std::vector<BinanceKline> klines;
+    // Top-level array response.
+    static BinanceKlinesResult from_json(const json& j) {
+        BinanceKlinesResult r;
+        for (const auto& row : j)
+            r.klines.push_back(BinanceKline::from_json(row));
+        return r;
+    }
+};
+
+struct BinanceKlinesRequest : TypedPublicRequest<BinanceKlinesResult> {
+    std::string            symbol;
+    std::string            interval;
+    std::optional<int64_t> start_time;
+    std::optional<int64_t> end_time;
+    std::optional<int>     limit;
+
+    HttpRequest build() const override {
+        HttpRequest r;
+        r.method = HttpRequest::Method::GET;
+        r.path   = "/api/v3/klines";
+        r.query  = "symbol=" + symbol + "&interval=" + interval;
+        if (start_time) r.query += "&startTime=" + std::to_string(*start_time);
+        if (end_time)   r.query += "&endTime=" + std::to_string(*end_time);
+        if (limit)      r.query += "&limit=" + std::to_string(*limit);
+        return r;
+    }
+};
+
 } // namespace exchange::binance::rest
