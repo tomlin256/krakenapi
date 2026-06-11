@@ -69,6 +69,11 @@ target_link_libraries(ws_client_example krakenapi ixwebsocket spdlog::spdlog CLI
 add_executable (rest_client_example examples/rest_client_example.cpp)
 target_link_libraries(rest_client_example krakenapi spdlog::spdlog CLI11::CLI11 example_backward)
 
+add_executable(binance_rest_client_example examples/binance/binance_rest_client_example.cpp)
+target_link_libraries(binance_rest_client_example
+    binanceapi spdlog::spdlog CLI11::CLI11 example_backward
+)
+
 #-------------------------------------------------------------------------------
 # Unit tests
 #-------------------------------------------------------------------------------
