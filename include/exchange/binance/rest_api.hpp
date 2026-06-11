@@ -491,4 +491,98 @@ struct BinanceTicker24hrRequest : TypedPublicRequest<BinanceTicker24hr> {
     }
 };
 
+// ═════════════════════════════════════════════════════════════════════════════
+// Signed (private) endpoints — Step 6.
+//
+// build() constructs the request WITHOUT auth params; BinanceRestClient's
+// execute(req, auth) calls auth.sign(), which appends timestamp/recvWindow/
+// signature to the query (GET/DELETE) or body (POST) and signs the raw
+// `query + body` concatenation. POST requests must therefore put ALL params
+// in `body` and leave `query` empty; GET/DELETE use only `query`.
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ── GET /api/v3/account ──────────────────────────────────────────────────────
+
+struct BinanceCommissionRates {
+    double maker{0.0};
+    double taker{0.0};
+    double buyer{0.0};
+    double seller{0.0};
+
+    static BinanceCommissionRates from_json(const json& j) {
+        BinanceCommissionRates r;
+        r.maker  = std::stod(j.value("maker", "0"));
+        r.taker  = std::stod(j.value("taker", "0"));
+        r.buyer  = std::stod(j.value("buyer", "0"));
+        r.seller = std::stod(j.value("seller", "0"));
+        return r;
+    }
+};
+
+struct BinanceBalance {
+    std::string asset;
+    double      free{0.0};
+    double      locked{0.0};
+
+    static BinanceBalance from_json(const json& j) {
+        BinanceBalance b;
+        b.asset  = j.value("asset", "");
+        b.free   = std::stod(j.value("free", "0"));
+        b.locked = std::stod(j.value("locked", "0"));
+        return b;
+    }
+};
+
+struct BinanceAccount {
+    int                         maker_commission{0};
+    int                         taker_commission{0};
+    int                         buyer_commission{0};
+    int                         seller_commission{0};
+    BinanceCommissionRates      commission_rates;
+    bool                        can_trade{false};
+    bool                        can_withdraw{false};
+    bool                        can_deposit{false};
+    bool                        brokered{false};
+    bool                        require_self_trade_prevention{false};
+    bool                        prevent_sor{false};
+    int64_t                     update_time{0};
+    std::string                 account_type;
+    std::vector<BinanceBalance> balances;
+    std::vector<std::string>    permissions;
+    int64_t                     uid{0};
+
+    static BinanceAccount from_json(const json& j) {
+        BinanceAccount a;
+        a.maker_commission  = j.value("makerCommission", 0);
+        a.taker_commission  = j.value("takerCommission", 0);
+        a.buyer_commission  = j.value("buyerCommission", 0);
+        a.seller_commission = j.value("sellerCommission", 0);
+        if (j.contains("commissionRates"))
+            a.commission_rates = BinanceCommissionRates::from_json(j.at("commissionRates"));
+        a.can_trade                     = j.value("canTrade", false);
+        a.can_withdraw                  = j.value("canWithdraw", false);
+        a.can_deposit                   = j.value("canDeposit", false);
+        a.brokered                      = j.value("brokered", false);
+        a.require_self_trade_prevention = j.value("requireSelfTradePrevention", false);
+        a.prevent_sor                   = j.value("preventSor", false);
+        a.update_time                   = j.value("updateTime", int64_t{0});
+        a.account_type                  = j.value("accountType", "");
+        for (const auto& el : j.value("balances", json::array()))
+            a.balances.push_back(BinanceBalance::from_json(el));
+        for (const auto& el : j.value("permissions", json::array()))
+            a.permissions.push_back(el.get<std::string>());
+        a.uid = j.value("uid", int64_t{0});
+        return a;
+    }
+};
+
+struct BinanceAccountRequest : TypedPrivateRequest<BinanceAccount> {
+    HttpRequest build() const override {
+        HttpRequest r;
+        r.method = HttpRequest::Method::GET;
+        r.path   = "/api/v3/account";
+        return r;
+    }
+};
+
 } // namespace exchange::binance::rest

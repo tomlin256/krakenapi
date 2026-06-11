@@ -8,6 +8,7 @@
 // =============================================================================
 
 #include "exchange/binance/rest_api.hpp"
+#include "binance_account_example_json.hpp"
 #include "binance_rest_example_json.hpp"
 
 #include <algorithm>
@@ -160,6 +161,40 @@ TEST(BinanceRestResponses, Ticker24hr_Array) {
     EXPECT_EQ(t.entries[0].symbol, "BNBBTC");
     EXPECT_EQ(t.entries[1].symbol, "ETHBTC");
     EXPECT_DOUBLE_EQ(t.entries[1].last_price, 0.07734100);
+}
+
+// ---------------------------------------------------------------------------
+// from_json — signed (private) endpoint responses
+// ---------------------------------------------------------------------------
+
+TEST(BinanceRestResponses, Account_FromJson) {
+    auto j = json::parse(fixtures::kAccountJson);
+    auto a = BinanceAccount::from_json(j);
+    EXPECT_EQ(a.maker_commission, 15);
+    EXPECT_EQ(a.taker_commission, 15);
+    EXPECT_EQ(a.buyer_commission, 0);
+    EXPECT_EQ(a.seller_commission, 0);
+    EXPECT_DOUBLE_EQ(a.commission_rates.maker, 0.0015);
+    EXPECT_DOUBLE_EQ(a.commission_rates.taker, 0.0015);
+    EXPECT_DOUBLE_EQ(a.commission_rates.buyer, 0.0);
+    EXPECT_DOUBLE_EQ(a.commission_rates.seller, 0.0);
+    EXPECT_TRUE(a.can_trade);
+    EXPECT_TRUE(a.can_withdraw);
+    EXPECT_TRUE(a.can_deposit);
+    EXPECT_FALSE(a.brokered);
+    EXPECT_FALSE(a.require_self_trade_prevention);
+    EXPECT_FALSE(a.prevent_sor);
+    EXPECT_EQ(a.update_time, 123456789LL);
+    EXPECT_EQ(a.account_type, "SPOT");
+    ASSERT_EQ(a.balances.size(), 2u);
+    EXPECT_EQ(a.balances[0].asset, "BTC");
+    EXPECT_DOUBLE_EQ(a.balances[0].free, 4723846.89208129);
+    EXPECT_DOUBLE_EQ(a.balances[0].locked, 0.0);
+    EXPECT_EQ(a.balances[1].asset, "LTC");
+    EXPECT_DOUBLE_EQ(a.balances[1].free, 4763368.68006011);
+    ASSERT_EQ(a.permissions.size(), 1u);
+    EXPECT_EQ(a.permissions[0], "SPOT");
+    EXPECT_EQ(a.uid, 354937868LL);
 }
 
 // ---------------------------------------------------------------------------

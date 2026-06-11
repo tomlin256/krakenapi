@@ -179,3 +179,17 @@ TEST(BinancePublicRequests, Ticker24hr_MultipleSymbols) {
     auto http = req.build();
     EXPECT_EQ(http.query, "symbols=%5B%22BTCUSDT%22%2C%22ETHBTC%22%5D");
 }
+
+// ---------------------------------------------------------------------------
+// Private (signed) requests — build() constructs the request WITHOUT auth
+// params; BinanceAuth::sign() appends timestamp/recvWindow/signature later.
+// ---------------------------------------------------------------------------
+
+TEST(BinancePrivateRequests, Account_Path) {
+    BinanceAccountRequest req;
+    auto http = req.build();
+    EXPECT_EQ(http.path, "/api/v3/account");
+    EXPECT_EQ(http.method, HttpRequest::Method::GET);
+    EXPECT_TRUE(http.query.empty());
+    EXPECT_TRUE(http.body.empty());
+}
