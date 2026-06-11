@@ -33,7 +33,7 @@ enum class OrderType {
     SettlePosition
 };
 
-enum class TimeInForce { GTC, GTD, IOC };
+enum class TimeInForce { GTC, GTD, IOC, FOK };
 
 enum class OrderStatus {
     PendingNew,
@@ -75,6 +75,7 @@ inline std::string to_string(TimeInForce v) {
         case TimeInForce::GTC: return "gtc";
         case TimeInForce::GTD: return "gtd";
         case TimeInForce::IOC: return "ioc";
+        case TimeInForce::FOK: return "fok";
     }
     throw std::invalid_argument("Unknown TimeInForce");
 }

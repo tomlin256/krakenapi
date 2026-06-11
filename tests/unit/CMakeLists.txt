@@ -67,6 +67,14 @@ target_link_libraries(test_binance_auth binanceapi GTest::gtest_main)
 gtest_discover_tests(test_binance_auth)
 
 #-------------------------------------------------------------------------------
+# Binance enum converter unit tests (Step 6.1)
+#-------------------------------------------------------------------------------
+
+add_executable(test_binance_types test_binance_types.cpp)
+target_link_libraries(test_binance_types binanceapi GTest::gtest_main)
+gtest_discover_tests(test_binance_types)
+
+#-------------------------------------------------------------------------------
 # Binance REST public market-data unit tests (Step 5.1)
 #-------------------------------------------------------------------------------
 

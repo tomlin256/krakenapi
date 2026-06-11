@@ -84,3 +84,27 @@ TEST(OrderTypeFromString, ThrowsOnUnknown) {
     EXPECT_THROW(exchange::kraken::kraken_order_type_from_string("not-a-real-type"),
                  std::invalid_argument);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TimeInForce — canonical FOK (added for Binance) has no Kraken wire format
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST(TimeInForceToString, CanonicalIncludesFok) {
+    using exchange::TimeInForce;
+    EXPECT_EQ(exchange::to_string(TimeInForce::GTC), "gtc");
+    EXPECT_EQ(exchange::to_string(TimeInForce::GTD), "gtd");
+    EXPECT_EQ(exchange::to_string(TimeInForce::IOC), "ioc");
+    EXPECT_EQ(exchange::to_string(TimeInForce::FOK), "fok");
+}
+
+TEST(TimeInForceToString, KrakenRejectsFok) {
+    using exchange::TimeInForce;
+    // Kraken's Spot API has no fill-or-kill time-in-force; the canonical
+    // value exists for Binance. The Kraken converter must throw rather than
+    // emit a string Kraken would reject (or worse, misinterpret).
+    EXPECT_EQ(exchange::kraken::kraken_tif_to_string(TimeInForce::GTC), "gtc");
+    EXPECT_THROW(exchange::kraken::kraken_tif_to_string(TimeInForce::FOK),
+                 std::invalid_argument);
+    EXPECT_THROW(exchange::kraken::kraken_tif_from_string("fok"),
+                 std::invalid_argument);
+}

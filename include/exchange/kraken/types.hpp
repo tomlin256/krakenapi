@@ -143,6 +143,10 @@ inline std::string kraken_tif_to_string(TimeInForce v) {
         case TimeInForce::GTC: return "gtc";
         case TimeInForce::GTD: return "gtd";
         case TimeInForce::IOC: return "ioc";
+        case TimeInForce::FOK:
+            // Canonical value with no Kraken wire format — Kraken's Spot API
+            // has no fill-or-kill time-in-force.
+            throw std::invalid_argument("Kraken does not support FOK time-in-force");
     }
     throw std::invalid_argument("Unknown TimeInForce");
 }

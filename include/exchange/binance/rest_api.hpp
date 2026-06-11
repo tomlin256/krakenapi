@@ -20,6 +20,7 @@
 //   - TypedPublicRequest<R> / TypedPrivateRequest<R> (compile-time response binding)
 //   - parse_binance_response<T>() — maps (http_status, json) → RestResponse<T>
 
+#include "exchange/binance/types.hpp"
 #include "exchange/common/rest.hpp"
 
 #include <cstdint>
