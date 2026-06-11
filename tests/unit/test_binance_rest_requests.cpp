@@ -249,3 +249,84 @@ TEST(BinancePrivateRequests, MyTrades_FromIdAndLimit) {
     auto http = req.build();
     EXPECT_EQ(http.query, "symbol=BNBBTC&fromId=28000&limit=5");
 }
+
+// ---------------------------------------------------------------------------
+// Trading requests (Step 6.4) — POST params live in the body (query empty);
+// DELETE params live in the query (body empty). BinanceAuth signs whichever
+// side the method dictates, so a param on the wrong side would corrupt the
+// signed payload.
+// ---------------------------------------------------------------------------
+
+TEST(BinanceTradingRequests, NewOrder_MarketMinimal) {
+    BinanceNewOrderRequest req;
+    req.symbol   = "BTCUSDT";
+    req.side     = exchange::Side::Sell;
+    req.type     = exchange::OrderType::Market;
+    req.quantity = "10.00000000";
+    auto http = req.build();
+    EXPECT_EQ(http.path, "/api/v3/order");
+    EXPECT_EQ(http.method, HttpRequest::Method::POST);
+    EXPECT_TRUE(http.query.empty());
+    EXPECT_EQ(http.body, "symbol=BTCUSDT&side=SELL&type=MARKET&quantity=10.00000000");
+}
+
+TEST(BinanceTradingRequests, NewOrder_LimitAllOptions) {
+    BinanceNewOrderRequest req;
+    req.symbol              = "BTCUSDT";
+    req.side                = exchange::Side::Buy;
+    req.type                = exchange::OrderType::Limit;
+    req.time_in_force       = exchange::TimeInForce::GTC;
+    req.quantity            = "1.00000000";
+    req.quote_order_qty     = "50000.00000000";
+    req.price               = "40000.00000000";
+    req.new_client_order_id = "myOrder1";
+    req.stop_price          = "39000.00000000";
+    req.iceberg_qty         = "0.10000000";
+    req.new_order_resp_type = exchange::binance::BinanceOrderRespType::Full;
+    auto http = req.build();
+    EXPECT_TRUE(http.query.empty());
+    EXPECT_EQ(http.body,
+              "symbol=BTCUSDT&side=BUY&type=LIMIT&timeInForce=GTC"
+              "&quantity=1.00000000&quoteOrderQty=50000.00000000"
+              "&price=40000.00000000&newClientOrderId=myOrder1"
+              "&stopPrice=39000.00000000&icebergQty=0.10000000"
+              "&newOrderRespType=FULL");
+}
+
+TEST(BinanceTradingRequests, NewOrder_UnsupportedTypeThrows) {
+    // TrailingStop has no Binance Spot wire format — build() must propagate
+    // binance_order_type_to_string's throw rather than emit a bogus param.
+    BinanceNewOrderRequest req;
+    req.symbol = "BTCUSDT";
+    req.type   = exchange::OrderType::TrailingStop;
+    EXPECT_THROW(req.build(), std::invalid_argument);
+}
+
+TEST(BinanceTradingRequests, CancelOrder_ByOrderId) {
+    BinanceCancelOrderRequest req;
+    req.symbol   = "LTCBTC";
+    req.order_id = 4;
+    auto http = req.build();
+    EXPECT_EQ(http.path, "/api/v3/order");
+    EXPECT_EQ(http.method, HttpRequest::Method::DELETE);
+    EXPECT_EQ(http.query, "symbol=LTCBTC&orderId=4");
+    EXPECT_TRUE(http.body.empty());
+}
+
+TEST(BinanceTradingRequests, CancelOrder_ByOrigClientOrderId) {
+    BinanceCancelOrderRequest req;
+    req.symbol               = "LTCBTC";
+    req.orig_client_order_id = "myOrder1";
+    auto http = req.build();
+    EXPECT_EQ(http.query, "symbol=LTCBTC&origClientOrderId=myOrder1");
+}
+
+TEST(BinanceTradingRequests, CancelAllOpenOrders_Query) {
+    BinanceCancelAllOpenOrdersRequest req;
+    req.symbol = "BTCUSDT";
+    auto http = req.build();
+    EXPECT_EQ(http.path, "/api/v3/openOrders");
+    EXPECT_EQ(http.method, HttpRequest::Method::DELETE);
+    EXPECT_EQ(http.query, "symbol=BTCUSDT");
+    EXPECT_TRUE(http.body.empty());
+}

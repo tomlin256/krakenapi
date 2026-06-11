@@ -260,6 +260,114 @@ TEST(BinanceRestResponses, MyTrades_FromJson) {
 }
 
 // ---------------------------------------------------------------------------
+// from_json — trading responses (Step 6.4)
+// ---------------------------------------------------------------------------
+
+TEST(BinanceRestResponses, NewOrder_AckShape) {
+    auto j = json::parse(fixtures::kNewOrderAckJson);
+    auto r = BinanceNewOrderResponse::from_json(j);
+    EXPECT_EQ(r.symbol, "BTCUSDT");
+    EXPECT_EQ(r.order_id, 28LL);
+    EXPECT_EQ(r.order_list_id, -1LL);
+    EXPECT_EQ(r.client_order_id, "6gCrw2kRUAF9CvJDGP16IP");
+    EXPECT_EQ(r.transact_time, 1507725176595LL);
+    // ACK carries nothing beyond the five always-fields — every optional
+    // must stay unset, distinguishing "absent" from "sent as zero".
+    EXPECT_FALSE(r.price.has_value());
+    EXPECT_FALSE(r.orig_qty.has_value());
+    EXPECT_FALSE(r.executed_qty.has_value());
+    EXPECT_FALSE(r.orig_quote_order_qty.has_value());
+    EXPECT_FALSE(r.cummulative_quote_qty.has_value());
+    EXPECT_FALSE(r.status.has_value());
+    EXPECT_FALSE(r.time_in_force.has_value());
+    EXPECT_FALSE(r.type.has_value());
+    EXPECT_FALSE(r.side.has_value());
+    EXPECT_FALSE(r.working_time.has_value());
+    EXPECT_FALSE(r.self_trade_prevention_mode.has_value());
+    EXPECT_TRUE(r.fills.empty());
+}
+
+TEST(BinanceRestResponses, NewOrder_ResultShape) {
+    auto j = json::parse(fixtures::kNewOrderResultJson);
+    auto r = BinanceNewOrderResponse::from_json(j);
+    EXPECT_EQ(r.symbol, "BTCUSDT");
+    EXPECT_EQ(r.order_id, 28LL);
+    ASSERT_TRUE(r.price.has_value());
+    EXPECT_DOUBLE_EQ(*r.price, 0.0);
+    ASSERT_TRUE(r.orig_qty.has_value());
+    EXPECT_DOUBLE_EQ(*r.orig_qty, 10.0);
+    ASSERT_TRUE(r.executed_qty.has_value());
+    EXPECT_DOUBLE_EQ(*r.executed_qty, 10.0);
+    ASSERT_TRUE(r.orig_quote_order_qty.has_value());
+    EXPECT_DOUBLE_EQ(*r.orig_quote_order_qty, 0.0);
+    ASSERT_TRUE(r.cummulative_quote_qty.has_value());
+    EXPECT_DOUBLE_EQ(*r.cummulative_quote_qty, 10.0);
+    EXPECT_EQ(r.status, exchange::OrderStatus::Filled);
+    EXPECT_EQ(r.time_in_force, exchange::TimeInForce::GTC);
+    EXPECT_EQ(r.type, "MARKET");  // raw wire string — see plan 004 decision 3
+    EXPECT_EQ(r.side, exchange::Side::Sell);
+    EXPECT_EQ(r.working_time, 1507725176595LL);
+    EXPECT_EQ(r.self_trade_prevention_mode, "NONE");
+    EXPECT_TRUE(r.fills.empty());
+}
+
+TEST(BinanceRestResponses, NewOrder_FullShapeWithFills) {
+    auto j = json::parse(fixtures::kNewOrderFullJson);
+    auto r = BinanceNewOrderResponse::from_json(j);
+    EXPECT_EQ(r.status, exchange::OrderStatus::Filled);
+    EXPECT_EQ(r.side, exchange::Side::Sell);
+    ASSERT_EQ(r.fills.size(), 2u);
+    EXPECT_DOUBLE_EQ(r.fills[0].price, 4000.0);
+    EXPECT_DOUBLE_EQ(r.fills[0].qty, 1.0);
+    EXPECT_DOUBLE_EQ(r.fills[0].commission, 4.0);
+    EXPECT_EQ(r.fills[0].commission_asset, "USDT");
+    EXPECT_EQ(r.fills[0].trade_id, 56LL);
+    EXPECT_DOUBLE_EQ(r.fills[1].price, 3999.0);
+    EXPECT_DOUBLE_EQ(r.fills[1].qty, 5.0);
+    EXPECT_DOUBLE_EQ(r.fills[1].commission, 19.995);
+    EXPECT_EQ(r.fills[1].commission_asset, "USDT");
+    EXPECT_EQ(r.fills[1].trade_id, 57LL);
+}
+
+TEST(BinanceRestResponses, CancelOrder_FromJson) {
+    auto j = json::parse(fixtures::kCancelOrderJson);
+    auto r = BinanceCancelOrderResponse::from_json(j);
+    EXPECT_EQ(r.symbol, "LTCBTC");
+    EXPECT_EQ(r.orig_client_order_id, "myOrder1");
+    EXPECT_EQ(r.order_id, 4LL);
+    EXPECT_EQ(r.order_list_id, -1LL);
+    EXPECT_EQ(r.client_order_id, "cancelMyOrder1");
+    EXPECT_EQ(r.transact_time, 1684804350068LL);
+    EXPECT_DOUBLE_EQ(r.price, 2.0);
+    EXPECT_DOUBLE_EQ(r.orig_qty, 1.0);
+    EXPECT_DOUBLE_EQ(r.executed_qty, 0.0);
+    EXPECT_DOUBLE_EQ(r.orig_quote_order_qty, 0.0);
+    EXPECT_DOUBLE_EQ(r.cummulative_quote_qty, 0.0);
+    EXPECT_EQ(r.status, exchange::OrderStatus::Canceled);
+    EXPECT_EQ(r.time_in_force, exchange::TimeInForce::GTC);
+    EXPECT_EQ(r.type, "LIMIT");
+    EXPECT_EQ(r.side, exchange::Side::Buy);
+    EXPECT_EQ(r.self_trade_prevention_mode, "NONE");
+}
+
+TEST(BinanceRestResponses, CancelAllOpenOrders_FromJson) {
+    auto j = json::parse(fixtures::kCancelAllOpenOrdersJson);
+    auto r = BinanceCancelAllResponse::from_json(j);
+    ASSERT_EQ(r.orders.size(), 1u);
+    const auto& o = r.orders[0];
+    EXPECT_EQ(o.symbol, "BTCUSDT");
+    EXPECT_EQ(o.orig_client_order_id, "E6APeyTJvkMvLMYMqu1KQ4");
+    EXPECT_EQ(o.order_id, 11LL);
+    EXPECT_EQ(o.status, exchange::OrderStatus::Canceled);
+    EXPECT_EQ(o.side, exchange::Side::Buy);
+}
+
+TEST(BinanceRestResponses, CancelAllOpenOrders_EmptyArray) {
+    auto r = BinanceCancelAllResponse::from_json(json::array());
+    EXPECT_TRUE(r.orders.empty());
+}
+
+// ---------------------------------------------------------------------------
 // parse_binance_response envelope
 // ---------------------------------------------------------------------------
 

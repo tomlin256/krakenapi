@@ -759,4 +759,222 @@ struct BinanceMyTradesRequest : TypedPrivateRequest<BinanceMyTradesResult> {
     }
 };
 
+// ── POST /api/v3/order ───────────────────────────────────────────────────────
+
+struct BinanceFill {
+    double      price{0.0};
+    double      qty{0.0};
+    double      commission{0.0};
+    std::string commission_asset;
+    int64_t     trade_id{0};
+
+    static BinanceFill from_json(const json& j) {
+        BinanceFill f;
+        f.price            = std::stod(j.value("price", "0"));
+        f.qty              = std::stod(j.value("qty", "0"));
+        f.commission       = std::stod(j.value("commission", "0"));
+        f.commission_asset = j.value("commissionAsset", "");
+        f.trade_id         = j.value("tradeId", int64_t{0});
+        return f;
+    }
+};
+
+// Covers all three newOrderRespType shapes: ACK fields are always present;
+// RESULT/FULL fields are std::optional and only set when the server sent
+// them; `fills` is non-empty only for FULL.
+struct BinanceNewOrderResponse {
+    // ACK and up:
+    std::string symbol;
+    int64_t     order_id{0};
+    int64_t     order_list_id{-1};
+    std::string client_order_id;
+    int64_t     transact_time{0};
+    // RESULT/FULL only:
+    std::optional<double>      price;
+    std::optional<double>      orig_qty;
+    std::optional<double>      executed_qty;
+    std::optional<double>      orig_quote_order_qty;
+    std::optional<double>      cummulative_quote_qty;  // wire: "cummulativeQuoteQty"
+    std::optional<OrderStatus> status;
+    std::optional<TimeInForce> time_in_force;
+    std::optional<std::string> type;                   // raw wire string
+    std::optional<Side>        side;
+    std::optional<int64_t>     working_time;
+    std::optional<std::string> self_trade_prevention_mode;
+    // FULL only (empty otherwise):
+    std::vector<BinanceFill> fills;
+
+    static BinanceNewOrderResponse from_json(const json& j) {
+        BinanceNewOrderResponse r;
+        r.symbol          = j.value("symbol", "");
+        r.order_id        = j.value("orderId", int64_t{0});
+        r.order_list_id   = j.value("orderListId", int64_t{-1});
+        r.client_order_id = j.value("clientOrderId", "");
+        r.transact_time   = j.value("transactTime", int64_t{0});
+        if (j.contains("price"))
+            r.price = std::stod(j.at("price").get<std::string>());
+        if (j.contains("origQty"))
+            r.orig_qty = std::stod(j.at("origQty").get<std::string>());
+        if (j.contains("executedQty"))
+            r.executed_qty = std::stod(j.at("executedQty").get<std::string>());
+        if (j.contains("origQuoteOrderQty"))
+            r.orig_quote_order_qty = std::stod(j.at("origQuoteOrderQty").get<std::string>());
+        if (j.contains("cummulativeQuoteQty"))
+            r.cummulative_quote_qty = std::stod(j.at("cummulativeQuoteQty").get<std::string>());
+        if (j.contains("status"))
+            r.status = binance_order_status_from_string(j.at("status").get<std::string>());
+        if (j.contains("timeInForce"))
+            r.time_in_force = binance_tif_from_string(j.at("timeInForce").get<std::string>());
+        if (j.contains("type"))
+            r.type = j.at("type").get<std::string>();
+        if (j.contains("side"))
+            r.side = binance_side_from_string(j.at("side").get<std::string>());
+        if (j.contains("workingTime"))
+            r.working_time = j.at("workingTime").get<int64_t>();
+        if (j.contains("selfTradePreventionMode"))
+            r.self_trade_prevention_mode = j.at("selfTradePreventionMode").get<std::string>();
+        for (const auto& el : j.value("fills", json::array()))
+            r.fills.push_back(BinanceFill::from_json(el));
+        return r;
+    }
+};
+
+struct BinanceNewOrderRequest : TypedPrivateRequest<BinanceNewOrderResponse> {
+    std::string symbol;                              // required
+    Side        side{Side::Buy};                     // required
+    OrderType   type{OrderType::Limit};              // required
+    std::optional<TimeInForce>          time_in_force;
+    std::optional<std::string>          quantity;          // caller-formatted exact
+    std::optional<std::string>          quote_order_qty;   //   decimals (plan 004
+    std::optional<std::string>          price;             //   decision 6)
+    std::optional<std::string>          new_client_order_id;
+    std::optional<std::string>          stop_price;
+    std::optional<std::string>          iceberg_qty;
+    std::optional<BinanceOrderRespType> new_order_resp_type;
+
+    // POST — all params go in the body (query stays empty; see the signed-
+    // endpoint note above). Values are appended verbatim: valid Binance
+    // symbols ([A-Z0-9]) and client order ids ([\.A-Z:/a-z0-9_-]{1,36})
+    // contain no characters needing form-encoding — same minimal-escaping
+    // stance as detail::symbols_query_value. Which params Binance *requires*
+    // per order type (e.g. LIMIT needs timeInForce+quantity+price) is
+    // enforced server-side; this struct stays a faithful wire mapping.
+    HttpRequest build() const override {
+        HttpRequest r;
+        r.method = HttpRequest::Method::POST;
+        r.path   = "/api/v3/order";
+        r.body   = "symbol=" + symbol;
+        r.body += "&side=" + exchange::binance::binance_side_to_string(side);
+        r.body += "&type=" + exchange::binance::binance_order_type_to_string(type);
+        if (time_in_force)
+            r.body += "&timeInForce=" + exchange::binance::binance_tif_to_string(*time_in_force);
+        if (quantity)            r.body += "&quantity=" + *quantity;
+        if (quote_order_qty)     r.body += "&quoteOrderQty=" + *quote_order_qty;
+        if (price)               r.body += "&price=" + *price;
+        if (new_client_order_id) r.body += "&newClientOrderId=" + *new_client_order_id;
+        if (stop_price)          r.body += "&stopPrice=" + *stop_price;
+        if (iceberg_qty)         r.body += "&icebergQty=" + *iceberg_qty;
+        if (new_order_resp_type)
+            r.body += "&newOrderRespType="
+                    + exchange::binance::binance_order_resp_type_to_string(*new_order_resp_type);
+        return r;
+    }
+};
+
+// ── DELETE /api/v3/order and /api/v3/openOrders ──────────────────────────────
+
+// Shape shared by DELETE /api/v3/order's single object and each row of
+// DELETE /api/v3/openOrders' array.
+struct BinanceCancelOrderResponse {
+    std::string symbol;
+    std::string orig_client_order_id;
+    int64_t     order_id{0};
+    int64_t     order_list_id{-1};
+    std::string client_order_id;
+    int64_t     transact_time{0};
+    double      price{0.0};
+    double      orig_qty{0.0};
+    double      executed_qty{0.0};
+    double      orig_quote_order_qty{0.0};
+    double      cummulative_quote_qty{0.0};  // wire: "cummulativeQuoteQty"
+    OrderStatus status{OrderStatus::Unknown};
+    TimeInForce time_in_force{TimeInForce::GTC};
+    std::string type;                        // raw wire string
+    Side        side{Side::Buy};
+    std::string self_trade_prevention_mode;
+
+    static BinanceCancelOrderResponse from_json(const json& j) {
+        BinanceCancelOrderResponse r;
+        r.symbol                = j.value("symbol", "");
+        r.orig_client_order_id  = j.value("origClientOrderId", "");
+        r.order_id              = j.value("orderId", int64_t{0});
+        r.order_list_id         = j.value("orderListId", int64_t{-1});
+        r.client_order_id       = j.value("clientOrderId", "");
+        r.transact_time         = j.value("transactTime", int64_t{0});
+        r.price                 = std::stod(j.value("price", "0"));
+        r.orig_qty              = std::stod(j.value("origQty", "0"));
+        r.executed_qty          = std::stod(j.value("executedQty", "0"));
+        r.orig_quote_order_qty  = std::stod(j.value("origQuoteOrderQty", "0"));
+        r.cummulative_quote_qty = std::stod(j.value("cummulativeQuoteQty", "0"));
+        r.status                = binance_order_status_from_string(j.value("status", ""));
+        r.time_in_force         = binance_tif_from_string(j.value("timeInForce", "GTC"));
+        r.type                  = j.value("type", "");
+        r.side                  = binance_side_from_string(j.value("side", "BUY"));
+        r.self_trade_prevention_mode = j.value("selfTradePreventionMode", "");
+        return r;
+    }
+};
+
+// Note: DELETE /api/v3/openOrders can interleave OCO cancellation objects
+// (contingencyType/orderReports) among plain rows; those parse as
+// part-populated BinanceCancelOrderResponse rows (j.value defaults) — full
+// OCO support is out of scope for the first cut (plan 004 decision 9).
+struct BinanceCancelAllResponse {
+    std::vector<BinanceCancelOrderResponse> orders;
+
+    // Top-level array.
+    static BinanceCancelAllResponse from_json(const json& j) {
+        BinanceCancelAllResponse r;
+        for (const auto& el : j)
+            r.orders.push_back(BinanceCancelOrderResponse::from_json(el));
+        return r;
+    }
+};
+
+struct BinanceCancelOrderRequest : TypedPrivateRequest<BinanceCancelOrderResponse> {
+    std::string                symbol;                // required
+    std::optional<int64_t>     order_id;              // one of order_id /
+    std::optional<std::string> orig_client_order_id;  //   orig_client_order_id
+    std::optional<std::string> new_client_order_id;
+
+    // DELETE — params go in the query (BinanceAuth signs query-side for
+    // non-POST methods).
+    HttpRequest build() const override {
+        HttpRequest r;
+        r.method = HttpRequest::Method::DELETE;
+        r.path   = "/api/v3/order";
+        r.query  = "symbol=" + symbol;
+        if (order_id)
+            r.query += "&orderId=" + std::to_string(*order_id);
+        if (orig_client_order_id)
+            r.query += "&origClientOrderId=" + *orig_client_order_id;
+        if (new_client_order_id)
+            r.query += "&newClientOrderId=" + *new_client_order_id;
+        return r;
+    }
+};
+
+struct BinanceCancelAllOpenOrdersRequest
+    : TypedPrivateRequest<BinanceCancelAllResponse> {
+    std::string symbol;  // required
+
+    HttpRequest build() const override {
+        HttpRequest r;
+        r.method = HttpRequest::Method::DELETE;
+        r.path   = "/api/v3/openOrders";
+        r.query  = "symbol=" + symbol;
+        return r;
+    }
+};
+
 } // namespace exchange::binance::rest
