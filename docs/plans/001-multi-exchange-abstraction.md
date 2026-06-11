@@ -690,6 +690,8 @@ Endpoints to implement (in `include/exchange/binance/rest_api.hpp`):
 - Add `tests/examples/binance/binance_rest_client_example.cpp` — the direct analog of `tests/examples/kraken/rest_client_example.cpp`: a CLI11 app with one subcommand per public endpoint (`ping`, `time`, `exchangeinfo`, `ticker [--symbols …]`, `book <symbol> [--limit N]`, `klines <symbol> --interval 1m`, `trades <symbol> [--limit N]`), each `run_*(BinanceRestClient&, args)` executing the typed request and logging the parsed fields via spdlog. `main()` mirrors the Kraken example: `curl_global_init` → construct `BinanceRestClient` → dispatch by subcommand → `curl_global_cleanup`. Public endpoints only — no credentials. Links `binanceapi spdlog::spdlog CLI11::CLI11 example_backward`.
 - **Tests**: All unit tests pass; example compiles and runs against live Binance (no credentials needed).
 
+**Done**: implemented via [plan 003](003-step-5-binance-rest-public.md) in five checkpoint commits (5.1–5.5). All 8 request/response types live in `include/exchange/binance/rest_api.hpp`, inheriting the **local** `exchange::binance::rest::TypedPublicRequest<R>` (plan 003 design decision 1 — the client's SFINAE gates on the local `PublicRequest`, mirroring Kraken). Fixtures in `tests/unit/binance_rest_example_json.hpp`; 32 new tests across `test_binance_rest_requests.cpp` + `test_binance_rest_responses.cpp` (full suite 211 green). CLI example verified live: all 7 subcommands returned 2xx against `api.binance.com`. Out of scope per plan 003: `bookTicker`, `BinanceExchangeInfo` filter/permission fields.
+
 ### Step 6 — Binance REST private (account + trading) endpoints
 
 **Done when**: Account and order endpoints implemented and unit-tested.
