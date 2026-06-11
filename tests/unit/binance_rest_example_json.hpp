@@ -66,6 +66,71 @@ inline constexpr const char* kKlinesJson = R"([
 ])";
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v3/exchangeInfo
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Abridged from the appendix: timezone, serverTime, and one symbols[] entry
+// with the 12 in-scope fields (filters/permissions/etc. omitted per the
+// "first cut" scope).
+inline constexpr const char* kExchangeInfoJson = R"({
+  "timezone": "UTC",
+  "serverTime": 1565246363776,
+  "symbols": [
+    {
+      "symbol": "ETHBTC",
+      "status": "TRADING",
+      "baseAsset": "ETH",
+      "baseAssetPrecision": 8,
+      "quoteAsset": "BTC",
+      "quotePrecision": 8,
+      "quoteAssetPrecision": 8,
+      "orderTypes": ["LIMIT","LIMIT_MAKER","MARKET","STOP_LOSS","STOP_LOSS_LIMIT","TAKE_PROFIT","TAKE_PROFIT_LIMIT"],
+      "icebergAllowed": true,
+      "ocoAllowed": true,
+      "isSpotTradingAllowed": true,
+      "isMarginTradingAllowed": true
+    }
+  ]
+})";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v3/ticker/24hr
+// ─────────────────────────────────────────────────────────────────────────────
+
+inline constexpr const char* kTicker24hrSingleJson = R"({
+  "symbol":"BNBBTC","priceChange":"-94.99999800","priceChangePercent":"-95.960",
+  "weightedAvgPrice":"0.29628482","prevClosePrice":"0.10002000","lastPrice":"4.00000200",
+  "lastQty":"200.00000000","bidPrice":"4.00000000","bidQty":"100.00000000",
+  "askPrice":"4.00000200","askQty":"100.00000000","openPrice":"99.00000000",
+  "highPrice":"100.00000000","lowPrice":"0.10000000","volume":"8913.30000000",
+  "quoteVolume":"15.30000000","openTime":1499783499040,"closeTime":1499869899040,
+  "firstId":28385,"lastId":28460,"count":76
+})";
+
+// Synthetic — array form returned for a `symbols=[...]` query (2 elements:
+// the appendix BNBBTC object plus a second symbol).
+inline constexpr const char* kTicker24hrArrayJson = R"([
+  {
+    "symbol":"BNBBTC","priceChange":"-94.99999800","priceChangePercent":"-95.960",
+    "weightedAvgPrice":"0.29628482","prevClosePrice":"0.10002000","lastPrice":"4.00000200",
+    "lastQty":"200.00000000","bidPrice":"4.00000000","bidQty":"100.00000000",
+    "askPrice":"4.00000200","askQty":"100.00000000","openPrice":"99.00000000",
+    "highPrice":"100.00000000","lowPrice":"0.10000000","volume":"8913.30000000",
+    "quoteVolume":"15.30000000","openTime":1499783499040,"closeTime":1499869899040,
+    "firstId":28385,"lastId":28460,"count":76
+  },
+  {
+    "symbol":"ETHBTC","priceChange":"0.00100000","priceChangePercent":"1.310",
+    "weightedAvgPrice":"0.07700000","prevClosePrice":"0.07634100","lastPrice":"0.07734100",
+    "lastQty":"5.00000000","bidPrice":"0.07734000","bidQty":"12.00000000",
+    "askPrice":"0.07734200","askQty":"9.00000000","openPrice":"0.07634100",
+    "highPrice":"0.07800000","lowPrice":"0.07600000","volume":"12345.00000000",
+    "quoteVolume":"950.00000000","openTime":1499783499040,"closeTime":1499869899040,
+    "firstId":1000,"lastId":2000,"count":1001
+  }
+])";
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Error envelope (any endpoint, non-2xx status)
 // ─────────────────────────────────────────────────────────────────────────────
 

@@ -10,6 +10,7 @@
 #include "exchange/binance/rest_api.hpp"
 #include "binance_rest_example_json.hpp"
 
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 
@@ -97,6 +98,68 @@ TEST(BinanceRestResponses, Klines_FromJson) {
     EXPECT_EQ(k.num_trades, 308LL);
     EXPECT_DOUBLE_EQ(k.taker_buy_base_volume, 1756.87402397);
     EXPECT_DOUBLE_EQ(k.taker_buy_quote_volume, 28.46694368);
+}
+
+TEST(BinanceRestResponses, ExchangeInfo_FromJson) {
+    auto j = json::parse(fixtures::kExchangeInfoJson);
+    auto e = BinanceExchangeInfo::from_json(j);
+    EXPECT_EQ(e.timezone, "UTC");
+    EXPECT_EQ(e.server_time, 1565246363776LL);
+    ASSERT_EQ(e.symbols.size(), 1u);
+    const auto& s = e.symbols[0];
+    EXPECT_EQ(s.symbol, "ETHBTC");
+    EXPECT_EQ(s.status, "TRADING");
+    EXPECT_EQ(s.base_asset, "ETH");
+    EXPECT_EQ(s.base_asset_precision, 8);
+    EXPECT_EQ(s.quote_asset, "BTC");
+    EXPECT_EQ(s.quote_precision, 8);
+    EXPECT_EQ(s.quote_asset_precision, 8);
+    ASSERT_EQ(s.order_types.size(), 7u);
+    EXPECT_NE(std::find(s.order_types.begin(), s.order_types.end(), "LIMIT"),
+              s.order_types.end());
+    EXPECT_NE(std::find(s.order_types.begin(), s.order_types.end(), "STOP_LOSS_LIMIT"),
+              s.order_types.end());
+    EXPECT_TRUE(s.iceberg_allowed);
+    EXPECT_TRUE(s.oco_allowed);
+    EXPECT_TRUE(s.is_spot_trading_allowed);
+    EXPECT_TRUE(s.is_margin_trading_allowed);
+}
+
+TEST(BinanceRestResponses, Ticker24hr_SingleObject) {
+    auto j = json::parse(fixtures::kTicker24hrSingleJson);
+    auto t = BinanceTicker24hr::from_json(j);
+    ASSERT_EQ(t.entries.size(), 1u);
+    const auto& e = t.entries[0];
+    EXPECT_EQ(e.symbol, "BNBBTC");
+    EXPECT_DOUBLE_EQ(e.price_change, -94.99999800);
+    EXPECT_DOUBLE_EQ(e.price_change_percent, -95.960);
+    EXPECT_DOUBLE_EQ(e.weighted_avg_price, 0.29628482);
+    EXPECT_DOUBLE_EQ(e.prev_close_price, 0.10002000);
+    EXPECT_DOUBLE_EQ(e.last_price, 4.00000200);
+    EXPECT_DOUBLE_EQ(e.last_qty, 200.0);
+    EXPECT_DOUBLE_EQ(e.bid_price, 4.0);
+    EXPECT_DOUBLE_EQ(e.bid_qty, 100.0);
+    EXPECT_DOUBLE_EQ(e.ask_price, 4.00000200);
+    EXPECT_DOUBLE_EQ(e.ask_qty, 100.0);
+    EXPECT_DOUBLE_EQ(e.open_price, 99.0);
+    EXPECT_DOUBLE_EQ(e.high_price, 100.0);
+    EXPECT_DOUBLE_EQ(e.low_price, 0.1);
+    EXPECT_DOUBLE_EQ(e.volume, 8913.3);
+    EXPECT_DOUBLE_EQ(e.quote_volume, 15.3);
+    EXPECT_EQ(e.open_time, 1499783499040LL);
+    EXPECT_EQ(e.close_time, 1499869899040LL);
+    EXPECT_EQ(e.first_id, 28385LL);
+    EXPECT_EQ(e.last_id, 28460LL);
+    EXPECT_EQ(e.count, 76LL);
+}
+
+TEST(BinanceRestResponses, Ticker24hr_Array) {
+    auto j = json::parse(fixtures::kTicker24hrArrayJson);
+    auto t = BinanceTicker24hr::from_json(j);
+    ASSERT_EQ(t.entries.size(), 2u);
+    EXPECT_EQ(t.entries[0].symbol, "BNBBTC");
+    EXPECT_EQ(t.entries[1].symbol, "ETHBTC");
+    EXPECT_DOUBLE_EQ(t.entries[1].last_price, 0.07734100);
 }
 
 // ---------------------------------------------------------------------------

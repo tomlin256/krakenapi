@@ -344,4 +344,150 @@ struct BinanceKlinesRequest : TypedPublicRequest<BinanceKlinesResult> {
     }
 };
 
+// ── GET /api/v3/exchangeInfo ─────────────────────────────────────────────────
+
+// First-cut scope: `filters`, `permissions`, `permissionSets`, `rateLimits`,
+// `exchangeFilters`, and self-trade-prevention fields are deliberately
+// omitted (see plan 003 design decision 6).
+struct BinanceSymbolInfo {
+    std::string              symbol;
+    std::string              status;
+    std::string              base_asset;
+    int                      base_asset_precision{0};
+    std::string              quote_asset;
+    int                      quote_precision{0};
+    int                      quote_asset_precision{0};
+    std::vector<std::string> order_types;
+    bool                     iceberg_allowed{false};
+    bool                     oco_allowed{false};
+    bool                     is_spot_trading_allowed{false};
+    bool                     is_margin_trading_allowed{false};
+    static BinanceSymbolInfo from_json(const json& j) {
+        BinanceSymbolInfo s;
+        s.symbol                    = j.value("symbol", "");
+        s.status                    = j.value("status", "");
+        s.base_asset                = j.value("baseAsset", "");
+        s.base_asset_precision      = j.value("baseAssetPrecision", 0);
+        s.quote_asset               = j.value("quoteAsset", "");
+        s.quote_precision           = j.value("quotePrecision", 0);
+        s.quote_asset_precision     = j.value("quoteAssetPrecision", 0);
+        if (j.contains("orderTypes"))
+            for (const auto& ot : j["orderTypes"])
+                s.order_types.push_back(ot.get<std::string>());
+        s.iceberg_allowed           = j.value("icebergAllowed", false);
+        s.oco_allowed               = j.value("ocoAllowed", false);
+        s.is_spot_trading_allowed   = j.value("isSpotTradingAllowed", false);
+        s.is_margin_trading_allowed = j.value("isMarginTradingAllowed", false);
+        return s;
+    }
+};
+
+struct BinanceExchangeInfo {
+    std::string                    timezone;
+    int64_t                        server_time{0};
+    std::vector<BinanceSymbolInfo> symbols;
+    static BinanceExchangeInfo from_json(const json& j) {
+        BinanceExchangeInfo e;
+        e.timezone    = j.value("timezone", "");
+        e.server_time = j.value("serverTime", int64_t{0});
+        if (j.contains("symbols"))
+            for (const auto& s : j["symbols"])
+                e.symbols.push_back(BinanceSymbolInfo::from_json(s));
+        return e;
+    }
+};
+
+struct BinanceExchangeInfoRequest : TypedPublicRequest<BinanceExchangeInfo> {
+    HttpRequest build() const override {
+        HttpRequest r;
+        r.method = HttpRequest::Method::GET;
+        r.path   = "/api/v3/exchangeInfo";
+        return r;
+    }
+};
+
+// ── GET /api/v3/ticker/24hr ──────────────────────────────────────────────────
+
+struct BinanceTicker24hrEntry {
+    std::string symbol;
+    double      price_change{0.0};
+    double      price_change_percent{0.0};
+    double      weighted_avg_price{0.0};
+    double      prev_close_price{0.0};
+    double      last_price{0.0};
+    double      last_qty{0.0};
+    double      bid_price{0.0};
+    double      bid_qty{0.0};
+    double      ask_price{0.0};
+    double      ask_qty{0.0};
+    double      open_price{0.0};
+    double      high_price{0.0};
+    double      low_price{0.0};
+    double      volume{0.0};
+    double      quote_volume{0.0};
+    int64_t     open_time{0};
+    int64_t     close_time{0};
+    int64_t     first_id{0};
+    int64_t     last_id{0};
+    int64_t     count{0};
+    static BinanceTicker24hrEntry from_json(const json& j) {
+        BinanceTicker24hrEntry e;
+        e.symbol               = j.value("symbol", "");
+        e.price_change         = std::stod(j.value("priceChange", "0"));
+        e.price_change_percent = std::stod(j.value("priceChangePercent", "0"));
+        e.weighted_avg_price   = std::stod(j.value("weightedAvgPrice", "0"));
+        e.prev_close_price     = std::stod(j.value("prevClosePrice", "0"));
+        e.last_price           = std::stod(j.value("lastPrice", "0"));
+        e.last_qty             = std::stod(j.value("lastQty", "0"));
+        e.bid_price            = std::stod(j.value("bidPrice", "0"));
+        e.bid_qty              = std::stod(j.value("bidQty", "0"));
+        e.ask_price            = std::stod(j.value("askPrice", "0"));
+        e.ask_qty              = std::stod(j.value("askQty", "0"));
+        e.open_price           = std::stod(j.value("openPrice", "0"));
+        e.high_price           = std::stod(j.value("highPrice", "0"));
+        e.low_price            = std::stod(j.value("lowPrice", "0"));
+        e.volume               = std::stod(j.value("volume", "0"));
+        e.quote_volume         = std::stod(j.value("quoteVolume", "0"));
+        e.open_time            = j.value("openTime", int64_t{0});
+        e.close_time           = j.value("closeTime", int64_t{0});
+        e.first_id             = j.value("firstId", int64_t{0});
+        e.last_id              = j.value("lastId", int64_t{0});
+        e.count                = j.value("count", int64_t{0});
+        return e;
+    }
+};
+
+struct BinanceTicker24hr {
+    std::vector<BinanceTicker24hrEntry> entries;
+    // Single object (symbol= query) or array (symbols=/no query).
+    static BinanceTicker24hr from_json(const json& j) {
+        BinanceTicker24hr t;
+        if (j.is_array()) {
+            for (const auto& el : j)
+                t.entries.push_back(BinanceTicker24hrEntry::from_json(el));
+        } else {
+            t.entries.push_back(BinanceTicker24hrEntry::from_json(j));
+        }
+        return t;
+    }
+};
+
+struct BinanceTicker24hrRequest : TypedPublicRequest<BinanceTicker24hr> {
+    std::optional<std::string>              symbol;
+    std::optional<std::vector<std::string>> symbols;
+
+    // Prefers `symbol` if set, else `symbols`, else neither.
+    HttpRequest build() const override {
+        HttpRequest r;
+        r.method = HttpRequest::Method::GET;
+        r.path   = "/api/v3/ticker/24hr";
+        if (symbol) {
+            r.query = "symbol=" + *symbol;
+        } else if (symbols && !symbols->empty()) {
+            r.query = "symbols=" + detail::symbols_query_value(*symbols);
+        }
+        return r;
+    }
+};
+
 } // namespace exchange::binance::rest

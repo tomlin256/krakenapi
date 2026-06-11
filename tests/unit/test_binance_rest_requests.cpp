@@ -149,3 +149,33 @@ TEST(BinancePublicRequests, Klines_OnlyLimit) {
     auto http = req.build();
     EXPECT_EQ(http.query, "symbol=BTCUSDT&interval=1m&limit=100");
 }
+
+TEST(BinancePublicRequests, ExchangeInfo_Path) {
+    BinanceExchangeInfoRequest req;
+    auto http = req.build();
+    EXPECT_EQ(http.path, "/api/v3/exchangeInfo");
+    EXPECT_EQ(http.method, HttpRequest::Method::GET);
+    EXPECT_TRUE(http.query.empty());
+}
+
+TEST(BinancePublicRequests, Ticker24hr_NoParams) {
+    BinanceTicker24hrRequest req;
+    auto http = req.build();
+    EXPECT_EQ(http.path, "/api/v3/ticker/24hr");
+    EXPECT_EQ(http.method, HttpRequest::Method::GET);
+    EXPECT_TRUE(http.query.empty());
+}
+
+TEST(BinancePublicRequests, Ticker24hr_SingleSymbol) {
+    BinanceTicker24hrRequest req;
+    req.symbol = "BNBBTC";
+    auto http = req.build();
+    EXPECT_EQ(http.query, "symbol=BNBBTC");
+}
+
+TEST(BinancePublicRequests, Ticker24hr_MultipleSymbols) {
+    BinanceTicker24hrRequest req;
+    req.symbols = {"BTCUSDT", "ETHBTC"};
+    auto http = req.build();
+    EXPECT_EQ(http.query, "symbols=%5B%22BTCUSDT%22%2C%22ETHBTC%22%5D");
+}
