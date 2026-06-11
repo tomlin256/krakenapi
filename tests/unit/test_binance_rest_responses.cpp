@@ -197,6 +197,68 @@ TEST(BinanceRestResponses, Account_FromJson) {
     EXPECT_EQ(a.uid, 354937868LL);
 }
 
+TEST(BinanceRestResponses, OpenOrders_FromJson) {
+    auto j = json::parse(fixtures::kOpenOrdersJson);
+    auto r = BinanceOpenOrdersResult::from_json(j);
+    ASSERT_EQ(r.orders.size(), 1u);
+    const auto& o = r.orders[0];
+    EXPECT_EQ(o.symbol, "LTCBTC");
+    EXPECT_EQ(o.order_id, 1LL);
+    EXPECT_EQ(o.order_list_id, -1LL);
+    EXPECT_EQ(o.client_order_id, "myOrder1");
+    EXPECT_DOUBLE_EQ(o.price, 0.1);
+    EXPECT_DOUBLE_EQ(o.orig_qty, 1.0);
+    EXPECT_DOUBLE_EQ(o.executed_qty, 0.0);
+    EXPECT_DOUBLE_EQ(o.cummulative_quote_qty, 0.0);
+    EXPECT_DOUBLE_EQ(o.orig_quote_order_qty, 0.0);
+    EXPECT_EQ(o.status, exchange::OrderStatus::New);
+    EXPECT_EQ(o.time_in_force, exchange::TimeInForce::GTC);
+    EXPECT_EQ(o.type, "LIMIT");  // raw wire string — see plan 004 decision 3
+    EXPECT_EQ(o.side, exchange::Side::Buy);
+    EXPECT_DOUBLE_EQ(o.stop_price, 0.0);
+    EXPECT_DOUBLE_EQ(o.iceberg_qty, 0.0);
+    EXPECT_EQ(o.time, 1499827319559LL);
+    EXPECT_EQ(o.update_time, 1499827319559LL);
+    EXPECT_TRUE(o.is_working);
+    EXPECT_EQ(o.working_time, 1499827319559LL);
+    EXPECT_EQ(o.self_trade_prevention_mode, "NONE");
+}
+
+TEST(BinanceRestResponses, AllOrders_AliasParsesSameShape) {
+    // BinanceAllOrdersResult is an alias of BinanceOpenOrdersResult — the
+    // two endpoints share one row shape; sanity-check the alias compiles and
+    // parses identically.
+    auto j = json::parse(fixtures::kOpenOrdersJson);
+    auto r = BinanceAllOrdersResult::from_json(j);
+    ASSERT_EQ(r.orders.size(), 1u);
+    EXPECT_EQ(r.orders[0].order_id, 1LL);
+}
+
+TEST(BinanceRestResponses, OpenOrders_EmptyArray) {
+    auto r = BinanceOpenOrdersResult::from_json(json::array());
+    EXPECT_TRUE(r.orders.empty());
+}
+
+TEST(BinanceRestResponses, MyTrades_FromJson) {
+    auto j = json::parse(fixtures::kMyTradesJson);
+    auto r = BinanceMyTradesResult::from_json(j);
+    ASSERT_EQ(r.trades.size(), 1u);
+    const auto& t = r.trades[0];
+    EXPECT_EQ(t.symbol, "BNBBTC");
+    EXPECT_EQ(t.id, 28457LL);
+    EXPECT_EQ(t.order_id, 100234LL);
+    EXPECT_EQ(t.order_list_id, -1LL);
+    EXPECT_DOUBLE_EQ(t.price, 4.00000100);
+    EXPECT_DOUBLE_EQ(t.qty, 12.0);
+    EXPECT_DOUBLE_EQ(t.quote_qty, 48.000012);
+    EXPECT_DOUBLE_EQ(t.commission, 10.1);
+    EXPECT_EQ(t.commission_asset, "BNB");
+    EXPECT_EQ(t.time, 1499865549590LL);
+    EXPECT_TRUE(t.is_buyer);
+    EXPECT_FALSE(t.is_maker);
+    EXPECT_TRUE(t.is_best_match);
+}
+
 // ---------------------------------------------------------------------------
 // parse_binance_response envelope
 // ---------------------------------------------------------------------------

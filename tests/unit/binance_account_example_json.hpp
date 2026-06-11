@@ -37,4 +37,22 @@ inline constexpr const char* kAccountJson = R"({
   "permissions":["SPOT"],"uid":354937868
 })";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v3/openOrders and /api/v3/allOrders (same row shape; this fixture
+// is reused for both BinanceOpenOrdersResult and the BinanceAllOrdersResult
+// alias)
+// ─────────────────────────────────────────────────────────────────────────────
+
+inline constexpr const char* kOpenOrdersJson = R"([
+  {"symbol":"LTCBTC","orderId":1,"orderListId":-1,"clientOrderId":"myOrder1","price":"0.1","origQty":"1.0","executedQty":"0.0","cummulativeQuoteQty":"0.0","status":"NEW","timeInForce":"GTC","type":"LIMIT","side":"BUY","stopPrice":"0.0","icebergQty":"0.0","time":1499827319559,"updateTime":1499827319559,"isWorking":true,"origQuoteOrderQty":"0.000000","workingTime":1499827319559,"selfTradePreventionMode":"NONE"}
+])";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v3/myTrades
+// ─────────────────────────────────────────────────────────────────────────────
+
+inline constexpr const char* kMyTradesJson = R"([
+  {"symbol":"BNBBTC","id":28457,"orderId":100234,"orderListId":-1,"price":"4.00000100","qty":"12.00000000","quoteQty":"48.000012","commission":"10.10000000","commissionAsset":"BNB","time":1499865549590,"isBuyer":true,"isMaker":false,"isBestMatch":true}
+])";
+
 } // namespace exchange::binance::rest::test

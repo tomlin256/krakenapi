@@ -193,3 +193,59 @@ TEST(BinancePrivateRequests, Account_Path) {
     EXPECT_TRUE(http.query.empty());
     EXPECT_TRUE(http.body.empty());
 }
+
+TEST(BinancePrivateRequests, OpenOrders_NoSymbol) {
+    BinanceOpenOrdersRequest req;
+    auto http = req.build();
+    EXPECT_EQ(http.path, "/api/v3/openOrders");
+    EXPECT_EQ(http.method, HttpRequest::Method::GET);
+    EXPECT_TRUE(http.query.empty());
+}
+
+TEST(BinancePrivateRequests, OpenOrders_WithSymbol) {
+    BinanceOpenOrdersRequest req;
+    req.symbol = "LTCBTC";
+    auto http = req.build();
+    EXPECT_EQ(http.query, "symbol=LTCBTC");
+}
+
+TEST(BinancePrivateRequests, AllOrders_RequiredOnly) {
+    BinanceAllOrdersRequest req;
+    req.symbol = "LTCBTC";
+    auto http = req.build();
+    EXPECT_EQ(http.path, "/api/v3/allOrders");
+    EXPECT_EQ(http.method, HttpRequest::Method::GET);
+    EXPECT_EQ(http.query, "symbol=LTCBTC");
+    EXPECT_TRUE(http.body.empty());
+}
+
+TEST(BinancePrivateRequests, AllOrders_AllOptionals) {
+    BinanceAllOrdersRequest req;
+    req.symbol     = "LTCBTC";
+    req.order_id   = 1;
+    req.start_time = 1499827319559LL;
+    req.end_time   = 1499827319560LL;
+    req.limit      = 10;
+    auto http = req.build();
+    EXPECT_EQ(http.query,
+              "symbol=LTCBTC&orderId=1&startTime=1499827319559"
+              "&endTime=1499827319560&limit=10");
+}
+
+TEST(BinancePrivateRequests, MyTrades_RequiredOnly) {
+    BinanceMyTradesRequest req;
+    req.symbol = "BNBBTC";
+    auto http = req.build();
+    EXPECT_EQ(http.path, "/api/v3/myTrades");
+    EXPECT_EQ(http.method, HttpRequest::Method::GET);
+    EXPECT_EQ(http.query, "symbol=BNBBTC");
+}
+
+TEST(BinancePrivateRequests, MyTrades_FromIdAndLimit) {
+    BinanceMyTradesRequest req;
+    req.symbol  = "BNBBTC";
+    req.from_id = 28000;
+    req.limit   = 5;
+    auto http = req.build();
+    EXPECT_EQ(http.query, "symbol=BNBBTC&fromId=28000&limit=5");
+}

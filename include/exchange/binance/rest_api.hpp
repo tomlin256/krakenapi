@@ -585,4 +585,178 @@ struct BinanceAccountRequest : TypedPrivateRequest<BinanceAccount> {
     }
 };
 
+// ── GET /api/v3/openOrders and /api/v3/allOrders ─────────────────────────────
+
+// Shared row shape of both order-query endpoints.
+//
+// Enum fields follow plan 004 decision 3 ("enum where the wire↔enum mapping
+// is total, raw string otherwise"): `status` folds unmapped values to
+// OrderStatus::Unknown, `time_in_force`/`side` are total — but `type` stays
+// a raw wire string because Binance's LIMIT_MAKER (and any future order
+// type) has no canonical OrderType value to map to.
+struct BinanceOrderInfo {
+    std::string symbol;
+    int64_t     order_id{0};
+    int64_t     order_list_id{-1};
+    std::string client_order_id;
+    double      price{0.0};
+    double      orig_qty{0.0};
+    double      executed_qty{0.0};
+    double      cummulative_quote_qty{0.0};  // wire: "cummulativeQuoteQty" (Binance's typo)
+    double      orig_quote_order_qty{0.0};
+    OrderStatus status{OrderStatus::Unknown};
+    TimeInForce time_in_force{TimeInForce::GTC};
+    std::string type;                        // raw wire string — see note above
+    Side        side{Side::Buy};
+    double      stop_price{0.0};
+    double      iceberg_qty{0.0};
+    int64_t     time{0};
+    int64_t     update_time{0};
+    bool        is_working{false};
+    int64_t     working_time{0};
+    std::string self_trade_prevention_mode;
+
+    static BinanceOrderInfo from_json(const json& j) {
+        BinanceOrderInfo o;
+        o.symbol                = j.value("symbol", "");
+        o.order_id              = j.value("orderId", int64_t{0});
+        o.order_list_id         = j.value("orderListId", int64_t{-1});
+        o.client_order_id       = j.value("clientOrderId", "");
+        o.price                 = std::stod(j.value("price", "0"));
+        o.orig_qty              = std::stod(j.value("origQty", "0"));
+        o.executed_qty          = std::stod(j.value("executedQty", "0"));
+        o.cummulative_quote_qty = std::stod(j.value("cummulativeQuoteQty", "0"));
+        o.orig_quote_order_qty  = std::stod(j.value("origQuoteOrderQty", "0"));
+        o.status                = binance_order_status_from_string(j.value("status", ""));
+        o.time_in_force         = binance_tif_from_string(j.value("timeInForce", "GTC"));
+        o.type                  = j.value("type", "");
+        o.side                  = binance_side_from_string(j.value("side", "BUY"));
+        o.stop_price            = std::stod(j.value("stopPrice", "0"));
+        o.iceberg_qty           = std::stod(j.value("icebergQty", "0"));
+        o.time                  = j.value("time", int64_t{0});
+        o.update_time           = j.value("updateTime", int64_t{0});
+        o.is_working            = j.value("isWorking", false);
+        o.working_time          = j.value("workingTime", int64_t{0});
+        o.self_trade_prevention_mode = j.value("selfTradePreventionMode", "");
+        return o;
+    }
+};
+
+struct BinanceOpenOrdersResult {
+    std::vector<BinanceOrderInfo> orders;
+
+    // Top-level array.
+    static BinanceOpenOrdersResult from_json(const json& j) {
+        BinanceOpenOrdersResult r;
+        for (const auto& el : j)
+            r.orders.push_back(BinanceOrderInfo::from_json(el));
+        return r;
+    }
+};
+
+// Same row shape and wrapper — distinct name per plan 001's endpoint table.
+using BinanceAllOrdersResult = BinanceOpenOrdersResult;
+
+struct BinanceOpenOrdersRequest : TypedPrivateRequest<BinanceOpenOrdersResult> {
+    std::optional<std::string> symbol;  // omit -> open orders across all symbols
+
+    HttpRequest build() const override {
+        HttpRequest r;
+        r.method = HttpRequest::Method::GET;
+        r.path   = "/api/v3/openOrders";
+        if (symbol) r.query = "symbol=" + *symbol;
+        return r;
+    }
+};
+
+struct BinanceAllOrdersRequest : TypedPrivateRequest<BinanceAllOrdersResult> {
+    std::string            symbol;      // required
+    std::optional<int64_t> order_id;    // return orders >= this id
+    std::optional<int64_t> start_time;
+    std::optional<int64_t> end_time;
+    std::optional<int>     limit;       // default 500, max 1000
+
+    HttpRequest build() const override {
+        HttpRequest r;
+        r.method = HttpRequest::Method::GET;
+        r.path   = "/api/v3/allOrders";
+        r.query  = "symbol=" + symbol;
+        if (order_id)   r.query += "&orderId=" + std::to_string(*order_id);
+        if (start_time) r.query += "&startTime=" + std::to_string(*start_time);
+        if (end_time)   r.query += "&endTime=" + std::to_string(*end_time);
+        if (limit)      r.query += "&limit=" + std::to_string(*limit);
+        return r;
+    }
+};
+
+// ── GET /api/v3/myTrades ─────────────────────────────────────────────────────
+
+struct BinanceMyTrade {
+    std::string symbol;
+    int64_t     id{0};
+    int64_t     order_id{0};
+    int64_t     order_list_id{-1};
+    double      price{0.0};
+    double      qty{0.0};
+    double      quote_qty{0.0};
+    double      commission{0.0};
+    std::string commission_asset;
+    int64_t     time{0};
+    bool        is_buyer{false};
+    bool        is_maker{false};
+    bool        is_best_match{false};
+
+    static BinanceMyTrade from_json(const json& j) {
+        BinanceMyTrade t;
+        t.symbol           = j.value("symbol", "");
+        t.id               = j.value("id", int64_t{0});
+        t.order_id         = j.value("orderId", int64_t{0});
+        t.order_list_id    = j.value("orderListId", int64_t{-1});
+        t.price            = std::stod(j.value("price", "0"));
+        t.qty              = std::stod(j.value("qty", "0"));
+        t.quote_qty        = std::stod(j.value("quoteQty", "0"));
+        t.commission       = std::stod(j.value("commission", "0"));
+        t.commission_asset = j.value("commissionAsset", "");
+        t.time             = j.value("time", int64_t{0});
+        t.is_buyer         = j.value("isBuyer", false);
+        t.is_maker         = j.value("isMaker", false);
+        t.is_best_match    = j.value("isBestMatch", false);
+        return t;
+    }
+};
+
+struct BinanceMyTradesResult {
+    std::vector<BinanceMyTrade> trades;
+
+    // Top-level array.
+    static BinanceMyTradesResult from_json(const json& j) {
+        BinanceMyTradesResult r;
+        for (const auto& el : j)
+            r.trades.push_back(BinanceMyTrade::from_json(el));
+        return r;
+    }
+};
+
+struct BinanceMyTradesRequest : TypedPrivateRequest<BinanceMyTradesResult> {
+    std::string            symbol;      // required
+    std::optional<int64_t> order_id;
+    std::optional<int64_t> start_time;
+    std::optional<int64_t> end_time;
+    std::optional<int64_t> from_id;     // trade id to fetch from
+    std::optional<int>     limit;       // default 500, max 1000
+
+    HttpRequest build() const override {
+        HttpRequest r;
+        r.method = HttpRequest::Method::GET;
+        r.path   = "/api/v3/myTrades";
+        r.query  = "symbol=" + symbol;
+        if (order_id)   r.query += "&orderId=" + std::to_string(*order_id);
+        if (start_time) r.query += "&startTime=" + std::to_string(*start_time);
+        if (end_time)   r.query += "&endTime=" + std::to_string(*end_time);
+        if (from_id)    r.query += "&fromId=" + std::to_string(*from_id);
+        if (limit)      r.query += "&limit=" + std::to_string(*limit);
+        return r;
+    }
+};
+
 } // namespace exchange::binance::rest
