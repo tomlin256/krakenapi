@@ -85,3 +85,11 @@ gtest_discover_tests(test_binance_rest_requests)
 add_executable(test_binance_rest_responses test_binance_rest_responses.cpp)
 target_link_libraries(test_binance_rest_responses binanceapi GTest::gtest_main)
 gtest_discover_tests(test_binance_rest_responses)
+
+#-------------------------------------------------------------------------------
+# Binance signed client round-trip unit tests (Step 6.5 — mock performer only)
+#-------------------------------------------------------------------------------
+
+add_executable(test_binance_client test_binance_client.cpp)
+target_link_libraries(test_binance_client binanceapi GTest::gtest_main)
+gtest_discover_tests(test_binance_client)
