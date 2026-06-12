@@ -26,6 +26,7 @@
 #include "exchange/binance/types.hpp"
 #include "exchange/common/ws_client.hpp"
 
+#include <cctype>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <string_view>
@@ -71,6 +72,13 @@ namespace detail {
 inline const json& stream_payload(const json& j) {
     // NOLINTNEXTLINE(bugprone-return-const-ref-from-parameter)
     return j.contains("data") ? j.at("data") : j;
+}
+
+// ASCII lowercase — Binance symbols are [A-Z0-9], so no locale concerns.
+inline std::string lower(std::string s) {
+    for (auto& c : s)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
 }
 
 } // namespace detail
@@ -398,6 +406,101 @@ binance_stream_frame_descriptor(const json& j) {
     }
 
     return d;  // FrameKind::Unknown
+}
+
+// ── Stream-name helpers ───────────────────────────────────────────────────────
+//
+// Stream names require lowercase symbols with mixed-case suffixes
+// ("btcusdt@aggTrade") while REST symbols are uppercase — a foot-gun these
+// helpers own. The request structs store the stream string verbatim, so
+// exotic streams ("@depth@100ms", "!ticker@arr") stay reachable by passing a
+// raw string; the helpers cover the documented defaults. interval is a raw
+// string, consistent with REST BinanceKlinesRequest.
+
+inline std::string agg_trade_stream(const std::string& symbol) {
+    return detail::lower(symbol) + "@aggTrade";
+}
+inline std::string trade_stream(const std::string& symbol) {
+    return detail::lower(symbol) + "@trade";
+}
+inline std::string kline_stream(const std::string& symbol, const std::string& interval) {
+    return detail::lower(symbol) + "@kline_" + interval;
+}
+inline std::string ticker_stream(const std::string& symbol) {
+    return detail::lower(symbol) + "@ticker";
+}
+inline std::string mini_ticker_stream(const std::string& symbol) {
+    return detail::lower(symbol) + "@miniTicker";
+}
+inline std::string book_ticker_stream(const std::string& symbol) {
+    return detail::lower(symbol) + "@bookTicker";
+}
+inline std::string depth_stream(const std::string& symbol) {
+    return detail::lower(symbol) + "@depth";
+}
+inline std::string partial_depth_stream(const std::string& symbol, int levels) {
+    return detail::lower(symbol) + "@depth" + std::to_string(levels);
+}
+
+// ── Subscribe request scaffold ────────────────────────────────────────────────
+//
+// Satisfies ExchangeWsClient::subscribe_async's structural contract:
+// WsRequestBase req_id slot, push_type/response_type, route_key(),
+// to_json(), unsubscribe_json(). One stream per request — the params array
+// always has exactly one element, matching the one-callback-per-route_key
+// dispatch model (Binance allows batching, but a batched SUBSCRIBE gets a
+// single ack with no per-stream failure signal — out of scope).
+
+template<typename PushMsg>
+struct TypedStreamSubscribeRequest : WsRequestBase {
+    using push_type     = PushMsg;
+    using response_type = BinanceStreamAck;
+
+    std::string stream;  // e.g. "btcusdt@aggTrade" — see helpers above
+
+    std::string route_key() const { return stream; }
+
+    json to_json() const {
+        return {{"method", "SUBSCRIBE"},
+                {"params", json::array({stream})},
+                {"id", req_id}};
+    }
+
+    // Pre-built by subscribe_async after req_id assignment; sent on cancel().
+    json unsubscribe_json() const {
+        return {{"method", "UNSUBSCRIBE"},
+                {"params", json::array({stream})},
+                {"id", req_id}};
+    }
+};
+
+using BinanceAggTradeSubscribe     = TypedStreamSubscribeRequest<BinanceAggTradeEvent>;
+using BinanceTradeSubscribe        = TypedStreamSubscribeRequest<BinanceTradeEvent>;
+using BinanceKlineSubscribe        = TypedStreamSubscribeRequest<BinanceKlineEvent>;
+using BinanceTickerSubscribe       = TypedStreamSubscribeRequest<BinanceTickerEvent>;
+using BinanceMiniTickerSubscribe   = TypedStreamSubscribeRequest<BinanceMiniTickerEvent>;
+using BinanceBookTickerSubscribe   = TypedStreamSubscribeRequest<BinanceBookTickerEvent>;
+using BinanceDepthSubscribe        = TypedStreamSubscribeRequest<BinanceDepthUpdateEvent>;
+using BinancePartialDepthSubscribe = TypedStreamSubscribeRequest<BinancePartialDepth>;
+
+// ── Client alias and connection-based factory ─────────────────────────────────
+//
+// BinanceStreamClient is ExchangeWsClient parameterised with the Binance
+// stream frame descriptor — the same runtime type, like KrakenWsClient.
+// For the real transport use the URL overload in
+// exchange/common/ix_ws_connection.hpp:
+//   exchange::ws::make_exchange_ws_client(std::string(STREAM_URL),
+//                                         binance_stream_frame_descriptor);
+
+using BinanceStreamClient = exchange::ws::ExchangeWsClient;
+
+inline std::shared_ptr<BinanceStreamClient>
+make_binance_stream_client(std::shared_ptr<IWsConnection>   conn,
+                           std::shared_ptr<IWsErrorHandler>  error_handler = nullptr) {
+    return exchange::ws::make_exchange_ws_client(
+        std::move(conn),
+        binance_stream_frame_descriptor,
+        std::move(error_handler));
 }
 
 } // namespace exchange::binance::ws

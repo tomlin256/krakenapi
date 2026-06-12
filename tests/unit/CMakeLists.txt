@@ -98,6 +98,9 @@ gtest_discover_tests(test_binance_client)
 # Binance WebSocket market-stream unit tests (Step 7 — mock connection only)
 #-------------------------------------------------------------------------------
 
+# krakenapi supplies the generic ExchangeWsClient implementation
+# (src/exchange/common/ws_client.cpp is compiled into libkrakenapi.a, not
+# libbinanceapi.a) — no Kraken-specific code is referenced.
 add_executable(test_binance_ws_client test_binance_ws_client.cpp)
-target_link_libraries(test_binance_ws_client binanceapi GTest::gtest_main)
+target_link_libraries(test_binance_ws_client binanceapi krakenapi GTest::gtest_main)
 gtest_discover_tests(test_binance_ws_client)

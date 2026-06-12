@@ -13,11 +13,44 @@
 
 #include "exchange/binance/ws_streams.hpp"
 #include "binance_ws_stream_example_json.hpp"
+#include "mock_ws_connection.hpp"
 
 #include <gtest/gtest.h>
 
+#include <memory>
+#include <string>
+#include <vector>
+
 using namespace exchange::binance::ws;
 namespace fixtures = exchange::binance::ws::test;
+
+namespace {
+
+// Client backed by a MockWsConnection. Tests fire_open() themselves for
+// precise control over the pre-connection outbound queue.
+std::pair<std::shared_ptr<BinanceStreamClient>, std::shared_ptr<MockWsConnection>>
+make_mock_client() {
+    auto conn   = std::make_shared<MockWsConnection>();
+    auto client = make_binance_stream_client(conn);
+    return {client, conn};
+}
+
+// Extracts the client-assigned id from a sent SUBSCRIBE frame.
+int64_t sent_id(const std::string& raw) {
+    return json::parse(raw).at("id").get<int64_t>();
+}
+
+// Success ack matching a sent request id.
+std::string make_ack(int64_t id) {
+    return json{{"result", nullptr}, {"id", id}}.dump();
+}
+
+// Wraps a bare payload in the combined-stream envelope dispatch delivers.
+std::string wrap(const std::string& stream, const char* bare_payload) {
+    return json{{"stream", stream}, {"data", json::parse(bare_payload)}}.dump();
+}
+
+} // namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
 // binance_stream_frame_descriptor — appendix §5 classification
@@ -222,4 +255,185 @@ TEST(BinanceStreamEvents, PartialDepth_FromJson) {
     ASSERT_EQ(d.asks.size(), 1u);
     EXPECT_DOUBLE_EQ(d.asks[0].price, 0.0026);
     EXPECT_DOUBLE_EQ(d.asks[0].quantity, 100.0);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Subscribe request scaffold + stream-name helpers (Step 7.4)
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST(BinanceStreamSubscribe, SubscribeRequest_ToJson) {
+    BinanceAggTradeSubscribe req;
+    req.stream = agg_trade_stream("BNBBTC");
+    req.req_id = 42;
+
+    EXPECT_EQ(req.route_key(), "bnbbtc@aggTrade");
+
+    auto expected_sub = json::parse(
+        R"({"method":"SUBSCRIBE","params":["bnbbtc@aggTrade"],"id":42})");
+    EXPECT_EQ(req.to_json(), expected_sub);
+
+    auto expected_unsub = json::parse(
+        R"({"method":"UNSUBSCRIBE","params":["bnbbtc@aggTrade"],"id":42})");
+    EXPECT_EQ(req.unsubscribe_json(), expected_unsub);
+}
+
+TEST(BinanceStreamSubscribe, StreamHelpers_LowercaseSymbol) {
+    EXPECT_EQ(agg_trade_stream("BNBBTC"), "bnbbtc@aggTrade");
+    EXPECT_EQ(trade_stream("BNBBTC"), "bnbbtc@trade");
+    EXPECT_EQ(kline_stream("BTCUSDT", "1m"), "btcusdt@kline_1m");
+    EXPECT_EQ(ticker_stream("BNBBTC"), "bnbbtc@ticker");
+    EXPECT_EQ(mini_ticker_stream("BNBBTC"), "bnbbtc@miniTicker");
+    EXPECT_EQ(book_ticker_stream("BNBUSDT"), "bnbusdt@bookTicker");
+    EXPECT_EQ(depth_stream("BNBBTC"), "bnbbtc@depth");
+    EXPECT_EQ(partial_depth_stream("BNBBTC", 5), "bnbbtc@depth5");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Subscribe lifecycle through ExchangeWsClient (mock connection, no network)
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST(BinanceStreamLifecycle, Subscribe_Lifecycle) {
+    auto [client, conn] = make_mock_client();
+    conn->fire_open();
+
+    BinanceAggTradeSubscribe req;
+    req.stream = agg_trade_stream("BNBBTC");
+
+    std::vector<BinanceAggTradeEvent> received;
+    auto fut = client->subscribe_async(
+        req, [&](BinanceAggTradeEvent e) { received.push_back(std::move(e)); });
+
+    // Phase 2 — SUBSCRIBE frame sent with the auto-assigned id.
+    ASSERT_EQ(conn->sent_messages.size(), 1u);
+    auto sub_frame = json::parse(conn->sent_messages[0]);
+    EXPECT_EQ(sub_frame.at("method"), "SUBSCRIBE");
+    EXPECT_EQ(sub_frame.at("params"), json::array({"bnbbtc@aggTrade"}));
+    const auto id = sub_frame.at("id").get<int64_t>();
+
+    // Phase 3 — ack matched by id; callback installed, handle active.
+    conn->inject_message(make_ack(id));
+    auto [ack, handle] = fut.get();
+    EXPECT_TRUE(ack.ok);
+    ASSERT_TRUE(ack.result.has_value());
+    EXPECT_EQ(ack.result->id, id);
+    EXPECT_TRUE(handle.is_active());
+
+    // Push — wrapped frame routes by stream name to the typed callback.
+    conn->inject_message(wrap("bnbbtc@aggTrade", fixtures::kAggTradeJson));
+    ASSERT_EQ(received.size(), 1u);
+    EXPECT_EQ(received[0].symbol, "BNBBTC");
+    EXPECT_EQ(received[0].agg_trade_id, 12345);
+    EXPECT_DOUBLE_EQ(received[0].price, 0.001);
+
+    // Cancel — UNSUBSCRIBE sent once; idempotent on second call.
+    handle.cancel();
+    ASSERT_EQ(conn->sent_messages.size(), 2u);
+    auto unsub_frame = json::parse(conn->sent_messages[1]);
+    EXPECT_EQ(unsub_frame.at("method"), "UNSUBSCRIBE");
+    EXPECT_EQ(unsub_frame.at("params"), json::array({"bnbbtc@aggTrade"}));
+    EXPECT_EQ(unsub_frame.at("id").get<int64_t>(), id);
+    EXPECT_FALSE(handle.is_active());
+
+    handle.cancel();
+    EXPECT_EQ(conn->sent_messages.size(), 2u);
+
+    // After cancel the push callback is gone.
+    conn->inject_message(wrap("bnbbtc@aggTrade", fixtures::kAggTradeJson));
+    EXPECT_EQ(received.size(), 1u);
+}
+
+TEST(BinanceStreamLifecycle, Subscribe_ErrorAck_NoCallbackInstalled) {
+    auto [client, conn] = make_mock_client();
+    conn->fire_open();
+
+    BinanceAggTradeSubscribe req;
+    req.stream = agg_trade_stream("BNBBTC");
+
+    int callback_count = 0;
+    auto fut = client->subscribe_async(
+        req, [&](const BinanceAggTradeEvent&) { ++callback_count; });
+
+    const auto id = sent_id(conn->sent_messages.at(0));
+    conn->inject_message(
+        json{{"error", {{"code", 2}, {"msg", "Invalid request"}}}, {"id", id}}.dump());
+
+    auto [ack, handle] = fut.get();
+    EXPECT_FALSE(ack.ok);
+    ASSERT_TRUE(ack.error.has_value());
+    EXPECT_EQ(*ack.error, "Invalid request");
+    EXPECT_FALSE(handle.is_active());
+
+    // No callback was installed — a push frame must not fire it.
+    conn->inject_message(wrap("bnbbtc@aggTrade", fixtures::kAggTradeJson));
+    EXPECT_EQ(callback_count, 0);
+}
+
+TEST(BinanceStreamLifecycle, Subscribe_BeforeOpen_QueuedAndFlushed) {
+    auto [client, conn] = make_mock_client();
+    // No fire_open() yet — the SUBSCRIBE must queue, not send.
+
+    BinanceTradeSubscribe req;
+    req.stream = trade_stream("BNBBTC");
+
+    auto fut = client->subscribe_async(req, [](const BinanceTradeEvent&) {});
+    EXPECT_TRUE(conn->sent_messages.empty());
+
+    conn->fire_open();
+    ASSERT_EQ(conn->sent_messages.size(), 1u);
+    EXPECT_EQ(json::parse(conn->sent_messages[0]).at("method"), "SUBSCRIBE");
+
+    // Complete the handshake so the pending future doesn't dangle.
+    conn->inject_message(make_ack(sent_id(conn->sent_messages[0])));
+    auto [ack, handle] = fut.get();
+    EXPECT_TRUE(ack.ok);
+    EXPECT_TRUE(handle.is_active());
+}
+
+TEST(BinanceStreamLifecycle, TwoStreamsOneConnection) {
+    auto [client, conn] = make_mock_client();
+    conn->fire_open();
+
+    BinanceAggTradeSubscribe agg_req;
+    agg_req.stream = agg_trade_stream("BNBBTC");
+    BinanceBookTickerSubscribe bt_req;
+    bt_req.stream = book_ticker_stream("BNBUSDT");
+
+    int agg_count = 0;
+    int bt_count  = 0;
+    auto agg_fut = client->subscribe_async(
+        agg_req, [&](const BinanceAggTradeEvent& e) {
+            ++agg_count;
+            EXPECT_EQ(e.symbol, "BNBBTC");
+        });
+    auto bt_fut = client->subscribe_async(
+        bt_req, [&](const BinanceBookTickerEvent& e) {
+            ++bt_count;
+            EXPECT_EQ(e.symbol, "BNBUSDT");
+        });
+
+    ASSERT_EQ(conn->sent_messages.size(), 2u);
+    conn->inject_message(make_ack(sent_id(conn->sent_messages[0])));
+    conn->inject_message(make_ack(sent_id(conn->sent_messages[1])));
+
+    auto [agg_ack, agg_handle] = agg_fut.get();
+    auto [bt_ack, bt_handle]   = bt_fut.get();
+    EXPECT_TRUE(agg_ack.ok);
+    EXPECT_TRUE(bt_ack.ok);
+    EXPECT_TRUE(agg_handle.is_active());
+    EXPECT_TRUE(bt_handle.is_active());
+
+    // Pushes route to the right callbacks by route_key — no cross-fire.
+    conn->inject_message(wrap("bnbbtc@aggTrade", fixtures::kAggTradeJson));
+    conn->inject_message(wrap("bnbusdt@bookTicker", fixtures::kBookTickerJson));
+    conn->inject_message(wrap("bnbbtc@aggTrade", fixtures::kAggTradeJson));
+
+    EXPECT_EQ(agg_count, 2);
+    EXPECT_EQ(bt_count, 1);
+
+    // Cancelling one stream leaves the other live.
+    agg_handle.cancel();
+    conn->inject_message(wrap("bnbbtc@aggTrade", fixtures::kAggTradeJson));
+    conn->inject_message(wrap("bnbusdt@bookTicker", fixtures::kBookTickerJson));
+    EXPECT_EQ(agg_count, 2);
+    EXPECT_EQ(bt_count, 2);
 }
