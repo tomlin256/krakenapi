@@ -77,3 +77,96 @@ TEST(BinanceStreamAck, ErrorAck_FromJson) {
     EXPECT_EQ(*a.error, "Invalid request: subscription id not provided");
     EXPECT_EQ(a.id, 7);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Flat push event types — from_json field assertions (Step 7.2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST(BinanceStreamEvents, AggTrade_FromJson) {
+    auto e = BinanceAggTradeEvent::from_json(json::parse(fixtures::kAggTradeJson));
+    EXPECT_EQ(e.event_time, 1672515782136LL);
+    EXPECT_EQ(e.symbol, "BNBBTC");
+    EXPECT_EQ(e.agg_trade_id, 12345);
+    EXPECT_DOUBLE_EQ(e.price, 0.001);
+    EXPECT_DOUBLE_EQ(e.qty, 100.0);
+    EXPECT_EQ(e.first_trade_id, 100);
+    EXPECT_EQ(e.last_trade_id, 105);
+    EXPECT_EQ(e.trade_time, 1672515782136LL);
+    EXPECT_TRUE(e.is_buyer_maker);
+}
+
+// Pins the decision-4 unwrap rule: dispatch hands push callbacks the whole
+// {"stream","data"} frame, and from_json must parse it identically to the
+// bare payload.
+TEST(BinanceStreamEvents, AggTrade_ParsesWrappedFrame) {
+    auto bare    = BinanceAggTradeEvent::from_json(json::parse(fixtures::kAggTradeJson));
+    auto wrapped = BinanceAggTradeEvent::from_json(json::parse(fixtures::kWrappedAggTradeJson));
+    EXPECT_EQ(wrapped.event_time, bare.event_time);
+    EXPECT_EQ(wrapped.symbol, bare.symbol);
+    EXPECT_EQ(wrapped.agg_trade_id, bare.agg_trade_id);
+    EXPECT_DOUBLE_EQ(wrapped.price, bare.price);
+    EXPECT_DOUBLE_EQ(wrapped.qty, bare.qty);
+    EXPECT_EQ(wrapped.first_trade_id, bare.first_trade_id);
+    EXPECT_EQ(wrapped.last_trade_id, bare.last_trade_id);
+    EXPECT_EQ(wrapped.trade_time, bare.trade_time);
+    EXPECT_EQ(wrapped.is_buyer_maker, bare.is_buyer_maker);
+}
+
+TEST(BinanceStreamEvents, Trade_FromJson) {
+    auto e = BinanceTradeEvent::from_json(json::parse(fixtures::kTradeJson));
+    EXPECT_EQ(e.event_time, 1672515782136LL);
+    EXPECT_EQ(e.symbol, "BNBBTC");
+    EXPECT_EQ(e.trade_id, 12345);
+    EXPECT_DOUBLE_EQ(e.price, 0.001);
+    EXPECT_DOUBLE_EQ(e.qty, 100.0);
+    EXPECT_EQ(e.trade_time, 1672515782136LL);
+    EXPECT_TRUE(e.is_buyer_maker);
+}
+
+TEST(BinanceStreamEvents, Ticker_FromJson) {
+    auto e = BinanceTickerEvent::from_json(json::parse(fixtures::kTickerJson));
+    EXPECT_EQ(e.event_time, 1672515782136LL);
+    EXPECT_EQ(e.symbol, "BNBBTC");
+    EXPECT_DOUBLE_EQ(e.price_change, 0.0015);
+    EXPECT_DOUBLE_EQ(e.price_change_pct, 250.00);
+    EXPECT_DOUBLE_EQ(e.weighted_avg_price, 0.0018);
+    EXPECT_DOUBLE_EQ(e.prev_close, 0.0009);
+    EXPECT_DOUBLE_EQ(e.last_price, 0.0025);
+    EXPECT_DOUBLE_EQ(e.last_qty, 10.0);
+    EXPECT_DOUBLE_EQ(e.bid_price, 0.0024);
+    EXPECT_DOUBLE_EQ(e.bid_qty, 10.0);
+    EXPECT_DOUBLE_EQ(e.ask_price, 0.0026);
+    EXPECT_DOUBLE_EQ(e.ask_qty, 100.0);
+    EXPECT_DOUBLE_EQ(e.open, 0.0010);
+    EXPECT_DOUBLE_EQ(e.high, 0.0025);
+    EXPECT_DOUBLE_EQ(e.low, 0.0010);
+    EXPECT_DOUBLE_EQ(e.volume, 10000.0);
+    EXPECT_DOUBLE_EQ(e.quote_volume, 18.0);
+    EXPECT_EQ(e.stats_open_time, 0);
+    EXPECT_EQ(e.stats_close_time, 86400000);
+    EXPECT_EQ(e.first_trade_id, 0);
+    EXPECT_EQ(e.last_trade_id, 18150);
+    EXPECT_EQ(e.num_trades, 18151);
+}
+
+TEST(BinanceStreamEvents, MiniTicker_FromJson) {
+    auto e = BinanceMiniTickerEvent::from_json(json::parse(fixtures::kMiniTickerJson));
+    EXPECT_EQ(e.event_time, 1672515782136LL);
+    EXPECT_EQ(e.symbol, "BNBBTC");
+    EXPECT_DOUBLE_EQ(e.close, 0.0025);
+    EXPECT_DOUBLE_EQ(e.open, 0.0010);
+    EXPECT_DOUBLE_EQ(e.high, 0.0025);
+    EXPECT_DOUBLE_EQ(e.low, 0.0010);
+    EXPECT_DOUBLE_EQ(e.volume, 10000.0);
+    EXPECT_DOUBLE_EQ(e.quote_volume, 18.0);
+}
+
+TEST(BinanceStreamEvents, BookTicker_FromJson) {
+    auto e = BinanceBookTickerEvent::from_json(json::parse(fixtures::kBookTickerJson));
+    EXPECT_EQ(e.update_id, 400900217);
+    EXPECT_EQ(e.symbol, "BNBUSDT");
+    EXPECT_DOUBLE_EQ(e.bid_price, 25.3519);
+    EXPECT_DOUBLE_EQ(e.bid_qty, 31.21);
+    EXPECT_DOUBLE_EQ(e.ask_price, 25.3652);
+    EXPECT_DOUBLE_EQ(e.ask_qty, 40.66);
+}
