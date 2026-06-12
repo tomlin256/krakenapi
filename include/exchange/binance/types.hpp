@@ -34,10 +34,13 @@
 
 #include "exchange/common/types.hpp"
 
+#include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
 
 namespace exchange::binance {
+
+using json = nlohmann::json;
 
 // Re-export the canonical enums so exchange::binance code refers to them
 // unprefixed (mirrors exchange/kraken/types.hpp).
@@ -141,5 +144,23 @@ inline std::string binance_order_resp_type_to_string(BinanceOrderRespType v) {
     }
     throw std::invalid_argument("Unknown BinanceOrderRespType");
 }
+
+// ── BinanceBookLevel ─────────────────────────────────────────────────────────
+//
+// One order-book price level. Shared by the REST order book
+// (GET /api/v3/depth) and the WS depth streams (@depth diff and
+// @depth<levels> partial), which all use the same positional row format.
+
+struct BinanceBookLevel {
+    double price{0.0};
+    double quantity{0.0};
+    // Parses a positional 2-element row: ["price","qty"].
+    static BinanceBookLevel from_json(const json& row) {
+        BinanceBookLevel l;
+        l.price    = std::stod(row.at(0).get<std::string>());
+        l.quantity = std::stod(row.at(1).get<std::string>());
+        return l;
+    }
+};
 
 } // namespace exchange::binance

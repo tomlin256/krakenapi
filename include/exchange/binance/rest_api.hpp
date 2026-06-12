@@ -192,17 +192,9 @@ struct BinanceTickerPriceRequest : TypedPublicRequest<BinanceTickerPrice> {
 
 // ── GET /api/v3/depth ────────────────────────────────────────────────────────
 
-struct BinanceBookLevel {
-    double price{0.0};
-    double quantity{0.0};
-    // Parses a positional 2-element row: ["price","qty"].
-    static BinanceBookLevel from_json(const json& row) {
-        BinanceBookLevel l;
-        l.price    = std::stod(row.at(0).get<std::string>());
-        l.quantity = std::stod(row.at(1).get<std::string>());
-        return l;
-    }
-};
+// Hoisted to exchange/binance/types.hpp (shared with the WS depth streams);
+// re-exported here so existing exchange::binance::rest spellings keep resolving.
+using exchange::binance::BinanceBookLevel;
 
 struct BinanceOrderBook {
     int64_t                       last_update_id{0};

@@ -170,3 +170,56 @@ TEST(BinanceStreamEvents, BookTicker_FromJson) {
     EXPECT_DOUBLE_EQ(e.ask_price, 25.3652);
     EXPECT_DOUBLE_EQ(e.ask_qty, 40.66);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Structured push event types — kline + depth (Step 7.3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST(BinanceStreamEvents, Kline_FromJson) {
+    auto e = BinanceKlineEvent::from_json(json::parse(fixtures::kKlineJson));
+    EXPECT_EQ(e.event_time, 1672515782136LL);
+    EXPECT_EQ(e.symbol, "BNBBTC");
+
+    const auto& k = e.kline;
+    EXPECT_EQ(k.start_time, 1672515780000LL);
+    EXPECT_EQ(k.close_time, 1672515839999LL);
+    EXPECT_EQ(k.symbol, "BNBBTC");
+    EXPECT_EQ(k.interval, "1m");
+    EXPECT_EQ(k.first_trade_id, 100);
+    EXPECT_EQ(k.last_trade_id, 200);
+    EXPECT_DOUBLE_EQ(k.open, 0.0010);
+    EXPECT_DOUBLE_EQ(k.close, 0.0020);
+    EXPECT_DOUBLE_EQ(k.high, 0.0025);
+    EXPECT_DOUBLE_EQ(k.low, 0.0015);
+    EXPECT_DOUBLE_EQ(k.volume, 1000.0);
+    EXPECT_DOUBLE_EQ(k.quote_volume, 1.0);
+    EXPECT_DOUBLE_EQ(k.taker_buy_base_volume, 500.0);
+    EXPECT_DOUBLE_EQ(k.taker_buy_quote_volume, 0.5);
+    EXPECT_EQ(k.num_trades, 100);
+    EXPECT_FALSE(k.is_closed);
+}
+
+TEST(BinanceStreamEvents, DepthUpdate_FromJson) {
+    auto e = BinanceDepthUpdateEvent::from_json(json::parse(fixtures::kDepthUpdateJson));
+    EXPECT_EQ(e.event_time, 1672515782136LL);
+    EXPECT_EQ(e.symbol, "BNBBTC");
+    EXPECT_EQ(e.first_update_id, 157);
+    EXPECT_EQ(e.final_update_id, 160);
+    ASSERT_EQ(e.bids.size(), 1u);
+    EXPECT_DOUBLE_EQ(e.bids[0].price, 0.0024);
+    EXPECT_DOUBLE_EQ(e.bids[0].quantity, 10.0);
+    ASSERT_EQ(e.asks.size(), 1u);
+    EXPECT_DOUBLE_EQ(e.asks[0].price, 0.0026);
+    EXPECT_DOUBLE_EQ(e.asks[0].quantity, 100.0);
+}
+
+TEST(BinanceStreamEvents, PartialDepth_FromJson) {
+    auto d = BinancePartialDepth::from_json(json::parse(fixtures::kPartialDepthJson));
+    EXPECT_EQ(d.last_update_id, 160);
+    ASSERT_EQ(d.bids.size(), 1u);
+    EXPECT_DOUBLE_EQ(d.bids[0].price, 0.0024);
+    EXPECT_DOUBLE_EQ(d.bids[0].quantity, 10.0);
+    ASSERT_EQ(d.asks.size(), 1u);
+    EXPECT_DOUBLE_EQ(d.asks[0].price, 0.0026);
+    EXPECT_DOUBLE_EQ(d.asks[0].quantity, 100.0);
+}

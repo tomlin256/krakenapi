@@ -23,11 +23,13 @@
 // This header does not include ix_ws_connection.hpp; for the real transport
 // use the URL overload of exchange::ws::make_exchange_ws_client there.
 
+#include "exchange/binance/types.hpp"
 #include "exchange/common/ws_client.hpp"
 
 #include <nlohmann/json.hpp>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace exchange::binance::ws {
 
@@ -234,6 +236,114 @@ struct BinanceBookTickerEvent {
         e.ask_price = std::stod(j.value("a", "0"));
         e.ask_qty   = std::stod(j.value("A", "0"));
         return e;
+    }
+};
+
+// <symbol>@kline_<interval> — candle payload nested under "k". Keyed
+// single-letter fields; the REST kline is a positional 12-array — same data,
+// different wire shape. Documented ignore field ("B") dropped.
+struct BinanceStreamKline {
+    int64_t     start_time{0};              // t
+    int64_t     close_time{0};              // T
+    std::string symbol;                     // s
+    std::string interval;                   // i
+    int64_t     first_trade_id{0};          // f
+    int64_t     last_trade_id{0};           // L
+    double      open{0.0};                  // o
+    double      close{0.0};                 // c
+    double      high{0.0};                  // h
+    double      low{0.0};                   // l
+    double      volume{0.0};                // v
+    double      quote_volume{0.0};          // q
+    double      taker_buy_base_volume{0.0}; // V
+    double      taker_buy_quote_volume{0.0}; // Q
+    int64_t     num_trades{0};              // n
+    bool        is_closed{false};           // x
+
+    // Parses the bare "k" object (BinanceKlineEvent extracts it).
+    static BinanceStreamKline from_json(const json& k) {
+        BinanceStreamKline c;
+        c.start_time             = k.value("t", int64_t{0});
+        c.close_time             = k.value("T", int64_t{0});
+        c.symbol                 = k.value("s", std::string{});
+        c.interval               = k.value("i", std::string{});
+        c.first_trade_id         = k.value("f", int64_t{0});
+        c.last_trade_id          = k.value("L", int64_t{0});
+        c.open                   = std::stod(k.value("o", "0"));
+        c.close                  = std::stod(k.value("c", "0"));
+        c.high                   = std::stod(k.value("h", "0"));
+        c.low                    = std::stod(k.value("l", "0"));
+        c.volume                 = std::stod(k.value("v", "0"));
+        c.quote_volume           = std::stod(k.value("q", "0"));
+        c.taker_buy_base_volume  = std::stod(k.value("V", "0"));
+        c.taker_buy_quote_volume = std::stod(k.value("Q", "0"));
+        c.num_trades             = k.value("n", int64_t{0});
+        c.is_closed              = k.value("x", false);
+        return c;
+    }
+};
+
+struct BinanceKlineEvent {
+    int64_t            event_time{0}; // E
+    std::string        symbol;        // s
+    BinanceStreamKline kline;         // k
+
+    static BinanceKlineEvent from_json(const json& frame) {
+        const json& j = detail::stream_payload(frame);
+        BinanceKlineEvent e;
+        e.event_time = j.value("E", int64_t{0});
+        e.symbol     = j.value("s", std::string{});
+        if (j.contains("k"))
+            e.kline = BinanceStreamKline::from_json(j.at("k"));
+        return e;
+    }
+};
+
+// <symbol>@depth — differential book update.
+struct BinanceDepthUpdateEvent {
+    int64_t     event_time{0};      // E
+    std::string symbol;             // s
+    int64_t     first_update_id{0}; // U
+    int64_t     final_update_id{0}; // u
+    std::vector<BinanceBookLevel> bids; // b
+    std::vector<BinanceBookLevel> asks; // a
+
+    static BinanceDepthUpdateEvent from_json(const json& frame) {
+        const json& j = detail::stream_payload(frame);
+        BinanceDepthUpdateEvent e;
+        e.event_time      = j.value("E", int64_t{0});
+        e.symbol          = j.value("s", std::string{});
+        e.first_update_id = j.value("U", int64_t{0});
+        e.final_update_id = j.value("u", int64_t{0});
+        if (j.contains("b"))
+            for (const auto& row : j["b"])
+                e.bids.push_back(BinanceBookLevel::from_json(row));
+        if (j.contains("a"))
+            for (const auto& row : j["a"])
+                e.asks.push_back(BinanceBookLevel::from_json(row));
+        return e;
+    }
+};
+
+// <symbol>@depth<levels> — top-N snapshot. Same shape as the REST order book
+// (full-name keys, no event envelope) but kept as its own type so ws code
+// doesn't depend on rest_api.hpp.
+struct BinancePartialDepth {
+    int64_t last_update_id{0}; // lastUpdateId
+    std::vector<BinanceBookLevel> bids;
+    std::vector<BinanceBookLevel> asks;
+
+    static BinancePartialDepth from_json(const json& frame) {
+        const json& j = detail::stream_payload(frame);
+        BinancePartialDepth d;
+        d.last_update_id = j.value("lastUpdateId", int64_t{0});
+        if (j.contains("bids"))
+            for (const auto& row : j["bids"])
+                d.bids.push_back(BinanceBookLevel::from_json(row));
+        if (j.contains("asks"))
+            for (const auto& row : j["asks"])
+                d.asks.push_back(BinanceBookLevel::from_json(row));
+        return d;
     }
 };
 
