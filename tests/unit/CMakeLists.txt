@@ -93,3 +93,11 @@ gtest_discover_tests(test_binance_rest_responses)
 add_executable(test_binance_client test_binance_client.cpp)
 target_link_libraries(test_binance_client binanceapi GTest::gtest_main)
 gtest_discover_tests(test_binance_client)
+
+#-------------------------------------------------------------------------------
+# Binance WebSocket market-stream unit tests (Step 7 — mock connection only)
+#-------------------------------------------------------------------------------
+
+add_executable(test_binance_ws_client test_binance_ws_client.cpp)
+target_link_libraries(test_binance_ws_client binanceapi GTest::gtest_main)
+gtest_discover_tests(test_binance_ws_client)
