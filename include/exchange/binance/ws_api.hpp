@@ -25,6 +25,7 @@
 // This header does not include ix_ws_connection.hpp; for the real transport
 // use the URL overload of exchange::ws::make_exchange_ws_client there.
 
+#include "exchange/binance/auth.hpp"
 #include "exchange/common/ws_client.hpp"
 
 #include <cstdint>
@@ -141,6 +142,51 @@ binance_ws_api_frame_descriptor(const json& j) {
 
     return d;  // FrameKind::Unknown when no usable id
 }
+
+// ── Signing ───────────────────────────────────────────────────────────────────
+//
+// The WS API uses the same key material, algorithm (HMAC-SHA256 → lowercase
+// hex), and recvWindow semantics as REST — only the payload framing differs
+// (alphabetically-sorted "k=v&k=v" over the params object, vs. REST's
+// query+body concatenation). So the credential bundle is the REST one by
+// alias, and signing is one free helper over the same crypto primitives.
+
+using BinanceWsCredentials = exchange::binance::rest::BinanceCredentials;
+
+namespace detail {
+
+// Renders one param value as it appears in the signed payload: strings raw
+// (no quotes), everything else via dump() (ints → digits, bools → true/false).
+inline std::string ws_param_value(const json& v) {
+    return v.is_string() ? v.get<std::string>() : v.dump();
+}
+
+// Injects apiKey, timestamp, and recvWindow (if creds.recv_window_ms > 0)
+// into params, then appends "signature" — HMAC-SHA256 hex over the sorted
+// payload. nlohmann's json object is std::map-backed, so key iteration is
+// already alphabetical: Binance's required signing order falls out with no
+// sort step. Payload and wire frame are rendered from the same params
+// object, so they cannot disagree. The request "id" lives outside params and
+// is never part of the signature. HMAC-SHA256 only, like BinanceAuth::sign
+// (Rsa/Ed25519 enum values are accepted-but-unimplemented there too).
+inline void ws_sign_params(json& params, const BinanceWsCredentials& creds,
+                           int64_t timestamp_ms) {
+    params["apiKey"]    = creds.api_key;
+    params["timestamp"] = timestamp_ms;
+    if (creds.recv_window_ms > 0)
+        params["recvWindow"] = creds.recv_window_ms;
+
+    std::string payload;
+    for (auto it = params.begin(); it != params.end(); ++it) {
+        if (!payload.empty()) payload += '&';
+        payload += it.key() + '=' + ws_param_value(it.value());
+    }
+
+    params["signature"] =
+        rest::detail::to_hex(rest::detail::hmac_sha256(creds.secret_key, payload));
+}
+
+} // namespace detail
 
 // ── ping ──────────────────────────────────────────────────────────────────────
 

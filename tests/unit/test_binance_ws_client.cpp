@@ -538,3 +538,78 @@ TEST(BinanceWsApiPing, ToJson) {
     req.req_id = 42;
     EXPECT_EQ(req.to_json(), json::parse(R"({"id":42,"method":"ping"})"));
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// detail::ws_sign_params — sorted-payload HMAC-SHA256 signing
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+
+// Expected signature recomputed over the exact expected sorted payload with
+// the same primitives (the test_binance_client precedent).
+std::string ws_sig(const std::string& secret, const std::string& payload) {
+    namespace rd = exchange::binance::rest::detail;
+    return rd::to_hex(rd::hmac_sha256(secret, payload));
+}
+
+BinanceWsCredentials test_ws_creds(int recv_window_ms = 0) {
+    BinanceWsCredentials creds;
+    creds.api_key        = "testApiKey";
+    creds.secret_key     = "testSecret";
+    creds.recv_window_ms = recv_window_ms;
+    return creds;
+}
+
+} // namespace
+
+TEST(BinanceWsSignParams, DeterministicSignature) {
+    json params{{"symbol", "BTCUSDT"}, {"side", "BUY"}};
+    detail::ws_sign_params(params, test_ws_creds(), 1655716096498);
+
+    EXPECT_EQ(params.at("apiKey"), "testApiKey");
+    EXPECT_EQ(params.at("timestamp"), 1655716096498);
+    EXPECT_EQ(params.at("signature"),
+              ws_sig("testSecret",
+                     "apiKey=testApiKey&side=BUY&symbol=BTCUSDT"
+                     "&timestamp=1655716096498"));
+}
+
+TEST(BinanceWsSignParams, PayloadIsAlphabeticallySorted) {
+    // Keys inserted in reverse-alphabetical order must still sign in sorted
+    // order — pins the std::map-backed-object assumption against a future
+    // switch to ordered_json.
+    json params;
+    params["zzz"] = "last";
+    params["aaa"] = "first";
+    detail::ws_sign_params(params, test_ws_creds(), 1000);
+
+    EXPECT_EQ(params.at("signature"),
+              ws_sig("testSecret",
+                     "aaa=first&apiKey=testApiKey&timestamp=1000&zzz=last"));
+}
+
+TEST(BinanceWsSignParams, RecvWindowIncludedWhenSet) {
+    json with_window{{"symbol", "BTCUSDT"}};
+    detail::ws_sign_params(with_window, test_ws_creds(5000), 1000);
+    EXPECT_EQ(with_window.at("recvWindow"), 5000);
+    EXPECT_EQ(with_window.at("signature"),
+              ws_sig("testSecret",
+                     "apiKey=testApiKey&recvWindow=5000&symbol=BTCUSDT"
+                     "&timestamp=1000"));
+
+    json without_window{{"symbol", "BTCUSDT"}};
+    detail::ws_sign_params(without_window, test_ws_creds(0), 1000);
+    EXPECT_FALSE(without_window.contains("recvWindow"));
+}
+
+TEST(BinanceWsSignParams, ValueRendering_StringsRawIntsAsDigits) {
+    // String values render unquoted; non-strings via dump(). A quoted string
+    // or a stray decimal point would produce a different signature.
+    json params{{"price", "0.10"}, {"orderId", 12510053279}};
+    detail::ws_sign_params(params, test_ws_creds(), 1000);
+
+    EXPECT_EQ(params.at("signature"),
+              ws_sig("testSecret",
+                     "apiKey=testApiKey&orderId=12510053279&price=0.10"
+                     "&timestamp=1000"));
+}
