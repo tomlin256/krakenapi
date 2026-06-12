@@ -1,6 +1,6 @@
 # Plan 005 — Step 7: Binance WebSocket market streams
 
-**Status**: Draft — awaiting approval
+**Status**: Done — implemented in commits `7d461fc` (7.1), `5409a69` (7.2), `da8eda5` (7.3), `b833587` (7.4), `195d482` (7.5); suite 255 → 277 green; example live-verified against `stream.binance.com`
 **Parent**: [Plan 001, Step 7](001-multi-exchange-abstraction.md#step-7--binance-websocket-market-streams)
 **Branch**: `feature/multi-exchange-abstraction`
 **Message formats**: [001-appendix-binance-message-formats.md §3 + §5](001-appendix-binance-message-formats.md)
