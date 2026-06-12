@@ -7,11 +7,15 @@
 // full license information.
 // =============================================================================
 //
-// Binance WebSocket market-stream unit tests — frame descriptor classification,
-// ack parsing, event from_json field assertions, and the full subscribe
-// lifecycle through ExchangeWsClient with a mock connection. No network I/O.
+// Binance WebSocket unit tests, both surfaces — market streams (frame
+// descriptor classification, ack parsing, event from_json field assertions,
+// subscribe lifecycle) and the WS API trading endpoint (descriptor, reply
+// envelope, signed requests, execute lifecycle) — all through ExchangeWsClient
+// with a mock connection. No network I/O.
 
+#include "exchange/binance/ws_api.hpp"
 #include "exchange/binance/ws_streams.hpp"
+#include "binance_ws_api_example_json.hpp"
 #include "binance_ws_stream_example_json.hpp"
 #include "mock_ws_connection.hpp"
 
@@ -436,4 +440,101 @@ TEST(BinanceStreamLifecycle, TwoStreamsOneConnection) {
     conn->inject_message(wrap("bnbusdt@bookTicker", fixtures::kBookTickerJson));
     EXPECT_EQ(agg_count, 2);
     EXPECT_EQ(bt_count, 2);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// WS API (trading endpoint) — appendix §4/§5
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ─────────────────────────────────────────────────────────────────────────────
+// binance_ws_api_frame_descriptor — every reply is a MethodResponse by id
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST(BinanceWsApiDescriptor, SuccessReply_IsMethodResponse) {
+    auto d = binance_ws_api_frame_descriptor(
+        json::parse(fixtures::kWsApiOrderPlaceSuccessJson));
+    EXPECT_EQ(d.kind, FrameKind::MethodResponse);
+    ASSERT_TRUE(d.correlation_id.has_value());
+    EXPECT_EQ(*d.correlation_id, "e2a85d9f-07a5-4f94-8d5f-789dc3deb097");
+    EXPECT_TRUE(d.route_key.empty());
+}
+
+TEST(BinanceWsApiDescriptor, ErrorReply_IsMethodResponse) {
+    auto d = binance_ws_api_frame_descriptor(
+        json::parse(fixtures::kWsApiOrderPlaceErrorJson));
+    EXPECT_EQ(d.kind, FrameKind::MethodResponse);
+    ASSERT_TRUE(d.correlation_id.has_value());
+    EXPECT_EQ(*d.correlation_id, "e2a85d9f-07a5-4f94-8d5f-789dc3deb097");
+}
+
+TEST(BinanceWsApiDescriptor, IntId_StringifiesLikePendingKey) {
+    // The client keys pending handlers by std::to_string(req_id) — an int id
+    // must stringify identically or replies never match their futures.
+    auto d = binance_ws_api_frame_descriptor(
+        json::parse(R"({"id":7,"status":200,"result":{}})"));
+    EXPECT_EQ(d.kind, FrameKind::MethodResponse);
+    ASSERT_TRUE(d.correlation_id.has_value());
+    EXPECT_EQ(*d.correlation_id, "7");
+}
+
+TEST(BinanceWsApiDescriptor, NoUsableId_IsUnknown) {
+    EXPECT_EQ(binance_ws_api_frame_descriptor(json::parse("{}")).kind,
+              FrameKind::Unknown);
+
+    // id:null — Binance's reply to malformed request JSON; uncorrelatable.
+    auto d = binance_ws_api_frame_descriptor(json::parse(
+        R"({"id":null,"status":400,"error":{"code":-32700,"msg":"JSON parse error"}})"));
+    EXPECT_EQ(d.kind, FrameKind::Unknown);
+    EXPECT_FALSE(d.correlation_id.has_value());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BinanceWsApiResponse envelope — parsed here via BinanceWsPongMessage, the
+// envelope-only response type (the typed order results land in step 8.3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST(BinanceWsApiEnvelope, Pong_Success) {
+    auto m = BinanceWsPongMessage::from_json(json::parse(fixtures::kWsApiPongJson));
+    EXPECT_TRUE(m.success);
+    EXPECT_EQ(m.status, 200);
+    ASSERT_TRUE(m.id.has_value());
+    EXPECT_EQ(*m.id, 1);
+    EXPECT_FALSE(m.error.has_value());
+    EXPECT_FALSE(m.error_code.has_value());
+    EXPECT_TRUE(m.rate_limits.empty());
+}
+
+TEST(BinanceWsApiEnvelope, Error_PopulatesCodeAndMsg) {
+    auto m = BinanceWsPongMessage::from_json(
+        json::parse(fixtures::kWsApiOrderPlaceErrorJson));
+    EXPECT_FALSE(m.success);
+    EXPECT_EQ(m.status, 400);
+    ASSERT_TRUE(m.error.has_value());
+    EXPECT_EQ(*m.error, "Account has insufficient balance for requested action.");
+    ASSERT_TRUE(m.error_code.has_value());
+    EXPECT_EQ(*m.error_code, -2010);
+    // String id is tolerated but not stored in the int slot.
+    EXPECT_FALSE(m.id.has_value());
+}
+
+TEST(BinanceWsApiEnvelope, RateLimits_Parsed) {
+    auto m = BinanceWsPongMessage::from_json(
+        json::parse(fixtures::kWsApiOrderPlaceSuccessJson));
+    EXPECT_TRUE(m.success);
+    ASSERT_EQ(m.rate_limits.size(), 1u);
+    EXPECT_EQ(m.rate_limits[0].rate_limit_type, "ORDERS");
+    EXPECT_EQ(m.rate_limits[0].interval, "SECOND");
+    EXPECT_EQ(m.rate_limits[0].interval_num, 10);
+    EXPECT_EQ(m.rate_limits[0].limit, 50);
+    EXPECT_EQ(m.rate_limits[0].count, 12);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BinanceWsPingRequest
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST(BinanceWsApiPing, ToJson) {
+    BinanceWsPingRequest req;
+    req.req_id = 42;
+    EXPECT_EQ(req.to_json(), json::parse(R"({"id":42,"method":"ping"})"));
 }
