@@ -74,6 +74,13 @@ target_link_libraries(binance_rest_client_example
     binanceapi spdlog::spdlog CLI11::CLI11 example_backward
 )
 
+# krakenapi supplies the generic ExchangeWsClient implementation (compiled
+# into libkrakenapi.a, not libbinanceapi.a) — no Kraken-specific code is used.
+add_executable(binance_ws_client_example examples/binance/binance_ws_client_example.cpp)
+target_link_libraries(binance_ws_client_example
+    binanceapi krakenapi ixwebsocket spdlog::spdlog CLI11::CLI11 example_backward
+)
+
 #-------------------------------------------------------------------------------
 # Unit tests
 #-------------------------------------------------------------------------------
