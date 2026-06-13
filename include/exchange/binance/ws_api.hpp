@@ -26,8 +26,10 @@
 // use the URL overload of exchange::ws::make_exchange_ws_client there.
 
 #include "exchange/binance/auth.hpp"
+#include "exchange/binance/rest_api.hpp"
 #include "exchange/common/ws_client.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -186,6 +188,12 @@ inline void ws_sign_params(json& params, const BinanceWsCredentials& creds,
         rest::detail::to_hex(rest::detail::hmac_sha256(creds.secret_key, payload));
 }
 
+// Current wall-clock ms — the default when a request's timestamp is unset.
+inline int64_t ws_now_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
 } // namespace detail
 
 // ── ping ──────────────────────────────────────────────────────────────────────
@@ -204,6 +212,105 @@ struct BinanceWsPongMessage : BinanceWsApiResponse {
 struct BinanceWsPingRequest : TypedWsRequest<BinanceWsPongMessage> {
     json to_json() const {
         return {{"id", req_id}, {"method", "ping"}};
+    }
+};
+
+// ── order.place / order.cancel ────────────────────────────────────────────────
+//
+// Field sets mirror the REST request structs (same wire names, same
+// caller-formatted-decimal-string convention, same enum converters); result
+// payloads are the REST response shapes verbatim, so the WS responses embed
+// them rather than duplicating the parsers (plan 006 decision 5). Signed
+// requests carry creds plus an explicit timestamp: 0 means "system clock at
+// to_json() time" (live callers do nothing); tests set a fixed value, making
+// the whole frame — signature included — exactly assertable. ExchangeWsClient
+// assigns req_id and then calls to_json() once, so signing happens there; the
+// id is outside params and never enters the signature.
+
+struct BinanceWsNewOrderResponse : BinanceWsApiResponse {
+    // Set on success; parses like the REST RESULT/FULL order shape.
+    std::optional<exchange::binance::rest::BinanceNewOrderResponse> order;
+
+    static BinanceWsNewOrderResponse from_json(const json& j) {
+        BinanceWsNewOrderResponse r;
+        detail::parse_ws_api_envelope(r, j);
+        if (j.contains("result") && j.at("result").is_object())
+            r.order = rest::BinanceNewOrderResponse::from_json(j.at("result"));
+        return r;
+    }
+};
+
+struct BinanceWsNewOrderRequest : TypedWsRequest<BinanceWsNewOrderResponse> {
+    BinanceWsCredentials creds;
+    int64_t              timestamp{0};  // ms; 0 → now at to_json() time
+
+    std::string symbol;                  // required
+    Side        side{Side::Buy};         // required
+    OrderType   type{OrderType::Limit};  // required
+    std::optional<TimeInForce>          time_in_force;
+    std::optional<std::string>          quantity;          // caller-formatted exact
+    std::optional<std::string>          quote_order_qty;   //   decimals (plan 004
+    std::optional<std::string>          price;             //   decision 6)
+    std::optional<std::string>          new_client_order_id;
+    std::optional<std::string>          stop_price;
+    std::optional<std::string>          iceberg_qty;
+    std::optional<BinanceOrderRespType> new_order_resp_type;
+
+    json to_json() const {
+        json params{
+            {"symbol", symbol},
+            {"side", exchange::binance::binance_side_to_string(side)},
+            {"type", exchange::binance::binance_order_type_to_string(type)},
+        };
+        if (time_in_force)
+            params["timeInForce"] = exchange::binance::binance_tif_to_string(*time_in_force);
+        if (quantity)            params["quantity"] = *quantity;
+        if (quote_order_qty)     params["quoteOrderQty"] = *quote_order_qty;
+        if (price)               params["price"] = *price;
+        if (new_client_order_id) params["newClientOrderId"] = *new_client_order_id;
+        if (stop_price)          params["stopPrice"] = *stop_price;
+        if (iceberg_qty)         params["icebergQty"] = *iceberg_qty;
+        if (new_order_resp_type)
+            params["newOrderRespType"] =
+                exchange::binance::binance_order_resp_type_to_string(*new_order_resp_type);
+
+        detail::ws_sign_params(params, creds,
+                               timestamp != 0 ? timestamp : detail::ws_now_ms());
+        return {{"id", req_id}, {"method", "order.place"}, {"params", std::move(params)}};
+    }
+};
+
+struct BinanceWsCancelOrderResponse : BinanceWsApiResponse {
+    // Set on success; the DELETE /api/v3/order shape inside the §4 envelope.
+    std::optional<exchange::binance::rest::BinanceCancelOrderResponse> order;
+
+    static BinanceWsCancelOrderResponse from_json(const json& j) {
+        BinanceWsCancelOrderResponse r;
+        detail::parse_ws_api_envelope(r, j);
+        if (j.contains("result") && j.at("result").is_object())
+            r.order = rest::BinanceCancelOrderResponse::from_json(j.at("result"));
+        return r;
+    }
+};
+
+struct BinanceWsCancelOrderRequest : TypedWsRequest<BinanceWsCancelOrderResponse> {
+    BinanceWsCredentials creds;
+    int64_t              timestamp{0};  // ms; 0 → now at to_json() time
+
+    std::string                symbol;                // required
+    std::optional<int64_t>     order_id;              // one of order_id /
+    std::optional<std::string> orig_client_order_id;  //   orig_client_order_id
+    std::optional<std::string> new_client_order_id;
+
+    json to_json() const {
+        json params{{"symbol", symbol}};
+        if (order_id)             params["orderId"] = *order_id;
+        if (orig_client_order_id) params["origClientOrderId"] = *orig_client_order_id;
+        if (new_client_order_id)  params["newClientOrderId"] = *new_client_order_id;
+
+        detail::ws_sign_params(params, creds,
+                               timestamp != 0 ? timestamp : detail::ws_now_ms());
+        return {{"id", req_id}, {"method", "order.cancel"}, {"params", std::move(params)}};
     }
 };
 

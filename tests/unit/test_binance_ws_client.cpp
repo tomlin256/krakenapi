@@ -26,6 +26,7 @@
 #include <vector>
 
 using namespace exchange::binance::ws;
+using namespace exchange::binance;  // canonical enums (Side, OrderType, …)
 namespace fixtures = exchange::binance::ws::test;
 
 namespace {
@@ -612,4 +613,157 @@ TEST(BinanceWsSignParams, ValueRendering_StringsRawIntsAsDigits) {
               ws_sig("testSecret",
                      "apiKey=testApiKey&orderId=12510053279&price=0.10"
                      "&timestamp=1000"));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// order.place / order.cancel — signed frames + reply parsing (appendix §4)
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST(BinanceWsApiNewOrder, ToJson) {
+    BinanceWsNewOrderRequest req;
+    req.creds         = test_ws_creds();
+    req.timestamp     = 1655716096498;
+    req.req_id        = 7;
+    req.symbol        = "BTCUSDT";
+    req.side          = Side::Buy;
+    req.type          = OrderType::Limit;
+    req.time_in_force = TimeInForce::GTC;
+    req.quantity      = "10";
+    req.price         = "0.10";
+
+    const json expected_sig = ws_sig(
+        "testSecret",
+        "apiKey=testApiKey&price=0.10&quantity=10&side=BUY&symbol=BTCUSDT"
+        "&timeInForce=GTC&timestamp=1655716096498&type=LIMIT");
+
+    const json expected{
+        {"id", 7},
+        {"method", "order.place"},
+        {"params",
+         {{"symbol", "BTCUSDT"},
+          {"side", "BUY"},
+          {"type", "LIMIT"},
+          {"timeInForce", "GTC"},
+          {"quantity", "10"},
+          {"price", "0.10"},
+          {"apiKey", "testApiKey"},
+          {"timestamp", 1655716096498},
+          {"signature", expected_sig}}}};
+
+    const json frame = req.to_json();
+    EXPECT_EQ(frame, expected);
+
+    // Enum wire strings and absence of every unset optional.
+    const json& p = frame.at("params");
+    EXPECT_EQ(p.at("side"), "BUY");
+    EXPECT_EQ(p.at("type"), "LIMIT");
+    EXPECT_EQ(p.at("timeInForce"), "GTC");
+    EXPECT_FALSE(p.contains("quoteOrderQty"));
+    EXPECT_FALSE(p.contains("newClientOrderId"));
+    EXPECT_FALSE(p.contains("stopPrice"));
+    EXPECT_FALSE(p.contains("icebergQty"));
+    EXPECT_FALSE(p.contains("newOrderRespType"));
+    EXPECT_FALSE(p.contains("recvWindow"));
+}
+
+TEST(BinanceWsApiNewOrder, ParsesSuccess) {
+    const auto resp =
+        BinanceWsNewOrderResponse::from_json(json::parse(fixtures::kWsApiOrderPlaceSuccessJson));
+
+    EXPECT_TRUE(resp.success);
+    EXPECT_EQ(resp.status, 200);
+    ASSERT_TRUE(resp.order.has_value());
+    EXPECT_EQ(resp.order->order_id, 12510053279);
+    EXPECT_EQ(resp.order->symbol, "BTCUSDT");
+    ASSERT_TRUE(resp.order->status.has_value());
+    EXPECT_EQ(*resp.order->status, OrderStatus::New);
+    EXPECT_EQ(resp.order->transact_time, 1655716096505);
+    ASSERT_TRUE(resp.order->price.has_value());
+    EXPECT_DOUBLE_EQ(*resp.order->price, 0.10);
+
+    ASSERT_EQ(resp.rate_limits.size(), 1u);
+    EXPECT_EQ(resp.rate_limits[0].count, 12);
+}
+
+TEST(BinanceWsApiNewOrder, ParsesError) {
+    const auto resp =
+        BinanceWsNewOrderResponse::from_json(json::parse(fixtures::kWsApiOrderPlaceErrorJson));
+
+    EXPECT_FALSE(resp.success);
+    EXPECT_EQ(resp.status, 400);
+    ASSERT_TRUE(resp.error.has_value());
+    EXPECT_EQ(*resp.error, "Account has insufficient balance for requested action.");
+    ASSERT_TRUE(resp.error_code.has_value());
+    EXPECT_EQ(*resp.error_code, -2010);
+    EXPECT_FALSE(resp.order.has_value());
+}
+
+TEST(BinanceWsApiCancel, ToJson_ByOrderId) {
+    BinanceWsCancelOrderRequest req;
+    req.creds     = test_ws_creds();
+    req.timestamp = 1000;
+    req.req_id    = 8;
+    req.symbol    = "BTCUSDT";
+    req.order_id  = 12510053279;
+
+    const json expected{
+        {"id", 8},
+        {"method", "order.cancel"},
+        {"params",
+         {{"symbol", "BTCUSDT"},
+          {"orderId", 12510053279},
+          {"apiKey", "testApiKey"},
+          {"timestamp", 1000},
+          {"signature",
+           ws_sig("testSecret",
+                  "apiKey=testApiKey&orderId=12510053279&symbol=BTCUSDT"
+                  "&timestamp=1000")}}}};
+
+    const json frame = req.to_json();
+    EXPECT_EQ(frame, expected);
+    EXPECT_TRUE(frame.at("params").contains("orderId"));
+    EXPECT_FALSE(frame.at("params").contains("origClientOrderId"));
+}
+
+TEST(BinanceWsApiCancel, ToJson_ByClientOrderId) {
+    BinanceWsCancelOrderRequest req;
+    req.creds                = test_ws_creds();
+    req.timestamp            = 1000;
+    req.req_id               = 9;
+    req.symbol               = "BTCUSDT";
+    req.orig_client_order_id = "myOrder1";
+
+    const json expected{
+        {"id", 9},
+        {"method", "order.cancel"},
+        {"params",
+         {{"symbol", "BTCUSDT"},
+          {"origClientOrderId", "myOrder1"},
+          {"apiKey", "testApiKey"},
+          {"timestamp", 1000},
+          {"signature",
+           ws_sig("testSecret",
+                  "apiKey=testApiKey&origClientOrderId=myOrder1&symbol=BTCUSDT"
+                  "&timestamp=1000")}}}};
+
+    const json frame = req.to_json();
+    EXPECT_EQ(frame, expected);
+    EXPECT_TRUE(frame.at("params").contains("origClientOrderId"));
+    EXPECT_FALSE(frame.at("params").contains("orderId"));
+}
+
+TEST(BinanceWsApiCancel, ParsesSuccess) {
+    const auto resp =
+        BinanceWsCancelOrderResponse::from_json(json::parse(fixtures::kWsApiCancelSuccessJson));
+
+    EXPECT_TRUE(resp.success);
+    EXPECT_EQ(resp.status, 200);
+    ASSERT_TRUE(resp.order.has_value());
+    EXPECT_EQ(resp.order->symbol, "BTCUSDT");
+    EXPECT_EQ(resp.order->orig_client_order_id, "a097fe6304b20a7e4fc436");
+    EXPECT_EQ(resp.order->order_id, 12510053279);
+    EXPECT_EQ(resp.order->status, OrderStatus::Canceled);
+
+    ASSERT_EQ(resp.rate_limits.size(), 1u);
+    EXPECT_EQ(resp.rate_limits[0].count, 14);
 }
