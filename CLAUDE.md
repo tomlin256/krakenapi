@@ -710,6 +710,13 @@ switch (kind) {
 
 ---
 
+## Adding a whole new exchange
+
+To integrate a **new exchange** (not just an endpoint), follow the self-contained
+playbook in [docs/agent-add-exchange.md](agent-add-exchange.md) — a commit-pinned
+checklist that uses the Binance adapter as the worked reference. The sections
+below cover adding endpoints/channels to an *existing* adapter.
+
 ## Adding a new REST endpoint
 
 1. **Declare request and response types** in `exchange/kraken/rest_api.hpp`:
