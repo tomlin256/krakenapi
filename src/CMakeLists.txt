@@ -68,8 +68,10 @@ if(KRAKENAPI_BUILD_BINANCE)
         # from exchange_common, exactly as it does for Kraken.
     )
     add_library(krakenapi::binanceapi ALIAS binanceapi)
-    # PUBLIC for the same reason as krakenapi — see the note above.
+    # exchange_http supplies the shared CurlHttpClient (and libcurl, PUBLIC).
+    # OpenSSL stays PUBLIC because auth.hpp's inline HMAC/SHA is exposed in a
+    # public header.
     target_link_libraries(binanceapi
-        PUBLIC exchange_common OpenSSL::SSL OpenSSL::Crypto CURL::libcurl
+        PUBLIC exchange_common exchange_http OpenSSL::SSL OpenSSL::Crypto
     )
 endif()

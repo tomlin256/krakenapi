@@ -53,7 +53,7 @@ TEST(BinanceClient, GetAccount_SignedRoundTrip) {
     const std::string sig     = expected_sig(payload);
 
     auto client = make_binance_test_client(
-        [&](const HttpRequest& http) -> std::pair<int, std::string> {
+        [&](const HttpRequest& http) -> HttpResponse {
             EXPECT_EQ(http.method, HttpRequest::Method::GET);
             EXPECT_EQ(http.path, "/api/v3/account");
             EXPECT_EQ(http.query, payload + "&signature=" + sig);
@@ -82,7 +82,7 @@ TEST(BinanceClient, PostNewOrder_SignedRoundTrip) {
     const std::string sig = expected_sig(payload);
 
     auto client = make_binance_test_client(
-        [&](const HttpRequest& http) -> std::pair<int, std::string> {
+        [&](const HttpRequest& http) -> HttpResponse {
             EXPECT_EQ(http.method, HttpRequest::Method::POST);
             EXPECT_EQ(http.path, "/api/v3/order");
             EXPECT_TRUE(http.query.empty());
@@ -118,7 +118,7 @@ TEST(BinanceClient, DeleteCancelOrder_SignedRoundTrip) {
     const std::string sig = expected_sig(payload);
 
     auto client = make_binance_test_client(
-        [&](const HttpRequest& http) -> std::pair<int, std::string> {
+        [&](const HttpRequest& http) -> HttpResponse {
             EXPECT_EQ(http.method, HttpRequest::Method::DELETE);
             EXPECT_EQ(http.path, "/api/v3/order");
             EXPECT_EQ(http.query, payload + "&signature=" + sig);
@@ -145,7 +145,7 @@ TEST(BinanceClient, DeleteCancelOrder_SignedRoundTrip) {
 
 TEST(BinanceClient, ApiErrorEnvelope_SurfacesMsg) {
     auto client = make_binance_test_client(
-        [](const HttpRequest&) -> std::pair<int, std::string> {
+        [](const HttpRequest&) -> HttpResponse {
             return {400, fixtures::kErrorJson};
         });
 
@@ -160,7 +160,7 @@ TEST(BinanceClient, ApiErrorEnvelope_SurfacesMsg) {
 
 TEST(BinanceClient, Non2xxWithoutErrorBody_SurfacesHttpStatus) {
     auto client = make_binance_test_client(
-        [](const HttpRequest&) -> std::pair<int, std::string> {
+        [](const HttpRequest&) -> HttpResponse {
             return {500, "{}"};
         });
 

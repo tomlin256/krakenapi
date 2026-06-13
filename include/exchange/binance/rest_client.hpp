@@ -10,25 +10,30 @@
 #pragma once
 
 // exchange/binance/rest_client.hpp
-// Type-safe HTTP executor for the Binance Spot REST API.
+// Type-safe HTTP executor for the Binance Spot REST API. The libcurl transport
+// is the shared exchange::rest::CurlHttpClient (plan 010); this class only binds
+// the Binance envelope/parse and auth.
 //
 // Namespace: exchange::binance::rest
 
 #include "exchange/binance/rest_api.hpp"
 #include "exchange/binance/auth.hpp"
+#include "exchange/common/http_client.hpp"
 
-#include <curl/curl.h>
 #include <functional>
+#include <memory>
 #include <type_traits>
 #include <utility>
 
 namespace exchange::binance::rest {
 
+using exchange::rest::CurlHttpClient;
+using exchange::rest::HttpResponse;
+
 class BinanceRestClient {
 public:
-    // Production constructor — uses real libcurl.
+    // Production constructor — uses the shared libcurl transport.
     explicit BinanceRestClient(std::string base_url = "https://api.binance.com");
-    ~BinanceRestClient();
 
     BinanceRestClient(const BinanceRestClient&) = delete;
     BinanceRestClient& operator=(const BinanceRestClient&) = delete;
@@ -39,9 +44,9 @@ public:
     exchange::rest::RestResponse<typename Req::response_type>
     execute(const Req& req) {
         auto http = req.build();
-        auto [status, raw] = perform_(http);
+        const HttpResponse r = perform_(http);
         return parse_binance_response<typename Req::response_type>(
-            status, json::parse(raw));
+            r.status, json::parse(r.body));
     }
 
     // Execute a private request (BinanceAuth injects timestamp + signature).
@@ -51,31 +56,26 @@ public:
     execute(const Req& req, const BinanceAuth& auth) {
         auto http = req.build();
         auth.sign(http);
-        auto [status, raw] = perform_(http);
+        const HttpResponse r = perform_(http);
         return parse_binance_response<typename Req::response_type>(
-            status, json::parse(raw));
+            r.status, json::parse(r.body));
     }
 
 private:
     // Test constructor — injects a custom performer so unit tests run without curl.
     explicit BinanceRestClient(
-        std::function<std::pair<int, std::string>(const HttpRequest&)> performer);
+        std::function<HttpResponse(const HttpRequest&)> performer);
 
     friend BinanceRestClient make_binance_test_client(
-        std::function<std::pair<int, std::string>(const HttpRequest&)>);
+        std::function<HttpResponse(const HttpRequest&)>);
 
-    std::pair<int, std::string> curl_perform(const HttpRequest& http);
-    static size_t write_cb(char* ptr, size_t size, size_t nmemb, void* userdata);
-
-    std::string   base_url_;
-    CURL*         curl_{nullptr};
-    std::function<std::pair<int, std::string>(const HttpRequest&)> perform_;
+    std::shared_ptr<CurlHttpClient>                 transport_;  // null in tests
+    std::function<HttpResponse(const HttpRequest&)> perform_;
 };
 
 // Factory used by unit tests to inject a mock HTTP performer.
 inline BinanceRestClient
-make_binance_test_client(
-    std::function<std::pair<int, std::string>(const HttpRequest&)> fn) {
+make_binance_test_client(std::function<HttpResponse(const HttpRequest&)> fn) {
     return BinanceRestClient(std::move(fn));
 }
 
