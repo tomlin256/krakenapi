@@ -1,7 +1,21 @@
 # Plan 012 — Install rules + CMake package config
 
-**Status**: Draft — implementing (Rob directed "do the install work")
+**Status**: Done — implemented in commits `cbbe1a8` + docs wrap-up
 **Branch**: `feature/multi-exchange-abstraction`
+
+> **Done**: `cmake --install` lays down the four static libs, the public headers
+> (component-gated by the build flags), the deprecated shim headers (under
+> `KRAKENAPI_BUILD_COMPAT_SHIM`), the vendored header-only `nlohmann_json`, and a
+> `find_package(krakenapi)` package config (`krakenapi::{common,http,krakenapi,
+> binanceapi}` targets + version file, `SameMajorVersion`, project `0.1.0`).
+> Install is gated by `KRAKENAPI_INSTALL` (top-level default). The
+> FetchContent-vs-export problem was resolved by vendoring nlohmann (decision 1)
+> and suppressing the deps' own install rules (`JSON_Install`/`INSTALL_GTEST` OFF;
+> ixwebsocket moved under `KRAKENAPI_BUILD_TESTS`), so a `-DKRAKENAPI_BUILD_TESTS=OFF`
+> install is **krakenapi-only** — verified, and a throwaway downstream consumer
+> doing `find_package(krakenapi)` + linking `krakenapi::krakenapi` +
+> `krakenapi::binanceapi` and naming `kraken::TickPrice` (the shim) compiled,
+> linked, and ran against the installed prefix. Suite stayed 304 green.
 
 ---
 

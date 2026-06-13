@@ -138,12 +138,23 @@ krakenapi/
 | `KRAKENAPI_BUILD_KRAKEN` | `ON` | Build the Kraken adapter (`libkrakenapi.a`) and its tests/examples |
 | `KRAKENAPI_BUILD_BINANCE` | `ON` | Build the Binance adapter (`libbinanceapi.a`) and its tests/examples |
 | `KRAKENAPI_BUILD_TESTS` | `ON` | Build unit tests and example programs |
-| `KRAKENAPI_BUILD_COMPAT_SHIM` | `ON` | Builds the deprecated `kraken_*.hpp` / `kraken::` forwarders' compile-proof, `test_compat_shim` ([plan 002](docs/plans/002-step-2b-compat-shim.md)). Has a dependency guard (requires `KRAKENAPI_BUILD_KRAKEN`; auto-disabled with a warning otherwise). The shim *headers* always exist in `include/`; this flag gates the test that proves they keep resolving. `install()`/packaging is punted |
+| `KRAKENAPI_BUILD_COMPAT_SHIM` | `ON` | Builds the deprecated `kraken_*.hpp` / `kraken::` forwarders' compile-proof, `test_compat_shim` ([plan 002](docs/plans/002-step-2b-compat-shim.md)). Has a dependency guard (requires `KRAKENAPI_BUILD_KRAKEN`; auto-disabled with a warning otherwise). The shim *headers* always exist in `include/`; this flag gates the test that proves they keep resolving |
+| `KRAKENAPI_INSTALL` | top-level: `ON` | Generate `install()` rules + the `krakenapi` CMake package config ([plan 012](docs/plans/012-install-and-package-config.md)). Defaults off when krakenapi is a `FetchContent` subproject |
 
 The two exchange flags are independent: `-DKRAKENAPI_BUILD_KRAKEN=OFF` builds a
 Binance-only tree (and vice versa). Both default `ON`. `exchange_common` (the
 generic `ExchangeWsClient` implementation) is always built — both adapters link
 it. Turning both exchanges off emits a "nothing will be built" warning.
+
+**Installing**: `cmake --install build --prefix <p>` lays down the four static
+libs, the public headers (component-gated by the build flags), and a package
+config so a downstream project can `find_package(krakenapi)` +
+`target_link_libraries(app krakenapi::krakenapi)`. The header-only `nlohmann_json`
+is **vendored** into the prefix (it is FetchContent'd and so can't be an export
+dependency); OpenSSL/libcurl resolve via `find_dependency`. ixwebsocket, GTest,
+and backward-cpp are deliberately **not** installed (ixwebsocket is fetched only
+under `KRAKENAPI_BUILD_TESTS`). Use `-DKRAKENAPI_BUILD_TESTS=OFF` for a clean,
+krakenapi-only install. See [plan 012](docs/plans/012-install-and-package-config.md).
 
 ### Common build commands
 

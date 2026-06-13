@@ -19,8 +19,8 @@
 | Phase 2 — shim machinery (thin forwarders + `kraken_compat.hpp`, delete duplicate `.cpp`s) | **Done** — `724846f` |
 | Phase 3 — compat compile-proof + behavioural tests | **Done** — `test_compat_shim.cpp` (see the as-implemented note at the end of Phase 3) |
 
-**Punted (explicitly out of scope for now)**:
-- **`install()` / packaging** — the `KRAKENAPI_BUILD_COMPAT_SHIM` option historically described "installing" the shim headers, but the project has *no* `install()` rules at all (the headers live in `include/` and are consumed in-tree or via `FetchContent`). Shipping the shim (and the rest of the library) to an installed prefix is a separate packaging effort, deferred.
+**Done elsewhere / superseded**:
+- **`install()` / packaging** — was punted here, then done in [plan 012](012-install-and-package-config.md): `cmake --install` ships the libs, public headers, and a `find_package(krakenapi)` package config; the shim headers are installed when `KRAKENAPI_BUILD_COMPAT_SHIM` is on.
 - **The `tests/compat/` example-relocation** (original Phase 3.1) — superseded; see the as-implemented note.
 
 The default `KRAKENAPI_BUILD_COMPAT_SHIM=ON` now does real work: it gates the

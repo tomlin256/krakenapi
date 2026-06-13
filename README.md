@@ -343,10 +343,35 @@ FetchContent_MakeAvailable(krakenapi)
 target_link_libraries(my_app PRIVATE krakenapi::krakenapi)   # and/or krakenapi::binanceapi
 ```
 
+### Installing & `find_package`
+
+```bash
+cmake -B build -DKRAKENAPI_BUILD_TESTS=OFF
+cmake --build build
+cmake --install build --prefix /your/prefix
+```
+
+This installs the four static libraries, the public headers, and a CMake package
+config. A downstream project then just:
+
+```cmake
+find_package(krakenapi REQUIRED)        # add -DCMAKE_PREFIX_PATH=/your/prefix
+target_link_libraries(my_app PRIVATE krakenapi::krakenapi)   # and/or krakenapi::binanceapi
+```
+
+The install is **self-contained**: OpenSSL and libcurl are resolved via
+`find_dependency`, and the header-only `nlohmann_json` is vendored into the
+prefix — a consumer needs no separate `nlohmann_json` (if you already use your
+own, note that the bundled copy sits on krakenapi's include path). `IxWsConnection`
+(the real WebSocket transport) still needs `ixwebsocket` linked separately, as it
+is not part of the installed package. The install rules are gated by
+`KRAKENAPI_INSTALL` (on for a top-level build, off when krakenapi is pulled in via
+`FetchContent`).
+
 ### Linker flags (manual)
 
 ```
--L/path/to/krakenapi/build/src -lkrakenapi -lexchange_common -lcurl -lssl -lcrypto
+-L/path/to/krakenapi/build/src -lkrakenapi -lexchange_common -lexchange_http -lcurl -lssl -lcrypto
 ```
 
 For WebSocket support, also link against ixwebsocket:
