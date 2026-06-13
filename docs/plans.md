@@ -12,4 +12,4 @@
 | 004 | [Step 6 — Binance REST private (account + trading) endpoints](plans/004-step-6-binance-rest-private.md) | Done |
 | 005 | [Step 7 — Binance WebSocket market streams](plans/005-step-7-binance-ws-streams.md) | Done |
 | 006 | [Step 8 — Binance WebSocket API (bidirectional trading)](plans/006-step-8-binance-ws-api.md) | Done |
-| 007 | [Step 9 — CMake target split, build toggles, full-matrix validation](plans/007-step-9-cmake-build-validation.md) | Draft |
+| 007 | [Step 9 — CMake target split, build toggles, full-matrix validation](plans/007-step-9-cmake-build-validation.md) | Done |

@@ -1,6 +1,6 @@
 # Plan 007 — Step 9: CMake target split, build toggles, and full-matrix validation
 
-**Status**: Draft — awaiting approval
+**Status**: Done — implemented in commits `9e73dc1`, `28179fd`, `edf4081`
 **Parent**: [Plan 001, Step 9](001-multi-exchange-abstraction.md#step-9--cmake-build-validation-final-cleanup)
 **Branch**: `feature/multi-exchange-abstraction`
 
