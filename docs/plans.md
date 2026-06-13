@@ -11,4 +11,4 @@
 | 003 | [Step 5 — Binance REST public (market data) endpoints](plans/003-step-5-binance-rest-public.md) | Done |
 | 004 | [Step 6 — Binance REST private (account + trading) endpoints](plans/004-step-6-binance-rest-private.md) | Done |
 | 005 | [Step 7 — Binance WebSocket market streams](plans/005-step-7-binance-ws-streams.md) | Done |
-| 006 | [Step 8 — Binance WebSocket API (bidirectional trading)](plans/006-step-8-binance-ws-api.md) | Draft |
+| 006 | [Step 8 — Binance WebSocket API (bidirectional trading)](plans/006-step-8-binance-ws-api.md) | Done |

@@ -1,6 +1,6 @@
 # Plan 006 — Step 8: Binance WebSocket API (bidirectional trading)
 
-**Status**: Draft — awaiting approval
+**Status**: Done — implemented in commits `398d2a8`, `0201b3f`, `d9592c7`, `b3504b0`, `480eba6`
 **Parent**: [Plan 001, Step 8](001-multi-exchange-abstraction.md#step-8--binance-websocket-api-bidirectional-trading)
 **Branch**: `feature/multi-exchange-abstraction`
 **Message formats**: [001-appendix-binance-message-formats.md §4 + §5](001-appendix-binance-message-formats.md)
