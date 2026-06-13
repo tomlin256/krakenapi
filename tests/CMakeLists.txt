@@ -81,6 +81,12 @@ target_link_libraries(binance_ws_client_example
     binanceapi krakenapi ixwebsocket spdlog::spdlog CLI11::CLI11 example_backward
 )
 
+# Same as above — krakenapi provides the generic ExchangeWsClient impl.
+add_executable(binance_ws_api_example examples/binance/binance_ws_api_example.cpp)
+target_link_libraries(binance_ws_api_example
+    binanceapi krakenapi ixwebsocket spdlog::spdlog CLI11::CLI11 example_backward
+)
+
 #-------------------------------------------------------------------------------
 # Unit tests
 #-------------------------------------------------------------------------------
