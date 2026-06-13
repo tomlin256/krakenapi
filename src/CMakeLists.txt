@@ -20,6 +20,25 @@ target_include_directories(exchange_common PUBLIC
 target_link_libraries(exchange_common PUBLIC nlohmann_json::nlohmann_json)
 
 #-------------------------------------------------------------------------------
+# Common HTTP transport — generic libcurl-backed CurlHttpClient (plan 010).
+#
+# Kept separate from exchange_common so the latter stays curl/ssl-free (the WS
+# engine needs no HTTP). Both REST adapters link this; a future exchange reuses
+# it. It owns the one piece of shared curl code the per-adapter rest_client.cpp
+# files used to duplicate.
+#-------------------------------------------------------------------------------
+
+add_library(exchange_http STATIC
+    exchange/common/http_client.cpp
+)
+add_library(krakenapi::http ALIAS exchange_http)
+target_include_directories(exchange_http PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
+    $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(exchange_http PUBLIC CURL::libcurl nlohmann_json::nlohmann_json)
+
+#-------------------------------------------------------------------------------
 # Kraken exchange adapter
 #-------------------------------------------------------------------------------
 
