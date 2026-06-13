@@ -47,11 +47,11 @@ if(KRAKENAPI_BUILD_KRAKEN)
         kraken/rest_client.cpp
     )
     add_library(krakenapi::krakenapi ALIAS krakenapi)
-    # OpenSSL + libcurl are PUBLIC, not PRIVATE: the public headers auth.hpp
-    # (inline HMAC/SHA over libcrypto) and rest_client.hpp (#include <curl/curl.h>)
-    # expose these to every consumer's own translation units.
+    # exchange_http supplies the shared CurlHttpClient (and libcurl, PUBLIC).
+    # OpenSSL stays PUBLIC because auth.hpp's inline HMAC/SHA is exposed in a
+    # public header.
     target_link_libraries(krakenapi
-        PUBLIC exchange_common OpenSSL::SSL OpenSSL::Crypto CURL::libcurl
+        PUBLIC exchange_common exchange_http OpenSSL::SSL OpenSSL::Crypto
     )
 endif()
 

@@ -10,24 +10,29 @@
 #pragma once
 
 // exchange/kraken/rest_client.hpp
-// Type-safe HTTP executor for the Kraken REST API.
+// Type-safe HTTP executor for the Kraken REST API. The libcurl transport is the
+// shared exchange::rest::CurlHttpClient (plan 010); this class only binds the
+// Kraken envelope/parse. Kraken reads errors from the JSON envelope, so it
+// ignores the HTTP status the transport returns.
 //
 // Namespace: exchange::kraken::rest
 
 #include "exchange/kraken/rest_api.hpp"
+#include "exchange/common/http_client.hpp"
 
-#include <curl/curl.h>
 #include <functional>
-#include <stdexcept>
+#include <memory>
 #include <type_traits>
 
 namespace exchange::kraken::rest {
 
+using exchange::rest::CurlHttpClient;
+using exchange::rest::HttpResponse;
+
 class KrakenRestClient {
 public:
-    // Production constructor — uses real libcurl.
+    // Production constructor — uses the shared libcurl transport.
     explicit KrakenRestClient(std::string base_url = "https://api.kraken.com");
-    ~KrakenRestClient();
 
     KrakenRestClient(const KrakenRestClient&) = delete;
     KrakenRestClient& operator=(const KrakenRestClient&) = delete;
@@ -38,8 +43,9 @@ public:
     exchange::kraken::RestResponse<typename Req::response_type>
     execute(const Req& req) {
         auto http = req.build();
-        auto raw  = perform_(http);
-        return exchange::kraken::parse_rest_response<typename Req::response_type>(json::parse(raw));
+        const HttpResponse r = perform_(http);
+        return exchange::kraken::parse_rest_response<typename Req::response_type>(
+            json::parse(r.body));
     }
 
     // Execute a private request (credentials required).
@@ -48,25 +54,23 @@ public:
     exchange::kraken::RestResponse<typename Req::response_type>
     execute(const Req& req, const Credentials& creds) {
         auto http = req.build(creds);
-        auto raw  = perform_(http);
-        return exchange::kraken::parse_rest_response<typename Req::response_type>(json::parse(raw));
+        const HttpResponse r = perform_(http);
+        return exchange::kraken::parse_rest_response<typename Req::response_type>(
+            json::parse(r.body));
     }
 
 private:
-    // Test constructor — injects a custom performer so unit tests can run without curl.
+    // Test constructor — injects a body-only performer (Kraken keys errors off
+    // the envelope, not the HTTP status, so tests only ever supply a body).
     explicit KrakenRestClient(std::function<std::string(const HttpRequest&)> performer);
 
     friend KrakenRestClient make_test_client(std::function<std::string(const HttpRequest&)>);
 
-    std::string curl_perform(const HttpRequest& http);
-    static size_t write_cb(char* ptr, size_t size, size_t nmemb, void* userdata);
-
-    std::string base_url_;
-    CURL* curl_{nullptr};
-    std::function<std::string(const HttpRequest&)> perform_;
+    std::shared_ptr<CurlHttpClient>                 transport_;  // null in tests
+    std::function<HttpResponse(const HttpRequest&)> perform_;
 };
 
-// Factory used by unit tests to inject a mock HTTP performer.
+// Factory used by unit tests to inject a mock HTTP performer (body only).
 inline KrakenRestClient make_test_client(std::function<std::string(const HttpRequest&)> fn) {
     return KrakenRestClient(std::move(fn));
 }
