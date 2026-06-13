@@ -81,13 +81,18 @@ The source tree has exactly four `.cpp` under `src/`; there is **no**
    archives (`nm`) to confirm the symbols live in `libexchange_common.a` and are
    **absent** from `libkrakenapi.a`.
 
-4. **OpenSSL/libcurl become PRIVATE on both exchange libs, with
-   `OpenSSL::Crypto` added explicitly** (the auth code calls libcrypto directly
-   — HMAC/SHA/EVP). Today they are unqualified (PUBLIC) and only `OpenSSL::SSL`
-   is named. PRIVATE is correct: nothing in the public headers needs curl/ssl
-   symbols, and the in-library `.cpp` files keep their own access. Examples/tests
-   already name spdlog/CLI11/ixwebsocket explicitly and never call curl/ssl
-   directly, so nothing downstream relies on transitive visibility.
+4. **OpenSSL/libcurl stay PUBLIC on both exchange libs; add `OpenSSL::Crypto`
+   explicitly.** *(Corrected during 9.1 — §F assumed PRIVATE on the premise that
+   the crypto lives in a `.cpp`. It does not: `auth.hpp` defines the HMAC/SHA
+   helpers **inline in a public header** against libcrypto, and `rest_client.hpp`
+   `#include <curl/curl.h>`, so every consumer's own translation unit compiles
+   and links those symbols. PRIVATE breaks the examples at compile time — it did,
+   on `private_rest.cpp`.)* PUBLIC matches today's effective behaviour (the
+   existing unqualified link is PUBLIC); the only real change is naming
+   `OpenSSL::Crypto` — the actual dependency, since the inline helpers use
+   libcrypto, not libssl. Moving the crypto into a `.cpp` to make OpenSSL
+   genuinely PRIVATE would change the public header surface and is deliberately
+   out of scope (decision: no library source is modified).
 
 5. **The three Binance WS targets drop `krakenapi` → link `binanceapi` only.**
    They reach the generic impl transitively via `binanceapi → exchange_common`.
@@ -281,7 +286,7 @@ redundant with cell 3, but will add it if you want the guarantee version-pinned.
 | Risk / assumption | Likelihood | Mitigation |
 |---|---|---|
 | `ws_client.cpp` left in *both* `krakenapi` and `exchange_common` → duplicate `ExchangeWsClient` symbols | Med if rushed | The `nm` archive check in 9.1's done-criteria catches it before commit; decision 3 names it the critical edit |
-| Making OpenSSL/curl `PRIVATE` breaks a target that relied on transitive visibility | Low | No example/test calls curl/ssl directly; all name their real deps (spdlog/CLI11/ixwebsocket) explicitly. Cell-1 build catches any regression |
+| ~~Making OpenSSL/curl `PRIVATE`~~ — **realized in 9.1**: PRIVATE broke `private_rest.cpp` because `auth.hpp`/`rest_client.hpp` expose OpenSSL/curl inline in public headers | Happened | Resolved by keeping both **PUBLIC** (decision 4, corrected) — matches today's effective link; 300-suite + all examples green afterward |
 | Cell 3 (`KRAKEN=OFF`) still fails to link — a hidden Kraken dependency in a Binance target | Low (audited: only the 3 WS targets named `krakenapi`, all fixed in 9.2) | This is exactly what cell 3 is for; if it fails, the plan has surfaced a real leak to fix before "done" |
 | `OpenSSL::Crypto` target name unavailable on the host's CMake/OpenSSL module | Low (standard since CMake 3.x FindOpenSSL) | Cell-1 configure fails loudly; fall back to `OpenSSL::SSL` only (it transitively pulls crypto) if so |
 | `example_backward` / spdlog / CLI11 fetched at top but only used inside guards → wasted fetch when an exchange is OFF | Cosmetic | Acceptable; fetches are cached and harmless. Not worth conditionalising |

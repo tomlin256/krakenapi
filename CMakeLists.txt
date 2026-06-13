@@ -17,10 +17,24 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Library options
 #-------------------------------------------------------------------------------
 
+option(KRAKENAPI_BUILD_KRAKEN  "Build the Kraken exchange adapter"  ON)
+option(KRAKENAPI_BUILD_BINANCE "Build the Binance exchange adapter" ON)
 option(KRAKENAPI_BUILD_TESTS "Build tests" ON)
 option(KRAKENAPI_BUILD_COMPAT_SHIM
        "Install deprecated kraken_*.hpp compatibility headers (source-compat for pre-refactor callers)"
        ON)
+
+# Dependency rules between the exchange/feature flags, checked at configure time.
+if(KRAKENAPI_BUILD_COMPAT_SHIM AND NOT KRAKENAPI_BUILD_KRAKEN)
+    message(WARNING
+        "KRAKENAPI_BUILD_COMPAT_SHIM requires KRAKENAPI_BUILD_KRAKEN; disabling shim.")
+    set(KRAKENAPI_BUILD_COMPAT_SHIM OFF CACHE BOOL "" FORCE)
+endif()
+
+if(NOT KRAKENAPI_BUILD_KRAKEN AND NOT KRAKENAPI_BUILD_BINANCE)
+    message(WARNING
+        "Both KRAKENAPI_BUILD_KRAKEN and KRAKENAPI_BUILD_BINANCE are OFF — nothing will be built.")
+endif()
 
 #-------------------------------------------------------------------------------
 # Find OpenSSL
