@@ -10,6 +10,7 @@
 
 add_library(exchange_common STATIC
     exchange/common/ws_client.cpp
+    exchange/common/tick_price.cpp
 )
 add_library(krakenapi::common ALIAS exchange_common)
 target_include_directories(exchange_common PUBLIC
@@ -24,7 +25,6 @@ target_link_libraries(exchange_common PUBLIC nlohmann_json::nlohmann_json)
 
 if(KRAKENAPI_BUILD_KRAKEN)
     add_library(krakenapi STATIC
-        kraken/types.cpp
         kraken/rest_client.cpp
     )
     add_library(krakenapi::krakenapi ALIAS krakenapi)

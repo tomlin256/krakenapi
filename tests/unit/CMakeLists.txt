@@ -1,6 +1,15 @@
 include(GoogleTest)
 
 #-------------------------------------------------------------------------------
+# Common (exchange-agnostic) unit tests — built regardless of exchange flags
+#-------------------------------------------------------------------------------
+
+# TickPrice exact-decimal serialisation (exchange::TickPrice lives in exchange_common)
+add_executable(test_tick_price test_tick_price.cpp)
+target_link_libraries(test_tick_price exchange_common GTest::gtest_main)
+gtest_discover_tests(test_tick_price)
+
+#-------------------------------------------------------------------------------
 # Kraken unit tests
 #-------------------------------------------------------------------------------
 
@@ -28,11 +37,6 @@ if(KRAKENAPI_BUILD_KRAKEN)
     add_executable(test_ws_responses test_ws_responses.cpp)
     target_link_libraries(test_ws_responses krakenapi GTest::gtest_main)
     gtest_discover_tests(test_ws_responses)
-
-    # TickPrice unit tests
-    add_executable(test_tick_price test_tick_price.cpp)
-    target_link_libraries(test_tick_price krakenapi GTest::gtest_main)
-    gtest_discover_tests(test_tick_price)
 
     # OrderType to_string/from_string unit tests (generic vs. Kraken wire format)
     add_executable(test_order_type test_order_type.cpp)

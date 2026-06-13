@@ -20,6 +20,7 @@
 // Namespace: exchange::kraken
 
 #include "exchange/common/types.hpp"
+#include "exchange/common/tick_price.hpp"
 
 #include <nlohmann/json.hpp>
 #include <cmath>
@@ -159,43 +160,13 @@ inline TimeInForce kraken_tif_from_string(const std::string& s) {
 }
 
 // ── TickPrice — exact decimal price representation ───────────────────────────
+//
+// TickPrice is exchange-agnostic and now lives in exchange:: (see
+// exchange/common/tick_price.hpp). Re-exported here so existing call sites that
+// name exchange::kraken::TickPrice — and the kraken::TickPrice compat alias —
+// keep resolving unchanged.
 
-struct TickPrice {
-    int64_t ticks{0};
-    int     decimals{0};
-
-    // Snap an absolute price onto the tick grid for a given decimal precision.
-    static TickPrice from(double price, int decimals) {
-        const long double scale = std::pow(10.0L, decimals);
-        return TickPrice{
-            static_cast<int64_t>(std::llroundl(
-                static_cast<long double>(price) * scale)),
-            decimals};
-    }
-
-    // Exact decimal string via integer point-insertion — no FP, no locale.
-    std::string str() const {
-        const bool neg = ticks < 0;
-        const uint64_t mag = neg
-            ? static_cast<uint64_t>(-(ticks + 1)) + 1
-            : static_cast<uint64_t>(ticks);
-        std::string digits = std::to_string(mag);
-        std::string out;
-        if (decimals <= 0) {
-            out = digits;
-        } else {
-            if (static_cast<int>(digits.size()) <= decimals)
-                digits.insert(0, static_cast<size_t>(decimals) - digits.size() + 1, '0');
-            const size_t dot = digits.size() - static_cast<size_t>(decimals);
-            out = digits.substr(0, dot) + "." + digits.substr(dot);
-        }
-        return neg ? "-" + out : out;
-    }
-
-    json to_json() const { return std::stod(str()); }
-
-    static TickPrice from_json(const json& j);
-};
+using exchange::TickPrice;
 
 // ── Sub-objects shared between REST and WebSocket ─────────────────────────────
 

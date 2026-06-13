@@ -863,3 +863,27 @@ TEST(Disconnect, EmptyReasonForwardedToCallback) {
 
     EXPECT_EQ(received_reason, "");
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AddOrderRequest serialises a TickPrice limit_price as a JSON *number*, not a
+// string (Kraken WS wire requirement). Migrated here from test_tick_price.cpp
+// when TickPrice moved to the exchange-agnostic common layer — this assertion is
+// Kraken-specific (it exercises Kraken's AddOrderRequest), so it lives with the
+// Kraken WS tests.
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST(KrakenAddOrderSerialisation, LimitPriceIsJsonNumber) {
+    exchange::kraken::ws::AddOrderRequest req;
+    req.order_type  = exchange::OrderType::Limit;
+    req.side        = exchange::Side::Buy;
+    req.order_qty   = 0.001;
+    req.symbol      = "TAO/USD";
+    req.token       = "tok";
+    req.limit_price = exchange::kraken::TickPrice::from(3096217 * 0.0001, 4);
+
+    const json j  = req.to_json();
+    const auto lp = j["params"]["limit_price"];
+
+    EXPECT_TRUE(lp.is_number()) << "limit_price must be a JSON number";
+    EXPECT_EQ(lp.dump(), "309.6217");
+}

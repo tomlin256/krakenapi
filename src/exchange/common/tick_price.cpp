@@ -7,12 +7,12 @@
 // full license information.
 // =============================================================================
 
-#include "exchange/kraken/types.hpp"
+#include "exchange/common/tick_price.hpp"
 
 #include <cmath>
 #include <string>
 
-namespace exchange::kraken {
+namespace exchange {
 
 TickPrice TickPrice::from_json(const json& j) {
     std::string s;
@@ -37,4 +37,4 @@ TickPrice TickPrice::from_json(const json& j) {
     return TickPrice{ticks, dec};
 }
 
-} // namespace exchange::kraken
+} // namespace exchange
