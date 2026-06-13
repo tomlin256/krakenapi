@@ -51,6 +51,17 @@ if(KRAKENAPI_BUILD_KRAKEN)
     )
     target_link_libraries(test_ws_reconnect_session GTest::gtest_main)
     gtest_discover_tests(test_ws_reconnect_session)
+
+    # Deprecated kraken:: compatibility-shim compile-proof + behavioural tests.
+    # Includes every old-path kraken_*.hpp forwarder (the compile-proof); links
+    # ixwebsocket because kraken_ix_ws_connection.hpp pulls in IxWsConnection.
+    # KRAKENAPI_SUPPRESS_DEPRECATION keeps the forwarders' #pragma message quiet.
+    if(KRAKENAPI_BUILD_COMPAT_SHIM)
+        add_executable(test_compat_shim test_compat_shim.cpp)
+        target_compile_definitions(test_compat_shim PRIVATE KRAKENAPI_SUPPRESS_DEPRECATION)
+        target_link_libraries(test_compat_shim krakenapi ixwebsocket GTest::gtest_main)
+        gtest_discover_tests(test_compat_shim)
+    endif()
 endif()
 
 #-------------------------------------------------------------------------------

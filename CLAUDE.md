@@ -138,7 +138,7 @@ krakenapi/
 | `KRAKENAPI_BUILD_KRAKEN` | `ON` | Build the Kraken adapter (`libkrakenapi.a`) and its tests/examples |
 | `KRAKENAPI_BUILD_BINANCE` | `ON` | Build the Binance adapter (`libbinanceapi.a`) and its tests/examples |
 | `KRAKENAPI_BUILD_TESTS` | `ON` | Build unit tests and example programs |
-| `KRAKENAPI_BUILD_COMPAT_SHIM` | `ON` | Reserved for the deprecated `kraken_*.hpp` / `kraken::` forwarders ([docs/plans/001-appendix-compat-shim.md](docs/plans/001-appendix-compat-shim.md)). Declared with a dependency guard (requires `KRAKENAPI_BUILD_KRAKEN`; auto-disabled with a warning otherwise); the install/test wiring lands with [plan 002](docs/plans/002-step-2b-compat-shim.md) |
+| `KRAKENAPI_BUILD_COMPAT_SHIM` | `ON` | Builds the deprecated `kraken_*.hpp` / `kraken::` forwarders' compile-proof, `test_compat_shim` ([plan 002](docs/plans/002-step-2b-compat-shim.md)). Has a dependency guard (requires `KRAKENAPI_BUILD_KRAKEN`; auto-disabled with a warning otherwise). The shim *headers* always exist in `include/`; this flag gates the test that proves they keep resolving. `install()`/packaging is punted |
 
 The two exchange flags are independent: `-DKRAKENAPI_BUILD_KRAKEN=OFF` builds a
 Binance-only tree (and vice versa). Both default `ON`. `exchange_common` (the
@@ -195,7 +195,7 @@ cmake --build build
 cd build && ctest --output-on-failure
 ```
 
-There are twelve test executables (300 tests total) — six Kraken/common, six Binance:
+There are thirteen test executables (304 tests total) — seven Kraken/common (incl. the compat-shim proof), six Binance:
 
 | Binary | Source | What it tests |
 |---|---|---|
@@ -211,11 +211,12 @@ There are twelve test executables (300 tests total) — six Kraken/common, six B
 | `build/bin/test_binance_rest_responses` | `test_binance_rest_responses.cpp` | `from_json` + `parse_binance_response` against captured fixtures |
 | `build/bin/test_binance_client` | `test_binance_client.cpp` | `BinanceRestClient::execute()` signed round-trip via mock performer |
 | `build/bin/test_binance_ws_client` | `test_binance_ws_client.cpp` | Binance stream + trading-WS-API lifecycle with `MockWsConnection` |
+| `build/bin/test_compat_shim` | `test_compat_shim.cpp` | Deprecated `kraken::` shim compile-proof (all 7 old-path forwarders) + forwarding-identity/behaviour — only when `KRAKENAPI_BUILD_COMPAT_SHIM=ON` |
 
 Tests do **not** require network access or credentials — all I/O is mocked.
 The flag matrix splits cleanly: `-DKRAKENAPI_BUILD_KRAKEN=OFF` runs 139 (the
 Binance suite plus the exchange-agnostic `TickPrice` tests, which build in any
-tree); `-DKRAKENAPI_BUILD_BINANCE=OFF` runs the 171 Kraken/common tests.
+tree); `-DKRAKENAPI_BUILD_BINANCE=OFF` runs the 175 Kraken/common tests (incl. the 4 compat-shim tests). `-DKRAKENAPI_BUILD_COMPAT_SHIM=OFF` drops those 4.
 
 ### Test suite breakdown
 

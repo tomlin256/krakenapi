@@ -325,7 +325,7 @@ OpenSSL, and libcurl, so you do not name those yourself.
 | `KRAKENAPI_BUILD_KRAKEN` | `ON` | Build the Kraken adapter + its tests/examples |
 | `KRAKENAPI_BUILD_BINANCE` | `ON` | Build the Binance adapter + its tests/examples |
 | `KRAKENAPI_BUILD_TESTS` | `ON` | Build unit tests and example programs |
-| `KRAKENAPI_BUILD_COMPAT_SHIM` | `ON` | Reserved for the deprecated `kraken::` shim (requires `KRAKENAPI_BUILD_KRAKEN`) |
+| `KRAKENAPI_BUILD_COMPAT_SHIM` | `ON` | Builds the deprecated `kraken::` shim compile-proof test (requires `KRAKENAPI_BUILD_KRAKEN`) |
 
 The two exchange flags are independent — `-DKRAKENAPI_BUILD_KRAKEN=OFF` builds a
 Binance-only tree, and vice versa.
@@ -540,8 +540,8 @@ Private channels need a token obtained via `GetWebSocketsTokenRequest` over REST
 cd build && ctest --output-on-failure
 ```
 
-Tests require no network access or credentials — all I/O is mocked. **300 tests**
-across twelve executables (six Kraken/common, six Binance):
+Tests require no network access or credentials — all I/O is mocked. **304 tests**
+across thirteen executables (seven Kraken/common, six Binance):
 
 | Binary | What it covers |
 |---|---|
@@ -551,10 +551,11 @@ across twelve executables (six Kraken/common, six Binance):
 | `test_binance_auth` / `test_binance_types` | HMAC-SHA256 signing; Binance enum converters |
 | `test_binance_rest_requests` / `test_binance_rest_responses` / `test_binance_client` | REST request building, JSON parsing, signed round-trip |
 | `test_binance_ws_client` | Binance market-stream + trading-WS-API lifecycle with `MockWsConnection` |
+| `test_compat_shim` | Deprecated `kraken::` shim compile-proof + forwarding behaviour (`KRAKENAPI_BUILD_COMPAT_SHIM`) |
 
 With `-DKRAKENAPI_BUILD_KRAKEN=OFF`, 139 tests build and run (the Binance suite
 plus the exchange-agnostic `TickPrice` tests); with `-DKRAKENAPI_BUILD_BINANCE=OFF`,
-the 171 Kraken/common tests.
+the 175 Kraken/common tests (`-DKRAKENAPI_BUILD_COMPAT_SHIM=OFF` drops the 4 shim tests).
 
 ---
 

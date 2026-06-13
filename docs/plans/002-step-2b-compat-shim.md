@@ -11,6 +11,24 @@
 
 ---
 
+## Status / progress
+
+| Phase | State |
+|---|---|
+| Phase 1 — consumer migration to `exchange::kraken::` | **Done** — `afc0de7`, `a6b82e3` |
+| Phase 2 — shim machinery (thin forwarders + `kraken_compat.hpp`, delete duplicate `.cpp`s) | **Done** — `724846f` |
+| Phase 3 — compat compile-proof + behavioural tests | **Done** — `test_compat_shim.cpp` (see the as-implemented note at the end of Phase 3) |
+
+**Punted (explicitly out of scope for now)**:
+- **`install()` / packaging** — the `KRAKENAPI_BUILD_COMPAT_SHIM` option historically described "installing" the shim headers, but the project has *no* `install()` rules at all (the headers live in `include/` and are consumed in-tree or via `FetchContent`). Shipping the shim (and the rest of the library) to an installed prefix is a separate packaging effort, deferred.
+- **The `tests/compat/` example-relocation** (original Phase 3.1) — superseded; see the as-implemented note.
+
+The default `KRAKENAPI_BUILD_COMPAT_SHIM=ON` now does real work: it gates the
+compile-proof. The remaining phase text below is the original plan; Phase 3 was
+implemented in a simpler, more thorough form.
+
+---
+
 ## Why this plan is bigger than the appendix's bullet list
 
 Before drafting this plan I audited the actual repo state against Step 2's stated "done when" criteria (`docs/plans/001-multi-exchange-abstraction.md` lines 558–570: *"All Kraken code lives under `exchange::kraken::*`; all tests pass"* + *"Update `tests/unit/` and `tests/examples/` includes and namespace references to the new API"*). That migration **did not happen**:
@@ -177,6 +195,39 @@ This is the "prove you've migrated" signal the appendix promises clients — wor
 ### Checkpoint commit
 `feat: step 2b phase 3 — add compat compile-proof and behavioural shim tests`
 Full build + `ctest --output-on-failure` green with the shim ON; documented OFF-path verification (3.4) run and confirmed clean.
+
+### Done — as implemented (diverges from the 3.1/3.2 sketch above)
+
+Rather than relocating the two preserved examples into `tests/compat/` (3.1) and
+splitting the proof across files, Phase 3 was implemented as a **single, more
+thorough** `tests/unit/test_compat_shim.cpp`, gated `if(KRAKENAPI_BUILD_KRAKEN
+AND KRAKENAPI_BUILD_COMPAT_SHIM)` and compiled with
+`KRAKENAPI_SUPPRESS_DEPRECATION` (so the forwarders' `#pragma message` stays
+quiet), linking `krakenapi ixwebsocket GTest::gtest_main`:
+
+- **Compile-proof**: it `#include`s **all seven** old-path forwarders
+  (`kraken_types/rest_api/rest_client/ws_api/ws_client/ix_ws_connection.hpp` +
+  `ws_reconnect_session.hpp`) — strictly broader than the two examples' subset,
+  and the reason the file links ixwebsocket (`kraken_ix_ws_connection.hpp` pulls
+  in `IxWsConnection`). If any forwarder or a `kraken_compat.hpp` alias stops
+  resolving against the new layout, this fails to compile — exactly the guard
+  the TickPrice → `exchange::` move (plan 009) would have needed.
+- **Forwarding identity** `static_assert`s: `kraken::{Side,OrderType,TickPrice,
+  OrderParams}`, `kraken::rest::KrakenRestClient`, `kraken::ws::{KrakenWsClient,
+  WsReconnectSession}` are the same types as their `exchange::…` originals.
+- **Behavioural** (4 GoogleTests): the deliberate hyphenated `kraken::to_string(
+  OrderType::StopLoss) == "stop-loss"` (the converter-overload trap
+  `kraken_compat.hpp` warns about), `kraken::TickPrice` round-trip, a REST
+  round-trip through `kraken::rest::make_test_client` + `GetServerTimeRequest`,
+  and a WS client built through the **`[[deprecated]]` `kraken::ws::make_ws_client(
+  conn)`** forwarder sending a `kraken::ws::PingRequest` via the shared
+  `MockWsConnection`.
+- **OFF-path verified**: `-DKRAKENAPI_BUILD_COMPAT_SHIM=OFF` drops the
+  `test_compat_shim` target and builds the library + new-API tests clean (304
+  tests with the shim ON → 300 with it OFF).
+
+Implemented in commit (this phase); the original 3.1 `tests/compat/` relocation
+and 3.2's separate file split are superseded by the above and were **not** done.
 
 ---
 
