@@ -314,4 +314,24 @@ struct BinanceWsCancelOrderRequest : TypedWsRequest<BinanceWsCancelOrderResponse
     }
 };
 
+// ── Client alias and connection-based factory ─────────────────────────────────
+//
+// BinanceWsApiClient is ExchangeWsClient parameterised with the WS API frame
+// descriptor — the same runtime type as BinanceStreamClient / KrakenWsClient.
+// For the real transport use the URL overload in
+// exchange/common/ix_ws_connection.hpp:
+//   exchange::ws::make_exchange_ws_client(std::string(WS_API_URL),
+//                                         binance_ws_api_frame_descriptor);
+
+using BinanceWsApiClient = exchange::ws::ExchangeWsClient;
+
+inline std::shared_ptr<BinanceWsApiClient>
+make_binance_ws_api_client(std::shared_ptr<IWsConnection>  conn,
+                           std::shared_ptr<IWsErrorHandler> error_handler = nullptr) {
+    return exchange::ws::make_exchange_ws_client(
+        std::move(conn),
+        binance_ws_api_frame_descriptor,
+        std::move(error_handler));
+}
+
 } // namespace exchange::binance::ws

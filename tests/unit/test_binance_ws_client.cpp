@@ -21,6 +21,7 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <memory>
 #include <string>
 #include <vector>
@@ -766,4 +767,122 @@ TEST(BinanceWsApiCancel, ParsesSuccess) {
 
     ASSERT_EQ(resp.rate_limits.size(), 1u);
     EXPECT_EQ(resp.rate_limits[0].count, 14);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Execute lifecycle through ExchangeWsClient + MockWsConnection (no network)
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+
+// WS API client backed by a MockWsConnection (binance_ws_api_frame_descriptor).
+std::pair<std::shared_ptr<BinanceWsApiClient>, std::shared_ptr<MockWsConnection>>
+make_mock_api_client() {
+    auto conn   = std::make_shared<MockWsConnection>();
+    auto client = make_binance_ws_api_client(conn);
+    return {client, conn};
+}
+
+} // namespace
+
+TEST(BinanceWsApiLifecycle, PingRoundTrip) {
+    auto [client, conn] = make_mock_api_client();
+    conn->fire_open();
+
+    auto fut = client->execute_async(BinanceWsPingRequest{});
+    ASSERT_EQ(conn->sent_messages.size(), 1u);
+    const auto sent = json::parse(conn->sent_messages[0]);
+    EXPECT_EQ(sent.at("method"), "ping");
+    const auto id = sent.at("id").get<int64_t>();
+
+    conn->inject_message(
+        json{{"id", id}, {"status", 200}, {"result", json::object()}}.dump());
+
+    const auto resp = fut.get();
+    EXPECT_TRUE(resp.ok);
+    ASSERT_TRUE(resp.result.has_value());
+    EXPECT_EQ(resp.result->status, 200);
+}
+
+TEST(BinanceWsApiLifecycle, OrderPlaceRoundTrip) {
+    auto [client, conn] = make_mock_api_client();
+    conn->fire_open();
+
+    BinanceWsNewOrderRequest req;
+    req.creds    = test_ws_creds();
+    req.symbol   = "BTCUSDT";
+    req.side     = Side::Buy;
+    req.type     = OrderType::Limit;
+    req.quantity = "10";
+    req.price    = "0.10";
+
+    auto fut = client->execute_async(req);
+    ASSERT_EQ(conn->sent_messages.size(), 1u);
+    const auto sent = json::parse(conn->sent_messages[0]);
+    EXPECT_EQ(sent.at("method"), "order.place");
+    const auto id = sent.at("id").get<int64_t>();
+
+    // Replay the §4 success fixture under the client-assigned id.
+    auto reply = json::parse(fixtures::kWsApiOrderPlaceSuccessJson);
+    reply["id"] = id;
+    conn->inject_message(reply.dump());
+
+    const auto resp = fut.get();
+    EXPECT_TRUE(resp.ok);
+    ASSERT_TRUE(resp.result.has_value());
+    ASSERT_TRUE(resp.result->order.has_value());
+    EXPECT_EQ(resp.result->order->order_id, 12510053279);
+}
+
+TEST(BinanceWsApiLifecycle, OrderPlaceError) {
+    auto [client, conn] = make_mock_api_client();
+    conn->fire_open();
+
+    BinanceWsNewOrderRequest req;
+    req.creds    = test_ws_creds();
+    req.symbol   = "BTCUSDT";
+    req.quantity = "10";
+    req.price    = "0.10";
+
+    auto fut = client->execute_async(req);
+    const auto id = json::parse(conn->sent_messages.at(0)).at("id").get<int64_t>();
+
+    auto reply = json::parse(fixtures::kWsApiOrderPlaceErrorJson);
+    reply["id"] = id;
+    conn->inject_message(reply.dump());
+
+    const auto resp = fut.get();  // resolves — must not hang
+    EXPECT_FALSE(resp.ok);
+    ASSERT_TRUE(resp.error.has_value());
+    EXPECT_EQ(*resp.error, "Account has insufficient balance for requested action.");
+}
+
+TEST(BinanceWsApiLifecycle, BeforeOpen_QueuedAndFlushed) {
+    auto [client, conn] = make_mock_api_client();
+    // No fire_open() — the ping must queue, not send.
+
+    auto fut = client->execute_async(BinanceWsPingRequest{});
+    EXPECT_TRUE(conn->sent_messages.empty());
+
+    conn->fire_open();
+    ASSERT_EQ(conn->sent_messages.size(), 1u);
+    const auto sent = json::parse(conn->sent_messages[0]);
+    EXPECT_EQ(sent.at("method"), "ping");
+
+    // Complete the round-trip so the pending future doesn't dangle.
+    conn->inject_message(
+        json{{"id", sent.at("id").get<int64_t>()}, {"status", 200}, {"result", json::object()}}
+            .dump());
+    EXPECT_TRUE(fut.get().ok);
+}
+
+TEST(BinanceWsApiLifecycle, Timeout) {
+    auto [client, conn] = make_mock_api_client();
+    conn->fire_open();
+
+    // No reply is ever injected — the blocking execute must time out.
+    const auto resp = client->execute(BinanceWsPingRequest{}, std::chrono::milliseconds{10});
+    EXPECT_FALSE(resp.ok);
+    ASSERT_TRUE(resp.error.has_value());
+    EXPECT_EQ(*resp.error, "request timed out");
 }
