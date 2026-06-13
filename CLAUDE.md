@@ -1,15 +1,25 @@
 # CLAUDE.md — krakenapi
 
-A type-safe C++ library for the [Kraken](https://kraken.com) Spot REST and WebSocket v2 APIs.
+A type-safe C++ library for the [Kraken](https://kraken.com) and
+[Binance](https://binance.com) Spot REST and WebSocket APIs. The compiler links
+each request type to its exact response type — no casts, no stringly-typed keys.
 
-> **In progress**: this repo is mid-migration to a multi-exchange layout (see
-> [docs/plans/001-multi-exchange-abstraction.md](docs/plans/001-multi-exchange-abstraction.md)).
-> Phases through **Step 2b** are complete: all Kraken code now lives under
-> `exchange::kraken::*`, a generic `exchange::`/`exchange::ws::`/`exchange::rest::`
-> scaffold layer exists for future adapters (e.g. Binance), and the old
-> `kraken_*.hpp` / `kraken::` surface survives only as a **deprecated compatibility
-> shim**. This file documents the post-2b layout — the shim is covered where
-> relevant but is not the primary surface for new code.
+> **Multi-exchange layout** — the [001 migration plan](docs/plans/001-multi-exchange-abstraction.md)
+> is **complete** (Steps 1–10). Code is organised in three tiers:
+> - a generic, exchange-agnostic **scaffold** (`exchange::` / `exchange::rest::` /
+>   `exchange::ws::`), compiled as `libexchange_common.a` and never edited by an
+>   adapter;
+> - two **adapters** built on it — **Kraken** (`exchange::kraken::*`,
+>   `libkrakenapi.a`) and **Binance** (`exchange::binance::*`, `libbinanceapi.a`)
+>   — peers that each link the scaffold but never each other, behind independent
+>   `KRAKENAPI_BUILD_KRAKEN` / `KRAKENAPI_BUILD_BINANCE` flags.
+>
+> The pre-refactor `kraken_*.hpp` / `kraken::` surface survives only as a
+> **deprecated compatibility shim** — not the surface for new code. To add a
+> third exchange, follow [docs/agent-add-exchange.md](docs/agent-add-exchange.md).
+> This file documents Kraken in depth and Binance in the
+> [Binance adapter reference](#binance-adapter-reference); both follow the same
+> three-tier shape.
 
 ---
 
@@ -30,16 +40,25 @@ krakenapi/
 │   │   │   ├── ws_client.hpp / .inl     #   ExchangeWsClient — exchange-agnostic dispatch
 │   │   │   ├── ix_ws_connection.hpp     #   IxWsConnection + make_exchange_ws_client(url, identifier)
 │   │   │   └── reconnect_session.hpp/.inl # WsReconnectSession — generic reconnect/backoff machinery
-│   │   └── kraken/                      # Kraken adapter — exchange::kraken::, ::rest::, ::ws::
-│   │       ├── auth.hpp                 #   Credentials, sign(), make_nonce() (+ private crypto helpers)
-│   │       ├── types.hpp                #   PriceType, TriggerReference, StpType, FeePreference, TickPrice,
-│   │       │                            #     OrderParams, OrderInfo, TradeInfo, LedgerEntry,
-│   │       │                            #     RestResponse<T> / parse_rest_response<T>
-│   │       ├── rest_api.hpp             #   All Kraken REST request/response types
-│   │       ├── rest_client.hpp          #   KrakenRestClient — typed libcurl executor
-│   │       ├── ws_api.hpp               #   All Kraken WS request/response types + identify_message /
-│   │       │                            #     kraken_frame_descriptor
-│   │       └── ws_client.hpp            #   KrakenWsClient alias, PUBLIC/PRIVATE_WS_URL, make_kraken_ws_client()
+│   │   ├── kraken/                      # Kraken adapter — exchange::kraken::, ::rest::, ::ws::
+│   │   │   ├── auth.hpp                 #   Credentials, sign(), make_nonce() (+ private crypto helpers)
+│   │   │   ├── types.hpp                #   PriceType, TriggerReference, StpType, FeePreference, TickPrice,
+│   │   │   │                            #     OrderParams, OrderInfo, TradeInfo, LedgerEntry,
+│   │   │   │                            #     RestResponse<T> / parse_rest_response<T>
+│   │   │   ├── rest_api.hpp             #   All Kraken REST request/response types
+│   │   │   ├── rest_client.hpp          #   KrakenRestClient — typed libcurl executor
+│   │   │   ├── ws_api.hpp               #   All Kraken WS request/response types + identify_message /
+│   │   │   │                            #     kraken_frame_descriptor
+│   │   │   └── ws_client.hpp            #   KrakenWsClient alias, PUBLIC/PRIVATE_WS_URL, make_kraken_ws_client()
+│   │   └── binance/                     # Binance adapter — exchange::binance::, ::rest::, ::ws::
+│   │       ├── auth.hpp                 #   BinanceCredentials, BinanceAuth (IRestAuth; inline HMAC-SHA256)
+│   │       ├── types.hpp                #   Binance enums + converters; re-exports canonical enums
+│   │       ├── rest_api.hpp             #   All Binance REST req/resp types + parse_binance_response<T>
+│   │       ├── rest_client.hpp          #   BinanceRestClient — typed libcurl executor
+│   │       ├── ws_streams.hpp           #   Market-data streams: events, binance_stream_frame_descriptor,
+│   │       │                            #     BinanceStreamClient alias, make_binance_stream_client(), STREAM_URL
+│   │       └── ws_api.hpp               #   Trading WS API: order.place/cancel/ping, signed params,
+│   │                                    #     binance_ws_api_frame_descriptor, make_binance_ws_api_client(), WS_API_URL
 │   ├── kraken_compat.hpp                # DEPRECATED — reopens kraken:: as a shim over exchange::kraken::
 │   ├── kraken_types.hpp, kraken_rest_api.hpp, kraken_rest_client.hpp,
 │   │   kraken_ws_api.hpp, kraken_ws_client(.hpp|.inl), kraken_ix_ws_connection.hpp
@@ -66,6 +85,10 @@ krakenapi/
     │   ├── ws_client_example.cpp        # KrakenWsClient all public channels + connection reuse demo
     │   ├── rest_client_example.cpp      # CLI11 demo of every public REST endpoint via KrakenRestClient
     │   ├── kraken_example.cpp           # REST + WebSocket combined demo
+    │   ├── binance/                     # Binance demos (each behind KRAKENAPI_BUILD_BINANCE)
+    │   │   ├── binance_rest_client_example.cpp   # CLI11 demo of every public Binance REST endpoint
+    │   │   ├── binance_ws_client_example.cpp     # All 8 market-data streams + connection-reuse demo
+    │   │   └── binance_ws_api_example.cpp        # Trading WS API ping (live-verified)
     │   ├── backward_init.cpp            # Shared crash-backtrace init, linked into examples via `example_backward`
     │   └── kapi.hpp / kapi.cpp          # Legacy KAPI reference wrapper (not installed)
     └── unit/
@@ -79,7 +102,14 @@ krakenapi/
         ├── test_order_type.cpp          # Generic vs. Kraken OrderType wire format (underscore vs. hyphen)
         ├── test_tick_price.cpp          # TickPrice exact-decimal serialisation (FP-noise-free)
         ├── test_ws_reconnect_session.cpp # WsReconnectSession lifecycle — deterministic, no sleeps
-        └── ws_client_example_json.hpp
+        ├── ws_client_example_json.hpp
+        ├── mock_ws_connection.hpp        # Shared MockWsConnection (Kraken + Binance WS tests)
+        ├── test_binance_auth.cpp         # BinanceAuth HMAC-SHA256 signing
+        ├── test_binance_types.cpp        # Binance enum converters
+        ├── test_binance_rest_requests.cpp / test_binance_rest_responses.cpp
+        ├── test_binance_client.cpp       # Signed REST round-trip via mock performer
+        ├── test_binance_ws_client.cpp    # Stream + WS-API lifecycle with MockWsConnection
+        └── binance_{rest,account,ws_stream,ws_api}_example_json.hpp  # Captured Binance fixtures
 ```
 
 ---
@@ -149,6 +179,9 @@ cmake --build build
 | `build/bin/ws_client_example` | `KrakenWsClient` — all 5 public channels + connection reuse demo |
 | `build/bin/rest_client_example` | CLI11 demo of every public REST endpoint via `KrakenRestClient` |
 | `build/bin/kraken_example` | Combined REST + WebSocket demo |
+| `build/bin/binance_rest_client_example` | CLI11 demo of every public Binance REST endpoint via `BinanceRestClient` |
+| `build/bin/binance_ws_client_example` | `BinanceStreamClient` — all 8 market-data streams + connection reuse |
+| `build/bin/binance_ws_api_example` | `BinanceWsApiClient` — trading WS API `ping` (live-verified) |
 
 ---
 
@@ -158,18 +191,26 @@ cmake --build build
 cd build && ctest --output-on-failure
 ```
 
-There are six test executables (161 tests total):
+There are twelve test executables (300 tests total) — six Kraken/common, six Binance:
 
 | Binary | Source | What it tests |
 |---|---|---|
-| `build/bin/kraken_unit_tests` | `test_signature/rest_requests/rest_responses/client.cpp` | REST request building, response parsing, signature, HTTP mock |
+| `build/bin/kraken_unit_tests` | `test_signature/rest_requests/rest_responses/client/kraken_auth.cpp` | REST request building, response parsing, signature, HTTP mock |
 | `build/bin/test_ws_client` | `test_ws_client.cpp` | `ExchangeWsClient` (as `KrakenWsClient`) lifecycle with `MockWsConnection` |
 | `build/bin/test_ws_responses` | `test_ws_responses.cpp` | `identify_message` + `from_json` against captured WS fixtures |
 | `build/bin/test_tick_price` | `test_tick_price.cpp` | `TickPrice::from`/`str` exact-decimal round-tripping |
 | `build/bin/test_order_type` | `test_order_type.cpp` | Generic (`exchange::to_string`) vs. Kraken (`kraken_order_type_to_string`) wire formats |
 | `build/bin/test_ws_reconnect_session` | `test_ws_reconnect_session.cpp` | `WsReconnectSession` start/stop/backoff/reconnect — deterministic, no real sleeps |
+| `build/bin/test_binance_auth` | `test_binance_auth.cpp` | `BinanceAuth` HMAC-SHA256 signing + header injection |
+| `build/bin/test_binance_types` | `test_binance_types.cpp` | Binance enum converters (incl. canonical FOK time-in-force) |
+| `build/bin/test_binance_rest_requests` | `test_binance_rest_requests.cpp` | Each Binance REST request builds the correct path/query/body |
+| `build/bin/test_binance_rest_responses` | `test_binance_rest_responses.cpp` | `from_json` + `parse_binance_response` against captured fixtures |
+| `build/bin/test_binance_client` | `test_binance_client.cpp` | `BinanceRestClient::execute()` signed round-trip via mock performer |
+| `build/bin/test_binance_ws_client` | `test_binance_ws_client.cpp` | Binance stream + trading-WS-API lifecycle with `MockWsConnection` |
 
 Tests do **not** require network access or credentials — all I/O is mocked.
+The flag matrix splits cleanly: `-DKRAKENAPI_BUILD_KRAKEN=OFF` runs the 129 Binance
+tests alone; `-DKRAKENAPI_BUILD_BINANCE=OFF` runs the 171 Kraken/common tests.
 
 ### Test suite breakdown
 
@@ -197,9 +238,12 @@ Tests do **not** require network access or credentials — all I/O is mocked.
 | `exchange::kraken::` | `exchange/kraken/types.hpp` | Kraken-only types — `PriceType`, `TriggerReference`, `StpType`, `FeePreference`, `TickPrice`, `OrderParams`, `OrderInfo`, `TradeInfo`, `LedgerEntry` — plus `RestResponse<T>` / `parse_rest_response<T>()` (Kraken's REST envelope; re-exports the canonical enums too) |
 | `exchange::kraken::rest::` | `exchange/kraken/{auth,rest_api,rest_client}.hpp` | `Credentials`, all REST request/response types, `KrakenRestClient` |
 | `exchange::kraken::ws::` | `exchange/kraken/{ws_api,ws_client}.hpp` | All WS request/response types, `SubscribeChannel`, `WsCredentials`, `identify_message`/`kraken_frame_descriptor`, `KrakenWsClient` (alias for `ExchangeWsClient`), `make_kraken_ws_client()`, URL constants |
+| `exchange::binance::` | `exchange/binance/types.hpp` | Binance enums + per-exchange string converters (`binance_order_type_to_string`, …); re-exports the canonical four |
+| `exchange::binance::rest::` | `exchange/binance/{auth,rest_api,rest_client}.hpp` | `BinanceCredentials`, `BinanceAuth` (`IRestAuth`), all REST request/response types, `parse_binance_response<T>`, `BinanceRestClient` |
+| `exchange::binance::ws::` | `exchange/binance/{ws_streams,ws_api}.hpp` | Stream events + `binance_stream_frame_descriptor` + `BinanceStreamClient`/`make_binance_stream_client()` (`STREAM_URL`); trading API req/resp + `binance_ws_api_frame_descriptor` + `BinanceWsApiClient`/`make_binance_ws_api_client()` (`WS_API_URL`). Both clients are `ExchangeWsClient` aliases |
 | `kraken::` *(deprecated)* | `kraken_compat.hpp` + old-path `kraken_*.hpp` forwarders | Reopens the pre-refactor namespace as aliases/forwarders over `exchange::kraken::*`, so untouched legacy call sites keep compiling and behaving identically. Gated by `KRAKENAPI_BUILD_COMPAT_SHIM` (default `ON`); see [docs/plans/001-appendix-compat-shim.md](docs/plans/001-appendix-compat-shim.md) and the migration guide for the full mapping |
 
-**Why the split**: `exchange::common::*` holds the scaffold that is genuinely exchange-agnostic — request/response binding templates, the WS dispatch loop, the connection interface, reconnect machinery. `exchange::kraken::*` supplies only what's Kraken-specific: wire formats, auth, endpoint URLs, and `identify_message`. A future Binance adapter (`exchange::binance::*`) reuses the entire common layer and follows the same three-tier shape.
+**Why the split**: `exchange::common::*` holds the scaffold that is genuinely exchange-agnostic — request/response binding templates, the WS dispatch loop, the connection interface, reconnect machinery. Each adapter supplies only what's exchange-specific: wire formats, auth, endpoint URLs, and its `*_frame_descriptor`. `exchange::binance::*` reuses the entire common layer and follows the same three-tier shape as `exchange::kraken::*` — it is the worked reference for [adding a new exchange](#adding-a-whole-new-exchange).
 
 ---
 
@@ -490,6 +534,90 @@ struct WsResponse {
 ```
 
 Defined once in `exchange::ws::` and re-exported here. `ok` is derived from `success`/`error` for response types that derive `BaseWsResponse` (which includes Kraken's `BaseResponse`); for plain types like `PongMessage` it is always `true`.
+
+---
+
+## Binance adapter reference
+
+The Binance adapter (`include/exchange/binance/`, `src/binance/rest_client.cpp`)
+mirrors Kraken's three-tier shape on the same `exchange_common` scaffold. It is
+the **worked reference** for [adding a new exchange](#adding-a-whole-new-exchange).
+Captured wire formats live in
+[docs/plans/001-appendix-binance-message-formats.md](docs/plans/001-appendix-binance-message-formats.md).
+
+**How Binance differs from Kraken** (the per-adapter specifics):
+
+| Aspect | Kraken | Binance |
+|---|---|---|
+| REST signing | HMAC-**SHA512**, base64, nonce | HMAC-**SHA256**, lowercase hex, `timestamp`(+`recvWindow`) |
+| REST envelope | `{error[], result}` → `kraken::RestResponse<T>` | HTTP status + body → `exchange::rest::RestResponse<T>` via `parse_binance_response<T>(status, j)` |
+| Credentials | `Credentials::from_file()` | `BinanceCredentials{api_key, secret_key, recv_window_ms=5000}` — a plain struct (set directly; no file loader) |
+| WS auth | session token (`WsCredentials`) | per-request HMAC over sorted `params` (`BinanceWsCredentials` = alias for `BinanceCredentials`) |
+| WS protocols | one endpoint (`ws_api.hpp`) | **two** — market streams (`ws_streams.hpp`) and a trading API (`ws_api.hpp`) |
+| WS frame classifier | `identify_message` + `kraken_frame_descriptor` | `binance_{stream,ws_api}_frame_descriptor` only (no `identify_message` — not required) |
+
+### Authentication (`exchange/binance/auth.hpp`, `exchange::binance::rest::`)
+
+`BinanceAuth : exchange::rest::IRestAuth` signs private REST requests; the crypto
+helpers (`detail::hmac_sha256`, `detail::to_hex`) are **inline in the header** —
+there is no `auth.cpp`. The signed payload is `query + body`, appended as a
+`signature=<hex>` parameter, with `X-MBX-APIKEY` carrying the key.
+
+### REST (`exchange/binance/{rest_api,rest_client}.hpp`, `exchange::binance::rest::`)
+
+`BinanceRestClient` (default base `https://api.binance.com`) is templated exactly
+like `KrakenRestClient`: `execute(req)` for public, `execute(req, creds)` for
+private; both return `exchange::rest::RestResponse<Req::response_type>`. Public
+requests derive `TypedPublicRequest<R>`, private derive `TypedPrivateRequest<R>`.
+`make_test_client(fn)` injects a mock performer for tests.
+
+| Public request | Path | Private request | Path |
+|---|---|---|---|
+| `BinancePingRequest` | `/api/v3/ping` | `BinanceAccountRequest` | `/api/v3/account` |
+| `BinanceServerTimeRequest` | `/api/v3/time` | `BinanceOpenOrdersRequest` | `/api/v3/openOrders` (GET) |
+| `BinanceTickerPriceRequest` | `/api/v3/ticker/price` | `BinanceAllOrdersRequest` | `/api/v3/allOrders` |
+| `BinanceOrderBookRequest` | `/api/v3/depth` | `BinanceMyTradesRequest` | `/api/v3/myTrades` |
+| `BinanceRecentTradesRequest` | `/api/v3/trades` | `BinanceNewOrderRequest` | `/api/v3/order` (POST) |
+| `BinanceKlinesRequest` | `/api/v3/klines` | `BinanceCancelOrderRequest` | `/api/v3/order` (DELETE) |
+| `BinanceExchangeInfoRequest` | `/api/v3/exchangeInfo` | `BinanceCancelAllOpenOrdersRequest` | `/api/v3/openOrders` (DELETE) |
+| `BinanceTicker24hrRequest` | `/api/v3/ticker/24hr` | | |
+
+### WebSocket market streams (`exchange/binance/ws_streams.hpp`, `exchange::binance::ws::`)
+
+`BinanceStreamClient` (alias for `ExchangeWsClient`), built via
+`make_binance_stream_client(conn)` or the URL factory over `STREAM_URL`
+(`wss://stream.binance.com/stream`). `binance_stream_frame_descriptor` routes
+`"stream"`-keyed pushes by stream name and `"id"`-keyed acks by `correlation_id`.
+One stream per `SUBSCRIBE`; every event `from_json` unwraps the combined-stream
+`{"stream","data"}` envelope.
+
+| Subscribe alias | Push event | Stream-name helper |
+|---|---|---|
+| `BinanceAggTradeSubscribe` | `BinanceAggTradeEvent` | `agg_trade_stream` |
+| `BinanceTradeSubscribe` | `BinanceTradeEvent` | `trade_stream` |
+| `BinanceKlineSubscribe` | `BinanceKlineEvent` | `kline_stream` |
+| `BinanceTickerSubscribe` | `BinanceTickerEvent` | `ticker_stream` |
+| `BinanceMiniTickerSubscribe` | `BinanceMiniTickerEvent` | `mini_ticker_stream` |
+| `BinanceBookTickerSubscribe` | `BinanceBookTickerEvent` | `book_ticker_stream` |
+| `BinanceDepthSubscribe` | `BinanceDepthUpdateEvent` | `depth_stream` |
+| `BinancePartialDepthSubscribe` | `BinancePartialDepth` | `partial_depth_stream` |
+
+### WebSocket trading API (`exchange/binance/ws_api.hpp`, `exchange::binance::ws::`)
+
+`BinanceWsApiClient` (alias for `ExchangeWsClient`), built via
+`make_binance_ws_api_client(conn)` or the URL factory over `WS_API_URL`
+(`wss://ws-api.binance.com/ws-api/v3`). Every reply is a `MethodResponse`
+(no push concept); `binance_ws_api_frame_descriptor` correlates by `id`.
+Responses derive `BinanceWsApiResponse : BaseWsResponse` (`ok = status < 400`).
+Order requests sign their `params` per-request via `detail::ws_sign_params`
+(alphabetically-sorted HMAC-SHA256) and **reuse the REST result structs** as
+their payloads.
+
+| Request | Method | Response |
+|---|---|---|
+| `BinanceWsPingRequest` | `ping` | `BinanceWsPongMessage` |
+| `BinanceWsNewOrderRequest` | `order.place` | `BinanceWsNewOrderResponse` (wraps `rest::BinanceNewOrderResponse`) |
+| `BinanceWsCancelOrderRequest` | `order.cancel` | `BinanceWsCancelOrderResponse` (wraps `rest::BinanceCancelOrderResponse`) |
 
 ---
 
@@ -883,6 +1011,11 @@ Place the banner before `#pragma once` (for headers) or before the first `#inclu
 
 # Combined REST + WS demo
 ./build/bin/kraken_example
+
+# Binance (all public — no credentials)
+./build/bin/binance_rest_client_example ticker --symbol BTCUSDT   # --help lists every endpoint
+./build/bin/binance_ws_client_example aggtrade BTCUSDT            # one of 8 stream subcommands
+./build/bin/binance_ws_api_example ping                          # trading WS API heartbeat
 ```
 
-Callers that embed the REST client must call `curl_global_init(CURL_GLOBAL_ALL)` before constructing `KrakenRestClient` and `curl_global_cleanup()` on teardown.
+Callers that embed a REST client must call `curl_global_init(CURL_GLOBAL_ALL)` before constructing `KrakenRestClient` / `BinanceRestClient` and `curl_global_cleanup()` on teardown.

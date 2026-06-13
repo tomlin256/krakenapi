@@ -1,8 +1,14 @@
 # krakenapi
 
-A type-safe C++ library for the [Kraken](https://kraken.com) Spot REST and WebSocket v2 APIs.
+A type-safe C++ library for the [Kraken](https://kraken.com) **and**
+[Binance](https://binance.com) Spot REST and WebSocket APIs.
 
-The compiler links each request type to its exact response type — no casts, no stringly-typed keys.
+The compiler links each request type to its exact response type — no casts, no
+stringly-typed keys. Both exchanges are built on one shared, exchange-agnostic
+engine; each is an independent static library you can enable or disable at
+configure time (`KRAKENAPI_BUILD_KRAKEN` / `KRAKENAPI_BUILD_BINANCE`, both `ON`
+by default). Adding a third exchange follows a documented
+[playbook](docs/agent-add-exchange.md).
 
 ---
 
@@ -17,10 +23,14 @@ git clone https://github.com/tomlin256/krakenapi.git
 cd krakenapi
 cmake -B build && cmake --build build
 
-# 3. Run an example
+# 3. Run an example — Kraken
 ./build/bin/rest_client_example time
 ./build/bin/rest_client_example ticker --pairs XXBTZUSD
 ./build/bin/ws_client_example ticker BTC/USD
+
+# ...or Binance
+./build/bin/binance_rest_client_example ticker --symbol BTCUSDT
+./build/bin/binance_ws_client_example aggtrade BTCUSDT
 ```
 
 All other dependencies (IXWebSocket, nlohmann/json, spdlog, Google Test) are fetched automatically by CMake.
@@ -242,6 +252,63 @@ case kraken::ws::MessageKind::Balances: {
 Source: [tests/examples/kraken_example.cpp](tests/examples/kraken_example.cpp)
 
 Shows how the REST and WebSocket layers share types from `kraken_types.hpp` — the same `OrderParams`, `Side`, and `OrderType` enums are used for placing orders on both transports.
+
+---
+
+## Binance
+
+The Binance adapter (`exchange::binance::*`, library `krakenapi::binanceapi`)
+covers Spot **REST** (public market data + private account/trading), **WebSocket
+market streams**, and a bidirectional **WebSocket trading API** — all on the same
+typed engine as Kraken. Three example programs (all public, no credentials):
+
+```bash
+# Every public REST endpoint (try --help)
+./build/bin/binance_rest_client_example ticker --symbol BTCUSDT
+./build/bin/binance_rest_client_example book BTCUSDT --limit 10
+
+# Market-data streams — one of 8 subcommands (aggtrade/trade/kline/ticker/…)
+./build/bin/binance_ws_client_example aggtrade BTCUSDT
+./build/bin/binance_ws_client_example multi BTCUSDT     # aggTrade + bookTicker, one socket
+
+# Trading WebSocket API heartbeat
+./build/bin/binance_ws_api_example ping
+```
+
+**REST** — same `execute(req)` / `execute(req, creds)` pattern as Kraken:
+
+```cpp
+#include "exchange/binance/rest_client.hpp"
+#include "exchange/binance/rest_api.hpp"
+using namespace exchange::binance::rest;
+
+curl_global_init(CURL_GLOBAL_ALL);
+BinanceRestClient client;                          // https://api.binance.com
+auto resp = client.execute(BinanceServerTimeRequest{});
+if (resp.ok) { /* resp.result->server_time */ }
+// Private: client.execute(BinanceAccountRequest{}, BinanceCredentials{key, secret});
+```
+
+**WebSocket streams** — subscribe via `BinanceStreamClient`:
+
+```cpp
+#include "exchange/binance/ws_streams.hpp"
+#include "exchange/common/ix_ws_connection.hpp"
+using namespace exchange::binance::ws;
+
+auto client = exchange::ws::make_exchange_ws_client(
+    std::string(STREAM_URL), binance_stream_frame_descriptor);
+
+BinanceAggTradeSubscribe req;
+req.stream = agg_trade_stream("BTCUSDT");
+auto [ack, handle] = client->subscribe(req, [](const BinanceAggTradeEvent& e) {
+    /* e.symbol, e.price, e.qty, … */
+});
+```
+
+The full Binance type/endpoint/channel reference — including the trading WS API
+(`order.place` / `order.cancel`) and how its per-request signing works — is in
+[CLAUDE.md → Binance adapter reference](CLAUDE.md#binance-adapter-reference).
 
 ---
 
@@ -473,12 +540,20 @@ Private channels need a token obtained via `GetWebSocketsTokenRequest` over REST
 cd build && ctest --output-on-failure
 ```
 
-Tests require no network access or credentials — all I/O is mocked.
+Tests require no network access or credentials — all I/O is mocked. **300 tests**
+across twelve executables (six Kraken/common, six Binance):
 
 | Binary | What it covers |
 |---|---|
 | `kraken_unit_tests` | HMAC signing, REST request building, JSON deserialization, HTTP mock round-trip |
-| `test_ws_client` | `KrakenWsClient` lifecycle, subscription handle, pre-connection queue |
+| `test_ws_client` / `test_ws_responses` | `KrakenWsClient` lifecycle, subscription handle, pre-connection queue; WS `from_json` |
+| `test_tick_price` / `test_order_type` / `test_ws_reconnect_session` | exact-decimal prices; wire formats; reconnect/backoff |
+| `test_binance_auth` / `test_binance_types` | HMAC-SHA256 signing; Binance enum converters |
+| `test_binance_rest_requests` / `test_binance_rest_responses` / `test_binance_client` | REST request building, JSON parsing, signed round-trip |
+| `test_binance_ws_client` | Binance market-stream + trading-WS-API lifecycle with `MockWsConnection` |
+
+With `-DKRAKENAPI_BUILD_KRAKEN=OFF` only the 129 Binance tests build and run;
+with `-DKRAKENAPI_BUILD_BINANCE=OFF`, the 171 Kraken/common tests.
 
 ---
 
