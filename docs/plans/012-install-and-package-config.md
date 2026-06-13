@@ -40,18 +40,30 @@ and links a small program against that prefix.
 
 ## Design decisions
 
-1. **Dependency resolution for installed consumers — `find_dependency` in the
-   config** *(recommended)*. The libs PUBLIC-link `OpenSSL::SSL`/`Crypto`,
-   `CURL::libcurl`, and `nlohmann_json::nlohmann_json`. The generated config
-   `include(CMakeFindDependencyMacro)` + `find_dependency(OpenSSL)` +
-   `find_dependency(CURL)` + `find_dependency(nlohmann_json)`, so the exported
-   targets' link requirements resolve downstream. OpenSSL/CURL are standard
-   find-modules. **`nlohmann_json` is FetchContent'd in our build, so an
-   *installed* consumer must have it findable** (vcpkg/conan/apt/brew/`find_package`
-   — it ships a `nlohmann_jsonConfig.cmake`). This is the conventional handling
-   for a header-only PUBLIC dep; we do **not** vendor a copy. *(Alternative —
-   bundle nlohmann's single header into our install — rejected as heavier and
-   surprising.)* Documented in the install README section.
+1. **Dependency resolution for installed consumers.** OpenSSL/CURL are
+   `find_package`d (imported targets), so the config `find_dependency(OpenSSL)` +
+   `find_dependency(CURL)` and the export references them fine. **nlohmann_json
+   needed a different answer than the plan first assumed**: it is FetchContent'd,
+   which makes `nlohmann_json::nlohmann_json` a *live local target* — CMake then
+   refuses to put it in our install export ("target nlohmann_json … not in any
+   export set"), and the usual `$<INSTALL_INTERFACE:…::…>` deferral trick is
+   blocked because CMake resolves the live alias rather than treating it as an
+   external name. *(Switching nlohmann to `find_package` would fix the export but
+   break the zero-setup FetchContent build.)* **Resolved by vendoring**: nlohmann
+   is header-only, so its headers are installed into our prefix's `include/`
+   (`install(DIRECTORY ${nlohmann_json_SOURCE_DIR}/include/nlohmann …)`), the libs
+   link it `$<BUILD_INTERFACE:…>`-only, and the config carries **no** nlohmann
+   `find_dependency`. The installed package is self-contained — a consumer needs
+   no separate nlohmann_json. (Caveat: a consumer with their own nlohmann sees our
+   copy on the krakenapi include path; acceptable for a stable header-only lib —
+   noted in the README.)
+
+1a. **Keep the deps' own install rules out of our prefix.** FetchContent
+   subprojects leak `install()` rules into a top-level `cmake --install`. Fixed:
+   `JSON_Install OFF` and `INSTALL_GTEST OFF`, and **ixwebsocket is fetched only
+   under `KRAKENAPI_BUILD_TESTS`** (no core library links it — it's
+   example/test-only), so a `-DKRAKENAPI_BUILD_TESTS=OFF` install lays down
+   *only* krakenapi + the vendored nlohmann + the package config. Verified.
 
 2. **Project version `0.1.0`** — `project(KRAKENAPI VERSION 0.1.0)`. The repo had
    none; `write_basic_package_version_file` needs one. Pre-1.0 signals the API is

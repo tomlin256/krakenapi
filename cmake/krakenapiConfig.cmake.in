@@ -1,0 +1,12 @@
+@PACKAGE_INIT@
+
+# krakenapi package config. The exported targets PUBLIC-link OpenSSL and libcurl
+# (standard CMake find-modules — resolved here). nlohmann_json is header-only and
+# vendored into this prefix's include dir, so it is NOT a consumer dependency.
+include(CMakeFindDependencyMacro)
+find_dependency(OpenSSL)
+find_dependency(CURL)
+
+include("${CMAKE_CURRENT_LIST_DIR}/krakenapiTargets.cmake")
+
+check_required_components(krakenapi)

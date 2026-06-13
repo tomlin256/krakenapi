@@ -17,7 +17,14 @@ target_include_directories(exchange_common PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
     $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(exchange_common PUBLIC nlohmann_json::nlohmann_json)
+# nlohmann_json is header-only and FetchContent'd (a non-installable local
+# target), so it can't go in our install export. We link it for the BUILD only
+# and vendor its headers into our install prefix (see the top-level CMakeLists),
+# making the installed package self-contained — consumers need no separate
+# nlohmann_json. The INSTALL_INTERFACE include dir already covers the vendored
+# copy.
+target_link_libraries(exchange_common PUBLIC
+    $<BUILD_INTERFACE:nlohmann_json::nlohmann_json>)
 
 #-------------------------------------------------------------------------------
 # Common HTTP transport — generic libcurl-backed CurlHttpClient (plan 010).
@@ -36,7 +43,9 @@ target_include_directories(exchange_http PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
     $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(exchange_http PUBLIC CURL::libcurl nlohmann_json::nlohmann_json)
+target_link_libraries(exchange_http PUBLIC
+    CURL::libcurl
+    $<BUILD_INTERFACE:nlohmann_json::nlohmann_json>)
 
 #-------------------------------------------------------------------------------
 # Kraken exchange adapter
@@ -74,4 +83,24 @@ if(KRAKENAPI_BUILD_BINANCE)
     target_link_libraries(binanceapi
         PUBLIC exchange_common exchange_http OpenSSL::SSL OpenSSL::Crypto
     )
+endif()
+
+#-------------------------------------------------------------------------------
+# Install the library targets into the krakenapiTargets export set (plan 012).
+# The export itself + headers + package config are installed from the top-level
+# CMakeLists. The two common libs are always present; the adapters only if their
+# flag built them.
+#-------------------------------------------------------------------------------
+
+if(KRAKENAPI_INSTALL)
+    set(_kapi_targets exchange_common exchange_http)
+    if(TARGET krakenapi)
+        list(APPEND _kapi_targets krakenapi)
+    endif()
+    if(TARGET binanceapi)
+        list(APPEND _kapi_targets binanceapi)
+    endif()
+    install(TARGETS ${_kapi_targets}
+            EXPORT      krakenapiTargets
+            ARCHIVE     DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()
