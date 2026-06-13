@@ -17,3 +17,4 @@
 | 009 | [Relocate `TickPrice` from the Kraken adapter to the common layer](plans/009-relocate-tickprice-to-common.md) | Done |
 | 010 | [Extract a shared cURL HTTP transport (de-duplicate REST clients)](plans/010-shared-curl-http-transport.md) | Done |
 | 011 | [Fully generic `RestClient` (unify the typed execute path)](plans/011-generic-rest-client.md) | Proposed (deferred) |
+| 012 | [Install rules + CMake package config](plans/012-install-and-package-config.md) | Draft |
