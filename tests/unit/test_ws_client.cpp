@@ -21,6 +21,8 @@
 
 #include <atomic>
 #include <chrono>
+#include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -886,4 +888,86 @@ TEST(KrakenAddOrderSerialisation, LimitPriceIsJsonNumber) {
 
     EXPECT_TRUE(lp.is_number()) << "limit_price must be a JSON number";
     EXPECT_EQ(lp.dump(), "309.6217");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Exception isolation (code-review H1): a from_json/callback throw must not
+// escape on_raw_message into the transport's receive thread, and the typed
+// futures must resolve to ok=false rather than break.
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+
+struct CountingErrorHandler : exchange::ws::IWsErrorHandler {
+    std::atomic<int> malformed{0};
+    void on_malformed_frame(const std::string&, const std::exception&) override { ++malformed; }
+    void on_connection_error(const std::string&) override {}
+};
+
+// A method response whose from_json always throws — stands in for any
+// unexpected-frame-shape deserialization failure.
+struct BoomResponse : exchange::ws::BaseWsResponse {
+    static BoomResponse from_json(const json&) {
+        throw std::runtime_error("from_json boom");
+    }
+};
+struct BoomRequest : exchange::ws::TypedWsRequest<BoomResponse> {
+    json to_json() const { return json{{"id", req_id}, {"method", "boom"}}; }
+};
+
+// Minimal identifier: any frame carrying an integer "id" is a method response.
+exchange::ws::FrameDescriptor boom_identifier(const json& j) {
+    exchange::ws::FrameDescriptor d;
+    if (j.contains("id") && j.at("id").is_number_integer()) {
+        d.kind           = exchange::ws::FrameKind::MethodResponse;
+        d.correlation_id = std::to_string(j.at("id").get<int64_t>());
+    }
+    return d;
+}
+
+}  // namespace
+
+TEST(WsErrorIsolation, MethodFromJsonThrowResolvesErrorNoCrash) {
+    auto conn   = std::make_shared<MockWsConnection>();
+    auto client = exchange::ws::make_exchange_ws_client(conn, boom_identifier);
+    conn->fire_open();
+
+    auto fut = client->execute_async(BoomRequest{});
+    ASSERT_EQ(conn->sent_messages.size(), 1u);
+    const auto id = json::parse(conn->sent_messages.back()).at("id").get<int64_t>();
+
+    // from_json throws inside the dispatched handler — injecting the reply must
+    // not propagate, and the future resolves ok=false (not broken_promise).
+    EXPECT_NO_THROW(conn->inject_message(json{{"id", id}, {"status", 200}}.dump()));
+
+    const auto resp = fut.get();
+    EXPECT_FALSE(resp.ok);
+    ASSERT_TRUE(resp.error.has_value());
+}
+
+TEST(WsErrorIsolation, ThrowingPushCallbackIsContained) {
+    auto conn   = std::make_shared<MockWsConnection>();
+    auto eh     = std::make_shared<CountingErrorHandler>();
+    auto client = exchange::ws::make_exchange_ws_client(
+        conn, exchange::kraken::ws::kraken_frame_descriptor, eh);
+    conn->fire_open();
+
+    exchange::kraken::ws::TickerSubscribeRequest sub_req;
+    sub_req.symbols = std::vector<std::string>{"BTC/USD"};
+
+    auto fut = client->subscribe_async(
+        sub_req,
+        [](const exchange::kraken::ws::TickerMessage&) {
+            throw std::runtime_error("push callback boom");
+        });
+
+    const int64_t id = json::parse(conn->sent_messages[0])["req_id"].get<int64_t>();
+    conn->inject_message(make_subscribe_ack(id));
+    auto [ack, handle] = fut.get();
+    ASSERT_TRUE(ack.ok);
+
+    // The valid ticker push fires the throwing callback. The receive thread must
+    // survive (no escape) and the error handler is notified.
+    EXPECT_NO_THROW(conn->inject_message(make_ticker_push("BTC/USD", 55000.0, 55001.0)));
+    EXPECT_GE(eh->malformed.load(), 1);
 }

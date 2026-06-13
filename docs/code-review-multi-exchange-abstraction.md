@@ -26,7 +26,7 @@ applied.
 
 | Severity | Count | Items |
 |---|---|---|
-| High | 1 | H1 |
+| High | 1 | H1 ✅ fixed |
 | Medium | 2 | M1, M2 |
 | Low | 4 | L1–L4 |
 | Nit / note | 3 | N1–N3 |
@@ -35,7 +35,17 @@ applied.
 
 ## High
 
-### H1 — A malformed server frame can crash the WS receive thread
+### H1 — A malformed server frame can crash the WS receive thread — ✅ FIXED
+
+> **Resolved**: `on_raw_message` now wraps both the method-response handler and
+> the push-callback invocation in a `try/catch` (std::exception **and** `...`)
+> that routes to `error_handler_->on_malformed_frame`, so a throwing `from_json`
+> / `std::stod` / `.get<double>()` / user callback can no longer escape into the
+> transport's receive thread. The `execute_async` and `subscribe_async` lambdas
+> additionally catch their own `from_json` and resolve the future to `ok=false`
+> rather than leaving a broken promise. Covered by
+> `test_ws_client.cpp::WsErrorIsolation.{MethodFromJsonThrowResolvesErrorNoCrash,
+> ThrowingPushCallbackIsContained}` (suite 304 → 306).
 
 **Where**: `src/exchange/common/ws_client.cpp:105,116` (handler/cb invocation);
 `include/exchange/common/ws_client.inl:103` (`Resp::from_json(j)` in the pending

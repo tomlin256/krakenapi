@@ -9,6 +9,8 @@
 
 #include "exchange/common/ws_client.hpp"
 
+#include <stdexcept>
+
 namespace exchange::ws {
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -89,6 +91,24 @@ void ExchangeWsClient::on_raw_message(const std::string& raw) {
 
     const auto desc = identifier_(j);
 
+    // A dispatched handler/callback runs user-supplied from_json + callbacks,
+    // any of which can throw (unexpected field type, std::stod on a non-number,
+    // a throwing user lambda). This runs on the transport's receive thread, so
+    // an escaped exception would std::terminate the process. Isolate it: report
+    // via the error handler and keep the dispatch loop alive. The typed futures
+    // additionally resolve themselves to ok=false (see ws_client.inl) so callers
+    // see a clean error rather than a broken promise.
+    auto safe_invoke = [&](const std::function<void(const json&)>& fn) {
+        try {
+            fn(j);
+        } catch (const std::exception& e) {
+            error_handler_->on_malformed_frame(raw, e);
+        } catch (...) {
+            const std::runtime_error e("non-std::exception thrown by WS dispatch handler");
+            error_handler_->on_malformed_frame(raw, e);
+        }
+    };
+
     switch (desc.kind) {
         case FrameKind::MethodResponse: {
             if (!desc.correlation_id.has_value()) break;
@@ -102,7 +122,7 @@ void ExchangeWsClient::on_raw_message(const std::string& raw) {
                     pending_.erase(it);
                 }
             }
-            if (handler) handler(j);
+            if (handler) safe_invoke(handler);
             break;
         }
         case FrameKind::PushMessage: {
@@ -113,7 +133,7 @@ void ExchangeWsClient::on_raw_message(const std::string& raw) {
                 auto it = subscriptions_.find(rk);
                 if (it != subscriptions_.end()) cb = it->second;
             }
-            if (cb) cb(j);
+            if (cb) safe_invoke(cb);
             break;
         }
         case FrameKind::Unknown:

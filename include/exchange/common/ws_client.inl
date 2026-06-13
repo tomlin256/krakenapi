@@ -100,7 +100,17 @@ ExchangeWsClient::execute_async(Req req) {
     {
         std::lock_guard<std::mutex> lk(pending_mu_);
         pending_[key] = [prom](const json& j) {
-            prom->set_value(detail::make_ws_response(Resp::from_json(j)));
+            // Resp::from_json may throw on an unexpected frame shape; resolve the
+            // future to a clean ok=false rather than leaving a broken promise
+            // (and the on_raw_message guard keeps the receive thread alive).
+            try {
+                prom->set_value(detail::make_ws_response(Resp::from_json(j)));
+            } catch (const std::exception& e) {
+                WsResponse<Resp> err;
+                err.ok    = false;
+                err.error = std::string("response parse failed: ") + e.what();
+                prom->set_value(std::move(err));
+            }
         };
     }
 
@@ -150,8 +160,16 @@ ExchangeWsClient::subscribe_async(Req req,
         pending_[key] = [this, prom, rk, erased_push, active,
                          unsub_js = std::move(unsub_js)](const json& j) mutable
         {
-            auto ack = AckType::from_json(j);
-            auto ws  = detail::make_ws_response(ack);
+            // A malformed ack frame must not throw into the receive thread or
+            // leave the subscribe future broken — resolve it to ok=false (no
+            // subscription installed, inactive handle).
+            WsResponse<AckType> ws;
+            try {
+                ws = detail::make_ws_response(AckType::from_json(j));
+            } catch (const std::exception& e) {
+                ws.ok    = false;
+                ws.error = std::string("subscribe ack parse failed: ") + e.what();
+            }
 
             SubscriptionHandle handle;
             if (ws.ok) {
