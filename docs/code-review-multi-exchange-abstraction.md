@@ -28,7 +28,7 @@ applied.
 |---|---|---|
 | High | 1 | H1 ✅ fixed |
 | Medium | 2 | M1 ✅ fixed, M2 ✅ fixed |
-| Low | 4 | L1–L4 |
+| Low | 4 | L1–L4 ✅ all fixed |
 | Nit / note | 3 | N1–N3 |
 
 ---
@@ -117,30 +117,43 @@ check.
 
 ## Low
 
-### L1 — Message reordering at connect
+### L1 — Message reordering at connect — ✅ FIXED
 **Where**: `src/exchange/common/ws_client.cpp:71-80`.
+> **Resolved**: `on_open_handler` now flushes the backlog **while holding
+> `queue_mu_`**, so a concurrent `enqueue_or_send` blocks and sends after the
+> backlog (it already sends under the same lock — no new lock-ordering risk).
+> Order pinned by `test_binance_ws_client.cpp::BinanceWsApiLifecycle.BeforeOpen_FlushesInFifoOrder`.
 `on_open_handler` moves the queue out, releases `queue_mu_`, then sends. A
 concurrent `enqueue_or_send` (`:62-69`) that sees `connected_==true` in the gap
 can send its message ahead of the flushed backlog. Benign for id-correlated
 request/reply, but a latent ordering bug. Flush while holding the lock, or gate
 new sends until the flush completes.
 
-### L2 — `TickPrice::from` has no overflow guard
+### L2 — `TickPrice::from` has no overflow guard — ✅ FIXED
 **Where**: `include/exchange/common/tick_price.hpp`.
+> **Resolved**: `from` now throws `std::overflow_error` when `price * 10^decimals`
+> exceeds a safe int64 bound (9.2e18 < 2^63), before the UB-prone `llroundl`/cast.
+> Test: `test_tick_price.cpp::TickPriceFrom.OverflowThrows`.
 `llroundl(price * pow(10, decimals))` overflows `int64_t` for large
 `decimals`/`price` (≥ ~18 decimals). Exchange pair precision is ≤ 8 in practice,
 so unreached — but it's an unchecked precondition on a now-shared common type.
 
-### L3 — `ws_param_value` mis-renders a JSON double
+### L3 — `ws_param_value` mis-renders a JSON double — ✅ FIXED
 **Where**: `include/exchange/binance/ws_api.hpp:162`.
+> **Resolved**: `ws_param_value` now throws `std::invalid_argument` on a
+> floating-point param (numeric params must be caller-formatted decimal strings
+> or integers — both round-trip exactly). Test:
+> `test_binance_ws_client.cpp::BinanceWsSignParams.RejectsFloatParam`.
 Non-strings render via `dump()`; fine today (all signed params are strings/ints),
 but a future `double` param would sign with `dump()`'s formatting (possible
 scientific notation) → signature mismatch. Latent.
 
-### L4 — `HMAC()` return value unchecked
+### L4 — `HMAC()` return value unchecked — ✅ FIXED
 **Where**: `include/exchange/binance/auth.hpp:42`, `include/exchange/kraken/auth.hpp:88`.
-`HMAC()` returns `nullptr` on failure; ignored. Won't fail for valid inputs;
-defensive nit.
+> **Resolved**: both `hmac_sha256`/`hmac_sha512` now throw `std::runtime_error`
+> if `HMAC()` returns `nullptr`. No dedicated test — the failure can't be
+> triggered without OpenSSL fault injection; the existing signature tests prove
+> the success path is unchanged.
 
 ---
 
@@ -170,7 +183,6 @@ exchange decoupling is `nm`- and flag-matrix-verified.
 
 ## Recommendation
 
-Fix **H1** before merge — it's a small, contained change with the largest
-robustness payoff (the engine everything rides on should isolate a bad frame).
-**M1** is a quick API-honesty fix. The remaining items are reasonable follow-up
-tickets rather than merge blockers.
+**All findings (H1, M1–M2, L1–L4) are now fixed and tested** — see the per-item
+"✅ Resolved" notes above. The full suite is green at 316. Nothing from this
+review remains outstanding.

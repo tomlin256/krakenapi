@@ -24,6 +24,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <stdexcept>
 #include <string>
 
 namespace exchange {
@@ -36,11 +37,15 @@ struct TickPrice {
 
     // Snap an absolute price onto the tick grid for a given decimal precision.
     static TickPrice from(double price, int decimals) {
-        const long double scale = std::pow(10.0L, decimals);
-        return TickPrice{
-            static_cast<int64_t>(std::llroundl(
-                static_cast<long double>(price) * scale)),
-            decimals};
+        const long double scaled =
+            static_cast<long double>(price) * std::pow(10.0L, decimals);
+        // Guard int64 overflow before llroundl/cast (UB otherwise, review L2).
+        // 9.2e18 is comfortably below 2^63 and far above any real
+        // price * 10^decimals (prices are bounded, decimals <= 8 on the wire).
+        if (scaled > 9.2e18L || scaled < -9.2e18L)
+            throw std::overflow_error(
+                "TickPrice::from: price * 10^decimals overflows int64");
+        return TickPrice{static_cast<int64_t>(std::llroundl(scaled)), decimals};
     }
 
     // Exact decimal string via integer point-insertion — no FP, no locale.

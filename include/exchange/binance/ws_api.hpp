@@ -161,7 +161,16 @@ namespace detail {
 // Renders one param value as it appears in the signed payload: strings raw
 // (no quotes), everything else via dump() (ints → digits, bools → true/false).
 inline std::string ws_param_value(const json& v) {
-    return v.is_string() ? v.get<std::string>() : v.dump();
+    if (v.is_string()) return v.get<std::string>();
+    // Floats are rejected (review L3): dump() may emit scientific notation, so a
+    // float param would sign to a string the server never reconstructs. Numeric
+    // params must be passed as caller-formatted decimal strings (price/qty) or
+    // integers (orderId/timestamp); both round-trip exactly.
+    if (v.is_number_float())
+        throw std::invalid_argument(
+            "ws_param_value: floating-point params must be caller-formatted "
+            "decimal strings, not JSON numbers");
+    return v.dump();
 }
 
 // Injects apiKey, timestamp, and recvWindow (if creds.recv_window_ms > 0)

@@ -625,6 +625,13 @@ TEST(BinanceWsSignParams, RejectsNonHmacAlgorithm) {
     EXPECT_THROW(detail::ws_sign_params(params, creds, 1000), std::invalid_argument);
 }
 
+TEST(BinanceWsSignParams, RejectsFloatParam) {
+    // Review L3: a floating-point param would sign non-canonically (dump() may
+    // use scientific notation), so it must be rejected — pass decimal strings.
+    json params{{"price", 0.1}};  // float, not a caller-formatted "0.1" string
+    EXPECT_THROW(detail::ws_sign_params(params, test_ws_creds(), 1000), std::invalid_argument);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // order.place / order.cancel — signed frames + reply parsing (appendix §4)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -894,4 +901,24 @@ TEST(BinanceWsApiLifecycle, Timeout) {
     EXPECT_FALSE(resp.ok);
     ASSERT_TRUE(resp.error.has_value());
     EXPECT_EQ(*resp.error, "request timed out");
+}
+
+TEST(BinanceWsApiLifecycle, BeforeOpen_FlushesInFifoOrder) {
+    // Review L1: requests queued before the socket opens must flush in enqueue
+    // order. req_ids increase per execute_async, so the sent frames' ids must be
+    // strictly increasing in send order.
+    auto [client, conn] = make_mock_api_client();
+
+    client->execute_async(BinanceWsPingRequest{});  // futures discarded; the
+    client->execute_async(BinanceWsPingRequest{});  // promises live in pending_,
+    client->execute_async(BinanceWsPingRequest{});  // the frames queue in order.
+    EXPECT_TRUE(conn->sent_messages.empty());
+
+    conn->fire_open();
+    ASSERT_EQ(conn->sent_messages.size(), 3u);
+    const auto id0 = json::parse(conn->sent_messages[0]).at("id").get<int64_t>();
+    const auto id1 = json::parse(conn->sent_messages[1]).at("id").get<int64_t>();
+    const auto id2 = json::parse(conn->sent_messages[2]).at("id").get<int64_t>();
+    EXPECT_LT(id0, id1);
+    EXPECT_LT(id1, id2);
 }

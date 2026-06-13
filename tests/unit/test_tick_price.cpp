@@ -12,6 +12,8 @@
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 
+#include <stdexcept>
+
 using json = nlohmann::json;
 using exchange::TickPrice;
 
@@ -81,4 +83,12 @@ TEST(TickPriceFromJson, FromJsonNumber) {
     // The decimal count inferred from the number's string form may vary, but
     // str() must round-trip through the same number of decimal digits.
     EXPECT_FALSE(tp.str().empty());
+}
+
+// ── Review L2: int64 overflow is rejected, realistic precision still works ────
+
+TEST(TickPriceFrom, OverflowThrows) {
+    EXPECT_THROW(TickPrice::from(1.0, 19), std::overflow_error);   // 10^19 > int64
+    EXPECT_THROW(TickPrice::from(1.0e12, 8), std::overflow_error); // 1e20
+    EXPECT_NO_THROW(TickPrice::from(1.0e9, 8));                    // 1e17 — fine
 }

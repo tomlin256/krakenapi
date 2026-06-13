@@ -71,14 +71,15 @@ void ExchangeWsClient::enqueue_or_send(const std::string& msg) {
 }
 
 void ExchangeWsClient::on_open_handler() {
-    std::vector<std::string> queued;
-    {
-        std::lock_guard<std::mutex> lk(queue_mu_);
-        connected_.store(true);
-        queued = std::move(send_queue_);
-    }
-    for (const auto& msg : queued)
+    // Flush the backlog while holding queue_mu_ (review L1): a concurrent
+    // enqueue_or_send that sees connected_==true must block here and send AFTER
+    // the backlog, not race ahead of it. enqueue_or_send already sends under the
+    // same lock, so this introduces no new lock-ordering risk.
+    std::lock_guard<std::mutex> lk(queue_mu_);
+    connected_.store(true);
+    for (const auto& msg : send_queue_)
         conn_->send(msg);
+    send_queue_.clear();
 }
 
 void ExchangeWsClient::on_raw_message(const std::string& raw) {

@@ -85,10 +85,11 @@ inline std::string sha256(const std::string& data) {
 inline std::string hmac_sha512(const std::string& key, const std::string& data) {
     unsigned char result[64];
     unsigned int  len = 64;
-    HMAC(EVP_sha512(),
-         reinterpret_cast<const unsigned char*>(key.data()), static_cast<int>(key.size()),
-         reinterpret_cast<const unsigned char*>(data.data()), data.size(),
-         result, &len);
+    if (HMAC(EVP_sha512(),
+             reinterpret_cast<const unsigned char*>(key.data()), static_cast<int>(key.size()),
+             reinterpret_cast<const unsigned char*>(data.data()), data.size(),
+             result, &len) == nullptr)        // review L4: surface OpenSSL failure
+        throw std::runtime_error("HMAC-SHA512 computation failed");
     return std::string(reinterpret_cast<char*>(result), len);
 }
 
