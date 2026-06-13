@@ -18,11 +18,13 @@
 #include "binance_rest_example_json.hpp"
 
 #include <gtest/gtest.h>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
 using namespace exchange::binance::rest;
 using exchange::rest::HttpRequest;
+using exchange::rest::HttpResponse;
 namespace fixtures = exchange::binance::rest::test;
 
 namespace {
@@ -171,4 +173,40 @@ TEST(BinanceClient, Non2xxWithoutErrorBody_SurfacesHttpStatus) {
     ASSERT_EQ(resp.errors.size(), 1u);
     EXPECT_EQ(resp.errors[0], "HTTP 500");
     EXPECT_FALSE(resp.result.has_value());
+}
+
+// ── Review M2: transport / parse / signing failures fold into ok=false ────────
+
+TEST(BinanceClient, TransportFailureFoldsIntoErrorResponse) {
+    auto client = make_binance_test_client(
+        [](const HttpRequest&) -> HttpResponse { throw std::runtime_error("network down"); });
+
+    const auto resp = client.execute(BinancePingRequest{});
+    EXPECT_FALSE(resp.ok);
+    EXPECT_FALSE(resp.errors.empty());
+}
+
+TEST(BinanceClient, MalformedBodyFoldsIntoErrorResponse) {
+    auto client = make_binance_test_client(
+        [](const HttpRequest&) -> HttpResponse { return HttpResponse{200, "<html>not json</html>"}; });
+
+    const auto resp = client.execute(BinancePingRequest{});
+    EXPECT_FALSE(resp.ok);
+    EXPECT_FALSE(resp.errors.empty());
+}
+
+// M1 + M2 composition: a rejected non-HMAC algorithm surfaces as ok=false, not
+// an escaped exception (sign() throws inside execute()'s try).
+TEST(BinanceClient, NonHmacAlgorithmFoldsIntoErrorResponse) {
+    auto client = make_binance_test_client(
+        [](const HttpRequest&) -> HttpResponse { return HttpResponse{200, "{}"}; });
+
+    BinanceCredentials creds;
+    creds.api_key    = "k";
+    creds.secret_key = "s";
+    creds.algorithm  = BinanceSignAlgorithm::Rsa;
+
+    const auto resp = client.execute(BinanceAccountRequest{}, BinanceAuth(creds));
+    EXPECT_FALSE(resp.ok);
+    EXPECT_FALSE(resp.errors.empty());
 }

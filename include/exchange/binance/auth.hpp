@@ -22,6 +22,7 @@
 #include <functional>
 #include <iomanip>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 
 // OpenSSL headers — required for HMAC-SHA256.
@@ -100,6 +101,14 @@ struct BinanceAuth : exchange::rest::IRestAuth {
     {}
 
     void sign(exchange::rest::HttpRequest& req) const override {
+        // Only HMAC-SHA256 is implemented. Reject other algorithms loudly rather
+        // than silently HMAC-signing with the wrong scheme (would produce a
+        // signature the server rejects, with no clue why).
+        if (creds_.algorithm != BinanceSignAlgorithm::HmacSha256)
+            throw std::invalid_argument(
+                "BinanceAuth: only HMAC-SHA256 signing is implemented "
+                "(RSA / Ed25519 are not supported)");
+
         using M = exchange::rest::HttpRequest::Method;
 
         const bool is_body_request = (req.method == M::POST);

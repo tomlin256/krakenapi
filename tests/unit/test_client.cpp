@@ -10,6 +10,7 @@
 #include "exchange/kraken/rest_client.hpp"
 
 #include <gtest/gtest.h>
+#include <stdexcept>
 #include <string>
 
 using namespace exchange::kraken::rest;
@@ -163,4 +164,27 @@ TEST(CredentialsFromFile, ThrowsWhenHomeUnset) {
     unsetenv("HOME");
     EXPECT_THROW(Credentials::from_file("default"), std::runtime_error);
     if (saved) setenv("HOME", saved, 1);
+}
+
+// ---------------------------------------------------------------------------
+// Review M2: transport / malformed-body failures fold into ok=false rather
+// than escaping as exceptions, so resp.ok is the single failure check.
+// ---------------------------------------------------------------------------
+
+TEST(KrakenRestClient, TransportFailureFoldsIntoErrorResponse) {
+    auto client = make_test_client(
+        [](const HttpRequest&) -> std::string { throw std::runtime_error("network down"); });
+
+    const auto resp = client.execute(GetServerTimeRequest{});
+    EXPECT_FALSE(resp.ok);
+    EXPECT_FALSE(resp.errors.empty());
+}
+
+TEST(KrakenRestClient, MalformedBodyFoldsIntoErrorResponse) {
+    auto client = make_test_client(
+        [](const HttpRequest&) -> std::string { return "<html>not json</html>"; });
+
+    const auto resp = client.execute(GetServerTimeRequest{});
+    EXPECT_FALSE(resp.ok);
+    EXPECT_FALSE(resp.errors.empty());
 }

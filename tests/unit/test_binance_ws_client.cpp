@@ -23,6 +23,7 @@
 
 #include <chrono>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -614,6 +615,14 @@ TEST(BinanceWsSignParams, ValueRendering_StringsRawIntsAsDigits) {
               ws_sig("testSecret",
                      "apiKey=testApiKey&orderId=12510053279&price=0.10"
                      "&timestamp=1000"));
+}
+
+TEST(BinanceWsSignParams, RejectsNonHmacAlgorithm) {
+    // Review M1: a non-HMAC algorithm must be rejected, not silently HMAC-signed.
+    json params{{"symbol", "BTCUSDT"}};
+    auto creds      = test_ws_creds();
+    creds.algorithm = exchange::binance::rest::BinanceSignAlgorithm::Rsa;
+    EXPECT_THROW(detail::ws_sign_params(params, creds, 1000), std::invalid_argument);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

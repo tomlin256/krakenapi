@@ -42,10 +42,18 @@ public:
              typename = std::enable_if_t<std::is_base_of_v<PublicRequest, Req>>>
     exchange::kraken::RestResponse<typename Req::response_type>
     execute(const Req& req) {
-        auto http = req.build();
-        const HttpResponse r = perform_(http);
-        return exchange::kraken::parse_rest_response<typename Req::response_type>(
-            json::parse(r.body));
+        using Resp = typename Req::response_type;
+        try {
+            auto http = req.build();
+            const HttpResponse r = perform_(http);
+            return exchange::kraken::parse_rest_response<Resp>(json::parse(r.body));
+        } catch (const std::exception& e) {
+            // Transport / malformed-body failures fold into the envelope so
+            // `resp.ok` is the single failure check (review M2).
+            exchange::kraken::RestResponse<Resp> err;
+            err.errors.push_back(std::string("request failed: ") + e.what());
+            return err;
+        }
     }
 
     // Execute a private request (credentials required).
@@ -53,10 +61,16 @@ public:
              typename = std::enable_if_t<std::is_base_of_v<PrivateRequest, Req>>>
     exchange::kraken::RestResponse<typename Req::response_type>
     execute(const Req& req, const Credentials& creds) {
-        auto http = req.build(creds);
-        const HttpResponse r = perform_(http);
-        return exchange::kraken::parse_rest_response<typename Req::response_type>(
-            json::parse(r.body));
+        using Resp = typename Req::response_type;
+        try {
+            auto http = req.build(creds);
+            const HttpResponse r = perform_(http);
+            return exchange::kraken::parse_rest_response<Resp>(json::parse(r.body));
+        } catch (const std::exception& e) {
+            exchange::kraken::RestResponse<Resp> err;
+            err.errors.push_back(std::string("request failed: ") + e.what());
+            return err;
+        }
     }
 
 private:

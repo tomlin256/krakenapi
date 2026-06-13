@@ -21,6 +21,7 @@
 #include "exchange/common/rest.hpp"
 
 #include <gtest/gtest.h>
+#include <stdexcept>
 #include <string>
 
 using namespace exchange::binance::rest;
@@ -206,4 +207,26 @@ TEST(BinanceAuth, InjectsXMbxApiKeyHeader) {
 TEST(BinanceAuth, ImplementsIRestAuth) {
     static_assert(std::is_base_of_v<exchange::rest::IRestAuth, BinanceAuth>,
                   "BinanceAuth must derive exchange::rest::IRestAuth");
+}
+
+// ── Review M1: reject non-HMAC algorithms instead of silently HMAC-signing ────
+
+TEST(BinanceAuth, RejectsNonHmacAlgorithm) {
+    BinanceCredentials creds;
+    creds.api_key    = "k";
+    creds.secret_key = "s";
+
+    HttpRequest req;
+    req.method = HttpRequest::Method::GET;
+    req.path   = "/api/v3/account";
+
+    creds.algorithm = BinanceSignAlgorithm::Rsa;
+    EXPECT_THROW(BinanceAuth(creds).sign(req), std::invalid_argument);
+
+    creds.algorithm = BinanceSignAlgorithm::Ed25519;
+    EXPECT_THROW(BinanceAuth(creds).sign(req), std::invalid_argument);
+
+    // The default (HMAC-SHA256) still signs without throwing.
+    creds.algorithm = BinanceSignAlgorithm::HmacSha256;
+    EXPECT_NO_THROW(BinanceAuth(creds).sign(req));
 }

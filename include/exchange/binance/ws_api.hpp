@@ -33,6 +33,7 @@
 #include <cstdint>
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -173,6 +174,12 @@ inline std::string ws_param_value(const json& v) {
 // (Rsa/Ed25519 enum values are accepted-but-unimplemented there too).
 inline void ws_sign_params(json& params, const BinanceWsCredentials& creds,
                            int64_t timestamp_ms) {
+    // HMAC-SHA256 only — reject other algorithms loudly (see BinanceAuth::sign).
+    if (creds.algorithm != rest::BinanceSignAlgorithm::HmacSha256)
+        throw std::invalid_argument(
+            "Binance WS signing: only HMAC-SHA256 is implemented "
+            "(RSA / Ed25519 are not supported)");
+
     params["apiKey"]    = creds.api_key;
     params["timestamp"] = timestamp_ms;
     if (creds.recv_window_ms > 0)

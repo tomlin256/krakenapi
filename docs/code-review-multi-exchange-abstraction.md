@@ -27,7 +27,7 @@ applied.
 | Severity | Count | Items |
 |---|---|---|
 | High | 1 | H1 ✅ fixed |
-| Medium | 2 | M1, M2 |
+| Medium | 2 | M1 ✅ fixed, M2 ✅ fixed |
 | Low | 4 | L1–L4 |
 | Nit / note | 3 | N1–N3 |
 
@@ -71,7 +71,14 @@ robustness payoff.
 
 ## Medium
 
-### M1 — `BinanceSignAlgorithm` is accepted but silently ignored
+### M1 — `BinanceSignAlgorithm` is accepted but silently ignored — ✅ FIXED
+
+> **Resolved**: `BinanceAuth::sign` and `detail::ws_sign_params` now throw
+> `std::invalid_argument` when `algorithm != HmacSha256`, instead of silently
+> HMAC-signing. Tests: `test_binance_auth.cpp::BinanceAuth.RejectsNonHmacAlgorithm`,
+> `test_binance_ws_client.cpp::BinanceWsSignParams.RejectsNonHmacAlgorithm`. On
+> the REST path the throw composes with M2 — a misconfigured algorithm surfaces
+> as `RestResponse{ok:false}` (`BinanceClient.NonHmacAlgorithmFoldsIntoErrorResponse`).
 
 **Where**: `include/exchange/binance/auth.hpp:62,69` (enum + field);
 `auth.hpp:102` (`BinanceAuth::sign`); `include/exchange/binance/ws_api.hpp:174`
@@ -85,7 +92,13 @@ comment (`ws_api.hpp:172-173`) even acknowledges it.
 **Fix**: either drop the enum (YAGNI until RSA/Ed25519 are implemented) or have
 the signers reject/branch on non-HMAC instead of silently proceeding.
 
-### M2 — REST `execute()` mixes exceptions with the `RestResponse` envelope
+### M2 — REST `execute()` mixes exceptions with the `RestResponse` envelope — ✅ FIXED
+
+> **Resolved**: both `BinanceRestClient::execute` and `KrakenRestClient::execute`
+> (public + private overloads) now wrap build/sign/`perform`/`json::parse` in a
+> `try/catch` that folds any `std::exception` into `RestResponse{ok:false,
+> errors:["request failed: …"]}`, so `resp.ok` is the single failure check.
+> Tests: `{Binance,Kraken}…Client.{TransportFailure,MalformedBody}FoldsIntoErrorResponse`.
 
 **Where**: `include/exchange/binance/rest_client.hpp` (inline `json::parse(raw)`);
 `src/binance/rest_client.cpp:97` (`throw std::runtime_error` on curl failure).
