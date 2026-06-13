@@ -247,6 +247,22 @@ Shows how the REST and WebSocket layers share types from `kraken_types.hpp` — 
 
 ## Building your own project
 
+The build produces three peer static libraries: `exchange_common` (the generic
+WebSocket-client engine, always built) and two adapters that each link it,
+`krakenapi::krakenapi` (Kraken) and `krakenapi::binanceapi` (Binance). Link
+whichever adapter(s) you use — each one transitively pulls in `exchange_common`,
+OpenSSL, and libcurl, so you do not name those yourself.
+
+| CMake option | Default | Effect |
+|---|---|---|
+| `KRAKENAPI_BUILD_KRAKEN` | `ON` | Build the Kraken adapter + its tests/examples |
+| `KRAKENAPI_BUILD_BINANCE` | `ON` | Build the Binance adapter + its tests/examples |
+| `KRAKENAPI_BUILD_TESTS` | `ON` | Build unit tests and example programs |
+| `KRAKENAPI_BUILD_COMPAT_SHIM` | `ON` | Reserved for the deprecated `kraken::` shim (requires `KRAKENAPI_BUILD_KRAKEN`) |
+
+The two exchange flags are independent — `-DKRAKENAPI_BUILD_KRAKEN=OFF` builds a
+Binance-only tree, and vice versa.
+
 ### CMake (FetchContent)
 
 ```cmake
@@ -257,13 +273,13 @@ FetchContent_Declare(krakenapi
 )
 FetchContent_MakeAvailable(krakenapi)
 
-target_link_libraries(my_app PRIVATE krakenapi::krakenapi)
+target_link_libraries(my_app PRIVATE krakenapi::krakenapi)   # and/or krakenapi::binanceapi
 ```
 
 ### Linker flags (manual)
 
 ```
--L/path/to/krakenapi/build/src -lkrakenapi -lcurl -lssl -lcrypto
+-L/path/to/krakenapi/build/src -lkrakenapi -lexchange_common -lcurl -lssl -lcrypto
 ```
 
 For WebSocket support, also link against ixwebsocket:
@@ -271,6 +287,12 @@ For WebSocket support, also link against ixwebsocket:
 ```
 -lixwebsocket -lz
 ```
+
+> **Upgrading from a pre-`exchange::`-refactor checkout?** The old
+> `kraken_*.hpp` headers and the `kraken::` namespace still work as a deprecated
+> compatibility shim. See the
+> [migration guide](docs/plans/001-appendix-migration-guide.md) to move to the
+> `exchange::kraken::*` surface used throughout this README's newer examples.
 
 ---
 

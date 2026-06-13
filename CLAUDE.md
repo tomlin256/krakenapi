@@ -47,12 +47,15 @@ krakenapi/
 │   │                                    #   + kraken_compat.hpp, plus a deprecation #pragma message
 │   └── ws_reconnect_session(.hpp|.inl)  # DEPRECATED — old-path forwarder for reconnect_session.hpp
 ├── src/
-│   ├── CMakeLists.txt                   # Builds libkrakenapi.a; exports krakenapi::krakenapi
+│   ├── CMakeLists.txt                   # Three peer libs: exchange_common (always),
+│   │                                    #   krakenapi (KRAKEN), binanceapi (BINANCE)
 │   ├── exchange/common/
-│   │   └── ws_client.cpp                # ExchangeWsClient non-template impl (exchange-agnostic)
-│   └── kraken/
-│       ├── rest_client.cpp              # KrakenRestClient implementation
-│       └── types.cpp                    # TickPrice::from_json and other non-template type bodies
+│   │   └── ws_client.cpp                # ExchangeWsClient non-template impl → libexchange_common.a
+│   ├── kraken/
+│   │   ├── rest_client.cpp              # KrakenRestClient implementation
+│   │   └── types.cpp                    # TickPrice::from_json and other non-template type bodies
+│   └── binance/
+│       └── rest_client.cpp              # BinanceRestClient implementation (WS is header-only)
 └── tests/
     ├── CMakeLists.txt                   # Fetches spdlog/CLI11/backward-cpp; wires examples + unit tests
     ├── examples/
@@ -99,8 +102,15 @@ krakenapi/
 
 | Option | Default | Effect |
 |---|---|---|
+| `KRAKENAPI_BUILD_KRAKEN` | `ON` | Build the Kraken adapter (`libkrakenapi.a`) and its tests/examples |
+| `KRAKENAPI_BUILD_BINANCE` | `ON` | Build the Binance adapter (`libbinanceapi.a`) and its tests/examples |
 | `KRAKENAPI_BUILD_TESTS` | `ON` | Build unit tests and example programs |
-| `KRAKENAPI_BUILD_COMPAT_SHIM` | `ON` | Install the deprecated `kraken_*.hpp` / `kraken::` forwarders described in [docs/plans/001-appendix-compat-shim.md](docs/plans/001-appendix-compat-shim.md) |
+| `KRAKENAPI_BUILD_COMPAT_SHIM` | `ON` | Reserved for the deprecated `kraken_*.hpp` / `kraken::` forwarders ([docs/plans/001-appendix-compat-shim.md](docs/plans/001-appendix-compat-shim.md)). Declared with a dependency guard (requires `KRAKENAPI_BUILD_KRAKEN`; auto-disabled with a warning otherwise); the install/test wiring lands with [plan 002](docs/plans/002-step-2b-compat-shim.md) |
+
+The two exchange flags are independent: `-DKRAKENAPI_BUILD_KRAKEN=OFF` builds a
+Binance-only tree (and vice versa). Both default `ON`. `exchange_common` (the
+generic `ExchangeWsClient` implementation) is always built — both adapters link
+it. Turning both exchanges off emits a "nothing will be built" warning.
 
 ### Common build commands
 
@@ -129,7 +139,9 @@ cmake --build build
 
 | Path | Description |
 |---|---|
-| `build/src/libkrakenapi.a` | Static library — link this in your project |
+| `build/src/libexchange_common.a` | Generic `ExchangeWsClient` impl — always built; both adapters link it (`PUBLIC`) |
+| `build/src/libkrakenapi.a` | Kraken adapter static library — link this for Kraken (transitively pulls `exchange_common`) |
+| `build/src/libbinanceapi.a` | Binance adapter static library — link this for Binance (transitively pulls `exchange_common`) |
 | `build/bin/public_rest` | Public REST demo |
 | `build/bin/private_rest` | Private REST demo |
 | `build/bin/public_ws` | Public WebSocket demo (low-level) |
@@ -841,8 +853,8 @@ Place the banner before `#pragma once` (for headers) or before the first `#inclu
 - JSON serialisation uses `to_json()` / `from_json()` static methods on each struct. Prefer `j.value("key", default)` over `j.at("key")` for fields that may be absent in responses.
 - Enum conversions are done by free functions `to_string(Enum)` and `foo_from_string(const std::string&)`. The canonical four (`Side`, `OrderType`, `TimeInForce`, `OrderStatus`) live in `exchange/common/types.hpp`; Kraken-only enums (`PriceType`, `TriggerReference`, `StpType`, `FeePreference`) and Kraken's hyphenated `OrderType` overrides (`kraken_order_type_to_string`/`from_string`) live in `exchange/kraken/types.hpp`. All throw `std::invalid_argument` on unknown values.
 - Monetary / volume fields returned by the REST API arrive as JSON **strings** (e.g., `"1.5"`) — deserialise with `std::stod(j.value("field", "0"))` rather than `.get<double>()`. For prices that must round-trip to an *exact* decimal string (e.g. for order placement), use `TickPrice` instead of raw `double` formatting — see [Shared types reference](#tickprice--exact-decimal-price-representation).
-- The static library (`libkrakenapi.a`) links against libcurl, OpenSSL, and `nlohmann_json`. It compiles both `src/exchange/common/ws_client.cpp` (generic dispatch) and `src/kraken/{rest_client,types}.cpp`, but does **not** link against ixwebsocket. Callers that use `IxWsConnection` must separately link against `ixwebsocket`.
-- IXWebSocket and spdlog are **not** linked into `libkrakenapi.a`; they are used only by examples and tests.
+- The build produces **three** static libraries (Step 9). `exchange_common` compiles the one piece of exchange-agnostic non-template WS code, `src/exchange/common/ws_client.cpp` (generic dispatch), and links only `nlohmann_json` (`PUBLIC`) — not OpenSSL/libcurl. `krakenapi` (`src/kraken/{rest_client,types}.cpp`) and `binanceapi` (`src/binance/rest_client.cpp`) are **peers**: each links `exchange_common PUBLIC` and OpenSSL+libcurl+`nlohmann_json` `PUBLIC`, and **neither links the other**. OpenSSL/libcurl are `PUBLIC` because the public headers expose them inline — `auth.hpp` defines the HMAC/SHA helpers inline against libcrypto and `rest_client.hpp` `#include`s `<curl/curl.h>`. None of the libraries link ixwebsocket; callers that use `IxWsConnection` must link `ixwebsocket` separately.
+- IXWebSocket and spdlog are **not** linked into any of the three libraries; they are used only by examples and tests.
 - Template methods for `ExchangeWsClient` live in `exchange/common/ws_client.inl` (included at the bottom of the `.hpp`). Non-template methods live in `src/exchange/common/ws_client.cpp`. Both are exchange-agnostic — Kraken contributes no `.cpp`/`.inl` for the WS client, only `kraken_frame_descriptor()` and its request/response types. Keep this split consistent when adding new methods.
 - Push callbacks stored in `subscriptions_` are type-erased to `std::function<void(const json&)>` internally; the typed lambda wrapper is created once in the template method and stored at subscription time.
 - **Don't add new code against the deprecated `kraken::` / `kraken_*.hpp` surface.** It exists solely so pre-refactor external callers keep compiling — see [docs/plans/001-appendix-compat-shim.md](docs/plans/001-appendix-compat-shim.md) and [001-appendix-migration-guide.md](docs/plans/001-appendix-migration-guide.md). New code, tests, and examples target `exchange::kraken::*` directly.
