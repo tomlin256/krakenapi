@@ -1,6 +1,6 @@
 # Plan 008 — Step 10: Agent onboarding guide for new exchanges
 
-**Status**: Draft — auto-approved by Rob; implementing immediately
+**Status**: Done — implemented in commits `3dcccee` (10.1) + the 10.2 verify/link/wrap-up
 **Parent**: [Plan 001, Step 10](001-multi-exchange-abstraction.md#step-10--write-the-agent-onboarding-guide-for-new-exchanges)
 **Branch**: `feature/multi-exchange-abstraction`
 
