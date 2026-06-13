@@ -1,7 +1,26 @@
 # Plan 009 — Relocate `TickPrice` from the Kraken adapter to the common layer
 
-**Status**: Draft — awaiting approval
+**Status**: Done — implemented in commits `77f6eec` (move) + the docs/wrap-up commit
 **Branch**: `feature/multi-exchange-abstraction`
+
+> **Done**: `TickPrice` now lives in `exchange::`
+> (`include/exchange/common/tick_price.hpp` + `src/exchange/common/tick_price.cpp`,
+> compiled into `libexchange_common.a`); `src/kraken/types.cpp` was deleted (git
+> tracked it as a rename) and dropped from the `krakenapi` target.
+> `exchange/kraken/types.hpp` re-exports it (`using exchange::TickPrice;`), so
+> every `exchange::kraken::TickPrice` reference and the `kraken::TickPrice` compat
+> alias resolve unchanged — zero Kraken call-site edits. `nm`-verified: the
+> `TickPrice::from_json` symbol is in `libexchange_common.a` and absent from
+> `libkrakenapi.a`. One discovery during 9.1: `test_tick_price.cpp` had a single
+> Kraken-coupled case (`AddOrderRequestLimitPriceIsNumber`, exercising
+> `kraken::ws::AddOrderRequest`) — it was **relocated** to the Kraken-guarded
+> `test_ws_client.cpp` (`KrakenAddOrderSerialisation.LimitPriceIsJsonNumber`), so
+> `test_tick_price.cpp` is now purely common (links `exchange_common`, runs in any
+> build). Total test count unchanged at 300. The single-exchange split shifts as
+> expected: `-DKRAKENAPI_BUILD_KRAKEN=OFF` now runs **139** (129 Binance + the 10
+> common `TickPrice` tests, which build with no `krakenapi` in the graph — the
+> proof of independence); `-DKRAKENAPI_BUILD_BINANCE=OFF` stays **171**.
+> `CLAUDE.md`/`README.md` updated to match.
 
 ---
 

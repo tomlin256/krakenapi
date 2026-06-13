@@ -552,8 +552,9 @@ across twelve executables (six Kraken/common, six Binance):
 | `test_binance_rest_requests` / `test_binance_rest_responses` / `test_binance_client` | REST request building, JSON parsing, signed round-trip |
 | `test_binance_ws_client` | Binance market-stream + trading-WS-API lifecycle with `MockWsConnection` |
 
-With `-DKRAKENAPI_BUILD_KRAKEN=OFF` only the 129 Binance tests build and run;
-with `-DKRAKENAPI_BUILD_BINANCE=OFF`, the 171 Kraken/common tests.
+With `-DKRAKENAPI_BUILD_KRAKEN=OFF`, 139 tests build and run (the Binance suite
+plus the exchange-agnostic `TickPrice` tests); with `-DKRAKENAPI_BUILD_BINANCE=OFF`,
+the 171 Kraken/common tests.
 
 ---
 

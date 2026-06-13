@@ -14,4 +14,4 @@
 | 006 | [Step 8 — Binance WebSocket API (bidirectional trading)](plans/006-step-8-binance-ws-api.md) | Done |
 | 007 | [Step 9 — CMake target split, build toggles, full-matrix validation](plans/007-step-9-cmake-build-validation.md) | Done |
 | 008 | [Step 10 — Agent onboarding guide for new exchanges](plans/008-step-10-agent-onboarding-guide.md) | Done |
-| 009 | [Relocate `TickPrice` from the Kraken adapter to the common layer](plans/009-relocate-tickprice-to-common.md) | Draft |
+| 009 | [Relocate `TickPrice` from the Kraken adapter to the common layer](plans/009-relocate-tickprice-to-common.md) | Done |
