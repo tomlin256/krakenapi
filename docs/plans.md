@@ -15,5 +15,5 @@
 | 007 | [Step 9 — CMake target split, build toggles, full-matrix validation](plans/007-step-9-cmake-build-validation.md) | Done |
 | 008 | [Step 10 — Agent onboarding guide for new exchanges](plans/008-step-10-agent-onboarding-guide.md) | Done |
 | 009 | [Relocate `TickPrice` from the Kraken adapter to the common layer](plans/009-relocate-tickprice-to-common.md) | Done |
-| 010 | [Extract a shared cURL HTTP transport (de-duplicate REST clients)](plans/010-shared-curl-http-transport.md) | Draft |
+| 010 | [Extract a shared cURL HTTP transport (de-duplicate REST clients)](plans/010-shared-curl-http-transport.md) | Done |
 | 011 | [Fully generic `RestClient` (unify the typed execute path)](plans/011-generic-rest-client.md) | Proposed (deferred) |

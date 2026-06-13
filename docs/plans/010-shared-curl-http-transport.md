@@ -1,7 +1,29 @@
 # Plan 010 — Extract a shared cURL HTTP transport (de-duplicate the REST clients)
 
-**Status**: Draft — awaiting approval
+**Status**: Done — implemented in commits `f17f66c`, `2153208`, `e2d79fc` + docs wrap-up
 **Branch**: `feature/multi-exchange-abstraction`
+
+> **Done**: the duplicated libcurl transport is now a single
+> `exchange::rest::CurlHttpClient` (`include/exchange/common/http_client.hpp` +
+> `src/exchange/common/http_client.cpp`) in a new always-built `exchange_http`
+> static library (Decision 1, recommended option — `exchange_common` stays
+> curl-free). `HttpResponse{status, body}` is the unified return; the handle is a
+> `unique_ptr<CURL,deleter>` (folds in review nit **N1**). Both adapters' clients
+> now hold a `shared_ptr<CurlHttpClient>` + an `HttpResponse` performer and keep
+> only their constructors out-of-line — **both `rest_client.cpp` files dropped
+> from ~100 lines to ~30, zero `curl_*` calls in either** (`nm`-verified: the
+> `curl_easy_perform` symbol lives only in `libexchange_http.a`, not in
+> `libkrakenapi.a`/`libbinanceapi.a`). Kraken's `make_test_client` stayed
+> body-only (the client adapts it to `{200, body}` internally), so **every
+> existing Kraken test compiled unchanged**; only Binance's four test lambdas
+> changed `-> std::pair<int,std::string>` to `-> HttpResponse`. **One correctness
+> fold-in**: `CurlHttpClient::perform` resets `CURLOPT_CUSTOMREQUEST` before
+> choosing a method, fixing a latent sticky-method bug (a DELETE-then-GET on the
+> same reused handle would otherwise still send DELETE). Suite stayed 300 green at
+> every checkpoint; both live REST examples (Binance `time`, Kraken `time`) and a
+> `KRAKEN=OFF` build were re-verified end-to-end through the new transport.
+> Out of scope as planned: the auth-model unification ([plan 011](011-generic-rest-client.md))
+> and the REST error-model hardening (review M2).
 
 ---
 
