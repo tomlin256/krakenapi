@@ -23,7 +23,8 @@
 //   ws_client_example ohlc       BTC/USD --interval 5
 //   ws_client_example instrument
 
-#include "kraken_ix_ws_connection.hpp"  // IxWsConnection + make_ws_client(url)
+#include "exchange/kraken/ws_client.hpp"        // KrakenWsClient, Kraken WS types, kraken_frame_descriptor
+#include "exchange/common/ix_ws_connection.hpp" // IxWsConnection + make_exchange_ws_client(url, …)
 
 #include <CLI/CLI.hpp>
 #include <spdlog/spdlog.h>
@@ -41,14 +42,14 @@
 static void run_ticker(const std::string& symbol) {
     spdlog::info("=== Ticker subscription: {} ===", symbol);
 
-    auto client = kraken::ws::make_ws_client(std::string(kraken::ws::PUBLIC_WS_URL));
+    auto client = exchange::ws::make_exchange_ws_client(std::string(exchange::kraken::ws::PUBLIC_WS_URL), exchange::kraken::ws::kraken_frame_descriptor);
 
-    kraken::ws::TickerSubscribeRequest sub_req;
+    exchange::kraken::ws::TickerSubscribeRequest sub_req;
     sub_req.symbols = std::vector<std::string>{symbol};
 
     auto [ack, handle] = client->subscribe(
         sub_req,
-        [](const kraken::ws::TickerMessage& msg) {
+        [](const exchange::kraken::ws::TickerMessage& msg) {
             for (const auto& d : msg.data)
                 spdlog::info("[ticker] {} bid={:.4f} ask={:.4f} last={:.4f} "
                              "vol={:.4f} chg={:+.2f}%",
@@ -69,17 +70,17 @@ static void run_ticker(const std::string& symbol) {
 
     // ── Connection reuse demo ─────────────────────────────────────────────────
     spdlog::info("Demonstrating connection reuse with a second KrakenWsClient…");
-    auto raw_conn = std::make_shared<kraken::ws::IxWsConnection>(
-                        std::string(kraken::ws::PUBLIC_WS_URL));
-    auto client2  = kraken::ws::make_ws_client(
-                        std::static_pointer_cast<kraken::ws::IWsConnection>(raw_conn));
+    auto raw_conn = std::make_shared<exchange::ws::IxWsConnection>(
+                        std::string(exchange::kraken::ws::PUBLIC_WS_URL));
+    auto client2  = exchange::kraken::ws::make_kraken_ws_client(
+                        std::static_pointer_cast<exchange::ws::IWsConnection>(raw_conn));
     raw_conn->connect();
 
-    kraken::ws::TickerSubscribeRequest sub2;
+    exchange::kraken::ws::TickerSubscribeRequest sub2;
     sub2.symbols = std::vector<std::string>{symbol};
     auto [ack2, handle2] = client2->subscribe(
         sub2,
-        [](const kraken::ws::TickerMessage& msg) {
+        [](const exchange::kraken::ws::TickerMessage& msg) {
             for (const auto& d : msg.data)
                 spdlog::info("[ticker/reused] {} bid={:.4f}", d.symbol, d.bid);
         },
@@ -103,15 +104,15 @@ static void run_book(const std::string& symbol, std::optional<int> depth) {
     spdlog::info("=== Book subscription: {} depth={} ===",
                  symbol, depth.value_or(10));
 
-    auto client = kraken::ws::make_ws_client(std::string(kraken::ws::PUBLIC_WS_URL));
+    auto client = exchange::ws::make_exchange_ws_client(std::string(exchange::kraken::ws::PUBLIC_WS_URL), exchange::kraken::ws::kraken_frame_descriptor);
 
-    kraken::ws::BookSubscribeRequest sub_req;
+    exchange::kraken::ws::BookSubscribeRequest sub_req;
     sub_req.symbols = std::vector<std::string>{symbol};
     if (depth) sub_req.depth = *depth;
 
     auto [ack, handle] = client->subscribe(
         sub_req,
-        [](const kraken::ws::BookMessage& msg) {
+        [](const exchange::kraken::ws::BookMessage& msg) {
             for (const auto& d : msg.data) {
                 spdlog::info("[book/{}] {} bids={} asks={}",
                              msg.type, d.symbol,
@@ -149,14 +150,14 @@ static void run_book(const std::string& symbol, std::optional<int> depth) {
 static void run_trade(const std::string& symbol) {
     spdlog::info("=== Trade subscription: {} ===", symbol);
 
-    auto client = kraken::ws::make_ws_client(std::string(kraken::ws::PUBLIC_WS_URL));
+    auto client = exchange::ws::make_exchange_ws_client(std::string(exchange::kraken::ws::PUBLIC_WS_URL), exchange::kraken::ws::kraken_frame_descriptor);
 
-    kraken::ws::TradeSubscribeRequest sub_req;
+    exchange::kraken::ws::TradeSubscribeRequest sub_req;
     sub_req.symbols = std::vector<std::string>{symbol};
 
     auto [ack, handle] = client->subscribe(
         sub_req,
-        [](const kraken::ws::TradeMessage& msg) {
+        [](const exchange::kraken::ws::TradeMessage& msg) {
             for (const auto& d : msg.data)
                 spdlog::info("[trade] {} price={:.4f} qty={:.6f} side={} type={} id={}",
                              d.symbol, d.price, d.qty,
@@ -183,15 +184,15 @@ static void run_ohlc(const std::string& symbol, std::optional<int> interval) {
     spdlog::info("=== OHLC subscription: {} interval={}m ===",
                  symbol, interval.value_or(1));
 
-    auto client = kraken::ws::make_ws_client(std::string(kraken::ws::PUBLIC_WS_URL));
+    auto client = exchange::ws::make_exchange_ws_client(std::string(exchange::kraken::ws::PUBLIC_WS_URL), exchange::kraken::ws::kraken_frame_descriptor);
 
-    kraken::ws::OHLCSubscribeRequest sub_req;
+    exchange::kraken::ws::OHLCSubscribeRequest sub_req;
     sub_req.symbols = std::vector<std::string>{symbol};
     if (interval) sub_req.interval = *interval;
 
     auto [ack, handle] = client->subscribe(
         sub_req,
-        [](const kraken::ws::OHLCMessage& msg) {
+        [](const exchange::kraken::ws::OHLCMessage& msg) {
             for (const auto& d : msg.data)
                 spdlog::info("[ohlc/{}] {} ts={} O={:.4f} H={:.4f} L={:.4f} "
                              "C={:.4f} vol={:.4f} trades={}",
@@ -219,14 +220,14 @@ static void run_ohlc(const std::string& symbol, std::optional<int> interval) {
 static void run_instrument() {
     spdlog::info("=== Instrument subscription ===");
 
-    auto client = kraken::ws::make_ws_client(std::string(kraken::ws::PUBLIC_WS_URL));
+    auto client = exchange::ws::make_exchange_ws_client(std::string(exchange::kraken::ws::PUBLIC_WS_URL), exchange::kraken::ws::kraken_frame_descriptor);
 
-    kraken::ws::InstrumentSubscribeRequest sub_req;
+    exchange::kraken::ws::InstrumentSubscribeRequest sub_req;
     // No symbols field for this channel — server sends all instruments.
 
     auto [ack, handle] = client->subscribe(
         sub_req,
-        [](const kraken::ws::InstrumentMessage& msg) {
+        [](const exchange::kraken::ws::InstrumentMessage& msg) {
             spdlog::info("[instrument/{}] {} asset(s), {} pair(s)",
                          msg.type, msg.assets.size(), msg.pairs.size());
             // Print the first few pairs to avoid flooding the terminal.

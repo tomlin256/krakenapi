@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15...4.2)
-project(KRAKENAPI VERSION 0.1.0 LANGUAGES CXX)
+project(KRAKENAPI VERSION 0.1.1 LANGUAGES CXX)
 
 # Allow fetched dependencies that declare cmake_minimum_required < 3.5
 # (CMake 4.x removed compatibility below 3.5)
@@ -21,17 +21,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(KRAKENAPI_BUILD_KRAKEN  "Build the Kraken exchange adapter"  ON)
 option(KRAKENAPI_BUILD_BINANCE "Build the Binance exchange adapter" ON)
 option(KRAKENAPI_BUILD_TESTS "Build tests" ON)
-option(KRAKENAPI_BUILD_COMPAT_SHIM
-       "Install deprecated kraken_*.hpp compatibility headers (source-compat for pre-refactor callers)"
-       ON)
 
 # Dependency rules between the exchange/feature flags, checked at configure time.
-if(KRAKENAPI_BUILD_COMPAT_SHIM AND NOT KRAKENAPI_BUILD_KRAKEN)
-    message(WARNING
-        "KRAKENAPI_BUILD_COMPAT_SHIM requires KRAKENAPI_BUILD_KRAKEN; disabling shim.")
-    set(KRAKENAPI_BUILD_COMPAT_SHIM OFF CACHE BOOL "" FORCE)
-endif()
-
 if(NOT KRAKENAPI_BUILD_KRAKEN AND NOT KRAKENAPI_BUILD_BINANCE)
     message(WARNING
         "Both KRAKENAPI_BUILD_KRAKEN and KRAKENAPI_BUILD_BINANCE are OFF — nothing will be built.")
@@ -138,21 +129,6 @@ if(KRAKENAPI_INSTALL)
     install(DIRECTORY include/exchange/binance
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/exchange)
   endif()
-  if(KRAKENAPI_BUILD_COMPAT_SHIM)
-    install(FILES
-            include/kraken_compat.hpp
-            include/kraken_types.hpp
-            include/kraken_rest_api.hpp
-            include/kraken_rest_client.hpp
-            include/kraken_ws_api.hpp
-            include/kraken_ws_client.hpp
-            include/kraken_ws_client.inl
-            include/kraken_ix_ws_connection.hpp
-            include/ws_reconnect_session.hpp
-            include/ws_reconnect_session.inl
-            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-  endif()
-
   # Vendor the header-only nlohmann_json into our prefix. It is FetchContent'd
   # (a non-installable local target), so it cannot be an export dependency;
   # shipping its headers here makes the installed package self-contained — the

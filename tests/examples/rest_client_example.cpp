@@ -28,7 +28,8 @@
 //   rest_client_example depth       XXBTZUSD --count 10
 //   rest_client_example trades      XXBTZUSD --count 5
 
-#include "kraken_rest_client.hpp"
+#include "exchange/kraken/rest_client.hpp"
+#include "exchange/kraken/rest_api.hpp"
 
 #include <CLI/CLI.hpp>
 #include <spdlog/spdlog.h>
@@ -38,7 +39,7 @@
 #include <string>
 #include <vector>
 
-using namespace kraken::rest;
+using namespace exchange::kraken::rest;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // time
@@ -275,7 +276,7 @@ static void run_trades(KrakenRestClient& client,
     for (const auto& t : r.trades)
         spdlog::info("  price={:.4f}  vol={:.6f}  time={:.3f}  side={}  type={}",
                      t.price, t.volume, t.time,
-                     t.side == kraken::Side::Buy ? "buy" : "sell",
+                     t.side == exchange::kraken::Side::Buy ? "buy" : "sell",
                      t.order_type == "l" ? "limit" : "market");
 }
 

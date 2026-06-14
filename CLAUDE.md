@@ -14,8 +14,9 @@ each request type to its exact response type — no casts, no stringly-typed key
 >   — peers that each link the scaffold but never each other, behind independent
 >   `KRAKENAPI_BUILD_KRAKEN` / `KRAKENAPI_BUILD_BINANCE` flags.
 >
-> The pre-refactor `kraken_*.hpp` / `kraken::` surface survives only as a
-> **deprecated compatibility shim** — not the surface for new code. To add a
+> The pre-refactor `kraken_*.hpp` / `kraken::` compatibility shim was **removed in
+> v0.1.1** ([plan 014](docs/plans/014-remove-compat-shim.md)) — `exchange::kraken::*`
+> is the only Kraken surface. To add a
 > third exchange, follow [docs/agent-add-exchange.md](docs/agent-add-exchange.md).
 > This file documents Kraken in depth and Binance in the
 > [Binance adapter reference](#binance-adapter-reference); both follow the same
@@ -61,12 +62,6 @@ krakenapi/
 │   │       │                            #     BinanceStreamClient alias, make_binance_stream_client(), STREAM_URL
 │   │       └── ws_api.hpp               #   Trading WS API: order.place/cancel/ping, signed params,
 │   │                                    #     binance_ws_api_frame_descriptor, make_binance_ws_api_client(), WS_API_URL
-│   ├── kraken_compat.hpp                # DEPRECATED — reopens kraken:: as a shim over exchange::kraken::
-│   ├── kraken_types.hpp, kraken_rest_api.hpp, kraken_rest_client.hpp,
-│   │   kraken_ws_api.hpp, kraken_ws_client(.hpp|.inl), kraken_ix_ws_connection.hpp
-│   │                                    # DEPRECATED — old-path forwarders: #include the new header
-│   │                                    #   + kraken_compat.hpp, plus a deprecation #pragma message
-│   └── ws_reconnect_session(.hpp|.inl)  # DEPRECATED — old-path forwarder for reconnect_session.hpp
 ├── src/
 │   ├── CMakeLists.txt                   # Three peer libs: exchange_common (always),
 │   │                                    #   krakenapi (KRAKEN), binanceapi (BINANCE)
@@ -138,7 +133,6 @@ krakenapi/
 | `KRAKENAPI_BUILD_KRAKEN` | `ON` | Build the Kraken adapter (`libkrakenapi.a`) and its tests/examples |
 | `KRAKENAPI_BUILD_BINANCE` | `ON` | Build the Binance adapter (`libbinanceapi.a`) and its tests/examples |
 | `KRAKENAPI_BUILD_TESTS` | `ON` | Build unit tests and example programs |
-| `KRAKENAPI_BUILD_COMPAT_SHIM` | `ON` | Builds the deprecated `kraken_*.hpp` / `kraken::` forwarders' compile-proof, `test_compat_shim` ([plan 002](docs/plans/002-step-2b-compat-shim.md)). Has a dependency guard (requires `KRAKENAPI_BUILD_KRAKEN`; auto-disabled with a warning otherwise). The shim *headers* always exist in `include/`; this flag gates the test that proves they keep resolving |
 | `KRAKENAPI_INSTALL` | top-level: `ON` | Generate `install()` rules + the `krakenapi` CMake package config ([plan 012](docs/plans/012-install-and-package-config.md)). Defaults off when krakenapi is a `FetchContent` subproject |
 
 The two exchange flags are independent: `-DKRAKENAPI_BUILD_KRAKEN=OFF` builds a
@@ -173,10 +167,6 @@ cmake --build build
 # Skip tests and examples
 cmake -B build -DKRAKENAPI_BUILD_TESTS=OFF
 cmake --build build
-
-# Drop the deprecated kraken_*.hpp compat shim
-cmake -B build -DKRAKENAPI_BUILD_COMPAT_SHIM=OFF
-cmake --build build
 ```
 
 ### Build outputs
@@ -206,7 +196,7 @@ cmake --build build
 cd build && ctest --output-on-failure
 ```
 
-There are thirteen test executables (304 tests total) — seven Kraken/common (incl. the compat-shim proof), six Binance:
+There are twelve test executables (312 tests total) — six Kraken/common, six Binance:
 
 | Binary | Source | What it tests |
 |---|---|---|
@@ -222,12 +212,11 @@ There are thirteen test executables (304 tests total) — seven Kraken/common (i
 | `build/bin/test_binance_rest_responses` | `test_binance_rest_responses.cpp` | `from_json` + `parse_binance_response` against captured fixtures |
 | `build/bin/test_binance_client` | `test_binance_client.cpp` | `BinanceRestClient::execute()` signed round-trip via mock performer |
 | `build/bin/test_binance_ws_client` | `test_binance_ws_client.cpp` | Binance stream + trading-WS-API lifecycle with `MockWsConnection` |
-| `build/bin/test_compat_shim` | `test_compat_shim.cpp` | Deprecated `kraken::` shim compile-proof (all 7 old-path forwarders) + forwarding-identity/behaviour — only when `KRAKENAPI_BUILD_COMPAT_SHIM=ON` |
 
 Tests do **not** require network access or credentials — all I/O is mocked.
-The flag matrix splits cleanly: `-DKRAKENAPI_BUILD_KRAKEN=OFF` runs 139 (the
+The flag matrix splits cleanly: `-DKRAKENAPI_BUILD_KRAKEN=OFF` runs 147 (the
 Binance suite plus the exchange-agnostic `TickPrice` tests, which build in any
-tree); `-DKRAKENAPI_BUILD_BINANCE=OFF` runs the 175 Kraken/common tests (incl. the 4 compat-shim tests). `-DKRAKENAPI_BUILD_COMPAT_SHIM=OFF` drops those 4.
+tree); `-DKRAKENAPI_BUILD_BINANCE=OFF` runs the 176 Kraken/common tests.
 
 ### Test suite breakdown
 
@@ -258,7 +247,6 @@ tree); `-DKRAKENAPI_BUILD_BINANCE=OFF` runs the 175 Kraken/common tests (incl. t
 | `exchange::binance::` | `exchange/binance/types.hpp` | Binance enums + per-exchange string converters (`binance_order_type_to_string`, …); re-exports the canonical four |
 | `exchange::binance::rest::` | `exchange/binance/{auth,rest_api,rest_client}.hpp` | `BinanceCredentials`, `BinanceAuth` (`IRestAuth`), all REST request/response types, `parse_binance_response<T>`, `BinanceRestClient` |
 | `exchange::binance::ws::` | `exchange/binance/{ws_streams,ws_api}.hpp` | Stream events + `binance_stream_frame_descriptor` + `BinanceStreamClient`/`make_binance_stream_client()` (`STREAM_URL`); trading API req/resp + `binance_ws_api_frame_descriptor` + `BinanceWsApiClient`/`make_binance_ws_api_client()` (`WS_API_URL`). Both clients are `ExchangeWsClient` aliases |
-| `kraken::` *(deprecated)* | `kraken_compat.hpp` + old-path `kraken_*.hpp` forwarders | Reopens the pre-refactor namespace as aliases/forwarders over `exchange::kraken::*`, so untouched legacy call sites keep compiling and behaving identically. Gated by `KRAKENAPI_BUILD_COMPAT_SHIM` (default `ON`); see [docs/plans/001-appendix-compat-shim.md](docs/plans/001-appendix-compat-shim.md) and the migration guide for the full mapping |
 
 **Why the split**: `exchange::common::*` holds the scaffold that is genuinely exchange-agnostic — request/response binding templates, the WS dispatch loop, the connection interface, reconnect machinery. Each adapter supplies only what's exchange-specific: wire formats, auth, endpoint URLs, and its `*_frame_descriptor`. `exchange::binance::*` reuses the entire common layer and follows the same three-tier shape as `exchange::kraken::*` — it is the worked reference for [adding a new exchange](#adding-a-whole-new-exchange).
 
@@ -277,7 +265,7 @@ All enums have free-function converters: `to_string(Enum)` and `foo_from_string(
 | `TimeInForce` | `GTC`, `GTD`, `IOC` |
 | `OrderStatus` | `PendingNew`, `New`, `PartiallyFilled`, `Filled`, `Canceled`, `Expired`, `Unknown` |
 
-**`OrderType` wire format diverges per exchange — this is the one enum every adapter must convert itself.** The canonical `to_string`/`from_string` produce underscore-separated strings (`"stop_loss"`); Kraken's wire format uses hyphens (`"stop-loss"`). Kraken therefore keeps its own pair — `kraken_order_type_to_string` / `kraken_order_type_from_string` in `exchange::kraken::` — alongside (not instead of) the canonical converters. `test_order_type.cpp` asserts both produce the *correct, genuinely different* strings for every value; the compat shim's `kraken::to_string(OrderType)` forwards specifically to the Kraken pair (see note in `kraken_compat.hpp` about why a blanket `using` would be unsafe here). `Side`, `TimeInForce`, and `OrderStatus` have identical wire formats across both layers, so Kraken simply re-exports the canonical converters.
+**`OrderType` wire format diverges per exchange — this is the one enum every adapter must convert itself.** The canonical `to_string`/`from_string` produce underscore-separated strings (`"stop_loss"`); Kraken's wire format uses hyphens (`"stop-loss"`). Kraken therefore keeps its own pair — `kraken_order_type_to_string` / `kraken_order_type_from_string` in `exchange::kraken::` — alongside (not instead of) the canonical converters. `test_order_type.cpp` asserts both produce the *correct, genuinely different* strings for every value. `Side`, `TimeInForce`, and `OrderStatus` have identical wire formats across both layers, so Kraken simply re-exports the canonical converters.
 
 ### Kraken-specific enumerations (`exchange/kraken/types.hpp`, namespace `exchange::kraken::`)
 
@@ -329,7 +317,7 @@ template<typename T>
 RestResponse<T> parse_rest_response(const json& j);
 ```
 
-This is the envelope type `KrakenRestClient::execute()` actually returns, and it lives in **`exchange::kraken::`** — not `exchange::rest::`. (The common scaffold separately defines a same-shaped `exchange::rest::RestResponse<T>` in `exchange/common/rest.hpp` for adapters that choose to build on it directly; Kraken kept its pre-refactor envelope type rather than switching, so every existing call site naming `exchange::kraken::RestResponse<T>` — including the compat shim's `kraken::RestResponse<T>` alias — continues to resolve to the same type unchanged.)
+This is the envelope type `KrakenRestClient::execute()` actually returns, and it lives in **`exchange::kraken::`** — not `exchange::rest::`. (The common scaffold separately defines a same-shaped `exchange::rest::RestResponse<T>` in `exchange/common/rest.hpp` for adapters that choose to build on it directly; Kraken kept its pre-refactor envelope type rather than switching, so every existing call site naming `exchange::kraken::RestResponse<T>` continues to resolve to the same type unchanged.)
 
 Always check `resp.ok` before accessing `resp.result`.
 
@@ -1009,7 +997,7 @@ Place the banner before `#pragma once` (for headers) or before the first `#inclu
 - IXWebSocket and spdlog are **not** linked into any of the three libraries; they are used only by examples and tests.
 - Template methods for `ExchangeWsClient` live in `exchange/common/ws_client.inl` (included at the bottom of the `.hpp`). Non-template methods live in `src/exchange/common/ws_client.cpp`. Both are exchange-agnostic — Kraken contributes no `.cpp`/`.inl` for the WS client, only `kraken_frame_descriptor()` and its request/response types. Keep this split consistent when adding new methods.
 - Push callbacks stored in `subscriptions_` are type-erased to `std::function<void(const json&)>` internally; the typed lambda wrapper is created once in the template method and stored at subscription time.
-- **Don't add new code against the deprecated `kraken::` / `kraken_*.hpp` surface.** It exists solely so pre-refactor external callers keep compiling — see [docs/plans/001-appendix-compat-shim.md](docs/plans/001-appendix-compat-shim.md) and [001-appendix-migration-guide.md](docs/plans/001-appendix-migration-guide.md). New code, tests, and examples target `exchange::kraken::*` directly.
+- **The deprecated `kraken::` / `kraken_*.hpp` compatibility shim was removed in v0.1.1** ([plan 014](docs/plans/014-remove-compat-shim.md)). `exchange::kraken::*` is the only Kraken surface; the [migration guide](docs/plans/001-appendix-migration-guide.md) maps every old name to its replacement.
 
 ---
 
