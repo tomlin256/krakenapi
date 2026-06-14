@@ -18,3 +18,4 @@
 | 010 | [Extract a shared cURL HTTP transport (de-duplicate REST clients)](plans/010-shared-curl-http-transport.md) | Done |
 | 011 | [Fully generic `RestClient` (unify the typed execute path)](plans/011-generic-rest-client.md) | Proposed (deferred) |
 | 012 | [Install rules + CMake package config](plans/012-install-and-package-config.md) | Done |
+| 013 | [Source-compat shim for legacy `src/kraken_{ws,rest}_client.cpp` paths](plans/013-source-compat-shim.md) | Done |
