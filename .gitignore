@@ -1,5 +1,4 @@
 cmake-build-*
 .idea
-build/
-build2/
+build*
 .cache/
