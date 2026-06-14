@@ -61,6 +61,31 @@ if(KRAKENAPI_BUILD_KRAKEN)
         target_compile_definitions(test_compat_shim PRIVATE KRAKENAPI_SUPPRESS_DEPRECATION)
         target_link_libraries(test_compat_shim krakenapi ixwebsocket GTest::gtest_main)
         gtest_discover_tests(test_compat_shim)
+
+        # Deprecated *source*-compat shim proof (src/kraken_{ws,rest}_client.cpp).
+        # Reproduces a pre-refactor consumer (e.g. flywheel) that does NOT link
+        # krakenapi's targets but instead builds its own WS-only and REST-only
+        # libs by compiling those two legacy source paths directly, then links
+        # both. compat_ws_shim / compat_rest_shim mirror those consumer libs
+        # (same sources, same direct dependencies); the test links BOTH and
+        # deliberately NOT krakenapi/exchange_common/exchange_http (which already
+        # contain the same TUs). This catches a TU that relocated again (compile/
+        # link break) and tick_price.cpp landing in both libs (duplicate symbol).
+        add_library(compat_ws_shim STATIC ${CMAKE_SOURCE_DIR}/src/kraken_ws_client.cpp)
+        target_include_directories(compat_ws_shim PUBLIC ${CMAKE_SOURCE_DIR}/include)
+        target_link_libraries(compat_ws_shim PUBLIC
+            OpenSSL::SSL OpenSSL::Crypto nlohmann_json::nlohmann_json ixwebsocket)
+
+        add_library(compat_rest_shim STATIC ${CMAKE_SOURCE_DIR}/src/kraken_rest_client.cpp)
+        target_include_directories(compat_rest_shim PUBLIC ${CMAKE_SOURCE_DIR}/include)
+        target_link_libraries(compat_rest_shim PUBLIC
+            CURL::libcurl OpenSSL::SSL OpenSSL::Crypto nlohmann_json::nlohmann_json)
+
+        add_executable(test_compat_source_shim test_compat_source_shim.cpp)
+        target_compile_definitions(test_compat_source_shim PRIVATE KRAKENAPI_SUPPRESS_DEPRECATION)
+        target_link_libraries(test_compat_source_shim
+            compat_ws_shim compat_rest_shim GTest::gtest_main)
+        gtest_discover_tests(test_compat_source_shim)
     endif()
 endif()
 
