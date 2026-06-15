@@ -1,6 +1,9 @@
 # 015 — Rename the project `krakenapi` → `cryptocogs`
 
-**Status:** Approved — implementing on branch `feature/rename-to-cryptocogs`.
+**Status:** Done — released as **v0.2.0** (branch `feature/rename-to-cryptocogs` → `main`).
+Verified: clean build, 312/312 ctest, and a `find_package(cryptocogs)` consumer
+links `cryptocogs::kraken` + `cryptocogs::binance`. Repo-only — the GitHub repo /
+local dir / Claude-memory follow-ups remain for Rob (see below).
 
 ## Goal
 

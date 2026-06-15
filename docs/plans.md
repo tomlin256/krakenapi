@@ -20,4 +20,4 @@
 | 012 | [Install rules + CMake package config](plans/012-install-and-package-config.md) | Done |
 | 013 | [Source-compat shim for legacy `src/kraken_{ws,rest}_client.cpp` paths](plans/013-source-compat-shim.md) | Done · removed in 014 |
 | 014 | [Remove the deprecated `kraken_*.hpp` / `kraken::` compatibility shim (header + source)](plans/014-remove-compat-shim.md) | Done |
-| 015 | [Rename the project `krakenapi` → `cryptocogs`](plans/015-rename-to-cryptocogs.md) | In progress |
+| 015 | [Rename the project `krakenapi` → `cryptocogs`](plans/015-rename-to-cryptocogs.md) | Done |
