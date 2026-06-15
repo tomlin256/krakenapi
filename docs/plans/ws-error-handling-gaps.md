@@ -62,7 +62,7 @@ and DNS resolution failures. All of these are invisible to the caller.
 - `IWsConnection` gained `ErrorCb` type alias and pure virtual `set_on_error(ErrorCb)`.
 - `IWsErrorHandler` gained pure virtual `on_connection_error(const std::string& reason)`.
 - `RateLimitedWsErrorHandler::on_connection_error` logs to `stderr` (same approach as
-  `on_malformed_frame` — no external dep in `libkrakenapi.a`).
+  `on_malformed_frame` — no external dep in `libkraken.a`).
 - `IxWsConnection` handles `ix::WebSocketMessageType::Error`, stores `error_cb_`, and
   implements `set_on_error`.
 - `KrakenWsClient::init()` registers the error callback, routing through `error_handler_`.
@@ -167,7 +167,7 @@ client_ = kraken::ws::make_ws_client(
     std::make_shared<SpdlogWsErrorHandler>());
 ```
 
-Note: this fix lives in the Flywheel repo, not krakenapi. It is listed here because the
+Note: this fix lives in the Flywheel repo, not cryptocogs. It is listed here because the
 root cause is `RateLimitedWsErrorHandler` writing to `stderr` rather than accepting an
 injectable sink.
 

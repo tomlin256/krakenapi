@@ -6,20 +6,20 @@
 > **Done**: `TickPrice` now lives in `exchange::`
 > (`include/exchange/common/tick_price.hpp` + `src/exchange/common/tick_price.cpp`,
 > compiled into `libexchange_common.a`); `src/kraken/types.cpp` was deleted (git
-> tracked it as a rename) and dropped from the `krakenapi` target.
+> tracked it as a rename) and dropped from the `cryptocogs` target.
 > `exchange/kraken/types.hpp` re-exports it (`using exchange::TickPrice;`), so
 > every `exchange::kraken::TickPrice` reference and the `kraken::TickPrice` compat
 > alias resolve unchanged — zero Kraken call-site edits. `nm`-verified: the
 > `TickPrice::from_json` symbol is in `libexchange_common.a` and absent from
-> `libkrakenapi.a`. One discovery during 9.1: `test_tick_price.cpp` had a single
+> `libkraken.a`. One discovery during 9.1: `test_tick_price.cpp` had a single
 > Kraken-coupled case (`AddOrderRequestLimitPriceIsNumber`, exercising
 > `kraken::ws::AddOrderRequest`) — it was **relocated** to the Kraken-guarded
 > `test_ws_client.cpp` (`KrakenAddOrderSerialisation.LimitPriceIsJsonNumber`), so
 > `test_tick_price.cpp` is now purely common (links `exchange_common`, runs in any
 > build). Total test count unchanged at 300. The single-exchange split shifts as
-> expected: `-DKRAKENAPI_BUILD_KRAKEN=OFF` now runs **139** (129 Binance + the 10
-> common `TickPrice` tests, which build with no `krakenapi` in the graph — the
-> proof of independence); `-DKRAKENAPI_BUILD_BINANCE=OFF` stays **171**.
+> expected: `-DCRYPTOCOGS_BUILD_KRAKEN=OFF` now runs **139** (129 Binance + the 10
+> common `TickPrice` tests, which build with no `cryptocogs` in the graph — the
+> proof of independence); `-DCRYPTOCOGS_BUILD_BINANCE=OFF` stays **171**.
 > `CLAUDE.md`/`README.md` updated to match.
 
 ---
@@ -40,7 +40,7 @@ compat alias — keeps compiling unchanged.
 
 **Done when**: `TickPrice` is defined in `exchange::`; `src/kraken/types.cpp` is
 gone; the full build + 300-test `ctest` is green; and a Binance-only build
-(`-DKRAKENAPI_BUILD_KRAKEN=OFF`) compiles **and runs** the `TickPrice` test —
+(`-DCRYPTOCOGS_BUILD_KRAKEN=OFF`) compiles **and runs** the `TickPrice` test —
 proof it no longer depends on Kraken.
 
 ## Footprint (verified)
@@ -52,8 +52,8 @@ proof it no longer depends on Kraken.
   `kraken_compat.hpp:93` (`using exchange::kraken::TickPrice;` → `kraken::TickPrice`),
   and tests `test_tick_price`, `test_client`, `test_rest_requests`,
   `test_ws_client`, plus `kraken_example`. **Binance: none.**
-- **Test wiring**: `test_tick_price` links `krakenapi`, inside the
-  `KRAKENAPI_BUILD_KRAKEN` guard.
+- **Test wiring**: `test_tick_price` links `cryptocogs`, inside the
+  `CRYPTOCOGS_BUILD_KRAKEN` guard.
 
 ## Design decisions
 
@@ -64,10 +64,10 @@ proof it no longer depends on Kraken.
    alias resolve unchanged — **zero call-site edits** in Kraken code, tests, or
    the shim.
 3. **`src/kraken/types.cpp` is deleted** (its only content moved) and dropped from
-   the `krakenapi` CMake target; `tick_price.cpp` joins the `exchange_common`
+   the `cryptocogs` CMake target; `tick_price.cpp` joins the `exchange_common`
    target. `exchange_common` already links nlohmann; it needs nothing new.
 4. **`test_tick_price` becomes a common test**: moved out of the
-   `KRAKENAPI_BUILD_KRAKEN` guard to run in any build, re-pointed to link
+   `CRYPTOCOGS_BUILD_KRAKEN` guard to run in any build, re-pointed to link
    `exchange_common` and include the new header. Consequence: its cases now also
    run in a Binance-only build (the count moves from the Kraken-only subset to
    always-on; the all-flags total stays 300). This is the right signal — a
@@ -91,14 +91,14 @@ proof it no longer depends on Kraken.
   that *use* `TickPrice` unchanged.
 - Delete `src/kraken/types.cpp`.
 - `src/CMakeLists.txt`: add `exchange/common/tick_price.cpp` to `exchange_common`;
-  remove `kraken/types.cpp` from `krakenapi` (leaving just `kraken/rest_client.cpp`).
+  remove `kraken/types.cpp` from `cryptocogs` (leaving just `kraken/rest_client.cpp`).
 - `tests/unit/CMakeLists.txt`: move `test_tick_price` out of the Kraken guard
   (top of the file, unconditional), link `exchange_common GTest::gtest_main`.
 - `tests/unit/test_tick_price.cpp`: include `exchange/common/tick_price.hpp`; if it
   refers to `exchange::kraken::TickPrice`, switch to `exchange::TickPrice` (the
   re-export means either compiles, but the common name is correct here).
 - **Gate**: `cmake -B build && cmake --build build && ctest` → 300 green. Then
-  spot-check `-DKRAKENAPI_BUILD_KRAKEN=OFF` builds + runs `test_tick_price`.
+  spot-check `-DCRYPTOCOGS_BUILD_KRAKEN=OFF` builds + runs `test_tick_price`.
 - **Checkpoint**: `refactor: move TickPrice to exchange:: (common) from kraken`.
 
 ## Step 2 — Docs + wrap-up

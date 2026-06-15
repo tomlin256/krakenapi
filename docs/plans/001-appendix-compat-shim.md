@@ -2,7 +2,7 @@
 
 Companion to [001-multi-exchange-abstraction.md](001-multi-exchange-abstraction.md) and [001-appendix-migration-guide.md](001-appendix-migration-guide.md).
 
-This supersedes the earlier "no backwards-compatibility aliases" decision. The library **ships** a deprecated compatibility shim so existing `krakenapi` consumers can adopt the refactored library with **zero source changes**, confirm everything builds and behaves, and only then migrate to the `exchange::…` API at their own pace using the migration guide.
+This supersedes the earlier "no backwards-compatibility aliases" decision. The library **ships** a deprecated compatibility shim so existing `cryptocogs` consumers can adopt the refactored library with **zero source changes**, confirm everything builds and behaves, and only then migrate to the `exchange::…` API at their own pace using the migration guide.
 
 The key difference from the hand-rolled shim sketched in the migration guide §7: because the shipped shim uses **real namespaces with forwarder functions** (not just namespace aliases), it covers the two things the alias-only version could not — `make_ws_client(url)` and the mock `make_ws_client(conn)` overload. The shipped shim is therefore **fully transparent**: a pre-refactor translation unit compiles and runs unchanged.
 
@@ -26,9 +26,9 @@ This is **source compatibility**, not ABI compatibility — the shim is header-o
 Existing callers do `#include "kraken_rest_client.hpp"`. The shim keeps headers at those exact paths so include lines resolve unchanged. Each is a thin forwarder: a deprecation pragma, an include of the new header, and an include of the namespace shim.
 
 ```cpp
-// include/kraken_rest_client.hpp  (shim; only when KRAKENAPI_BUILD_COMPAT_SHIM=ON)
+// include/kraken_rest_client.hpp  (shim; only when CRYPTOCOGS_BUILD_COMPAT_SHIM=ON)
 #pragma once
-#ifndef KRAKENAPI_SUPPRESS_DEPRECATION
+#ifndef CRYPTOCOGS_SUPPRESS_DEPRECATION
 #  pragma message("kraken_rest_client.hpp is deprecated; include exchange/kraken/rest_client.hpp. See docs/plans/001-appendix-migration-guide.md (removed in vNEXT_MAJOR).")
 #endif
 #include "exchange/kraken/rest_client.hpp"
@@ -131,12 +131,12 @@ This relies on the Step 2 re-exports (the `exchange::kraken::rest`/`ws` namespac
 
 | Surface | Mechanism |
 |---|---|
-| Old header included | `#pragma message(...)` at top of each forwarder, guarded by `KRAKENAPI_SUPPRESS_DEPRECATION` |
+| Old header included | `#pragma message(...)` at top of each forwarder, guarded by `CRYPTOCOGS_SUPPRESS_DEPRECATION` |
 | Old factory called | `[[deprecated("…")]]` on the `make_ws_client` forwarders → compiler warning at the call site |
 | Old class name used | `[[deprecated]]` on the `KrakenWsClient` alias |
 | Bulk re-exported types | no per-name attribute possible (brought in via `using namespace`); the header-level pragma covers these |
 
-`-DKRAKENAPI_SUPPRESS_DEPRECATION` (or `#define` before the include) silences the pragmas for clients who have acknowledged the deprecation but are not ready to migrate. `[[deprecated]]` warnings remain unless they also suppress those via their own warning flags — intentional, so the migration is visible but not blocking.
+`-DCRYPTOCOGS_SUPPRESS_DEPRECATION` (or `#define` before the include) silences the pragmas for clients who have acknowledged the deprecation but are not ready to migrate. `[[deprecated]]` warnings remain unless they also suppress those via their own warning flags — intentional, so the migration is visible but not blocking.
 
 ---
 
@@ -144,27 +144,27 @@ This relies on the Step 2 re-exports (the `exchange::kraken::rest`/`ws` namespac
 
 ```cmake
 # top-level CMakeLists.txt
-option(KRAKENAPI_BUILD_COMPAT_SHIM
+option(CRYPTOCOGS_BUILD_COMPAT_SHIM
        "Install deprecated kraken_*.hpp compatibility headers (source-compat for pre-refactor callers)"
        ON)
 ```
 
-- The shim is header-only. When the option is ON, the `krakenapi::krakenapi` target's install rules also install the shim headers (`kraken_*.hpp`, `kraken_compat.hpp`) under the same include prefix, so an existing `find_package(krakenapi)` + `target_link_libraries(app krakenapi::krakenapi)` keeps resolving the old include paths with **no client CMake change**.
-- Optionally expose a distinct `krakenapi::compat` INTERFACE target (links `krakenapi::krakenapi`, adds the shim include dir) for clients who prefer to opt in explicitly rather than get the shim transparently. Recommend the transparent install as the default; document the interface target as the explicit alternative.
+- The shim is header-only. When the option is ON, the `cryptocogs::kraken` target's install rules also install the shim headers (`kraken_*.hpp`, `kraken_compat.hpp`) under the same include prefix, so an existing `find_package(cryptocogs)` + `target_link_libraries(app cryptocogs::kraken)` keeps resolving the old include paths with **no client CMake change**.
+- Optionally expose a distinct `cryptocogs::compat` INTERFACE target (links `cryptocogs::kraken`, adds the shim include dir) for clients who prefer to opt in explicitly rather than get the shim transparently. Recommend the transparent install as the default; document the interface target as the explicit alternative.
 - When the option is OFF, none of the `kraken_*.hpp` paths exist → a pre-refactor TU fails to find the header, which is exactly the signal a client wants when verifying they have fully migrated.
 
 ---
 
 ## 5. Tests — proving the shim is transparent
 
-Two layers of proof, both gated on `KRAKENAPI_BUILD_COMPAT_SHIM=ON`:
+Two layers of proof, both gated on `CRYPTOCOGS_BUILD_COMPAT_SHIM=ON`:
 
 1. **Compile-proof from preserved originals** — keep the **unmodified** pre-refactor `rest_client_example.cpp` and `ws_client_example.cpp` under `tests/compat/` (verbatim, still using `kraken::` names and old includes). They are compiled (not necessarily run) against the shim. If they build, the public surface is intact. This is the highest-signal, lowest-maintenance check: the originals are exactly what real clients wrote.
 2. **Behavioural `tests/unit/test_compat_shim.cpp`** — drives the shim through old names with the existing mock infrastructure, asserting outcomes (not just compilation):
    - Public REST round-trip via `make_test_client` using `kraken::rest::GetServerTimeRequest` → assert parsed fields.
    - WS subscribe via `MockWsConnection` through **`kraken::ws::make_ws_client(conn)`** (exercises the mock-connection forwarder) → fire_open, inject a ticker frame, assert the callback fires with a `kraken::ws::TickerMessage`.
    - `kraken::ws::make_ws_client(url)` overload resolves to the URL forwarder (compile-time check via `static_assert` on the return type, no network).
-   - Build the test TU with `-DKRAKENAPI_SUPPRESS_DEPRECATION` so the suite is warning-clean; a separate one-line target without the suppress confirms the pragma fires (optional).
+   - Build the test TU with `-DCRYPTOCOGS_SUPPRESS_DEPRECATION` so the suite is warning-clean; a separate one-line target without the suppress confirms the pragma fires (optional).
 
 Determinism is preserved — all WS testing is `MockWsConnection`-driven, no sleeps (project guideline).
 
@@ -178,7 +178,7 @@ The whole point — a client can sequence their migration with confidence:
 2. **Build and run** their own test suite. Deprecation pragmas list what they use; behaviour is identical.
 3. **Gain confidence** that the refactored library works in their environment.
 4. **Migrate incrementally** using [001-appendix-migration-guide.md](001-appendix-migration-guide.md) — file by file, at their pace, deprecation warnings shrinking as they go.
-5. **Verify clean** by configuring with `-DKRAKENAPI_BUILD_COMPAT_SHIM=OFF`; a green build proves no remaining dependency on the old surface.
+5. **Verify clean** by configuring with `-DCRYPTOCOGS_BUILD_COMPAT_SHIM=OFF`; a green build proves no remaining dependency on the old surface.
 6. **Done** before the shim's removal version; no fire-drill at the major bump.
 
 ---

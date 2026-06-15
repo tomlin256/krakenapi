@@ -10,8 +10,8 @@ Plan 002 shipped the **header** compat shim (`kraken_compat.hpp` + the seven
 keep compiling against the `kraken::` namespace. But it deleted/relocated the old
 **source** files (`src/kraken_ws_client.cpp`, `src/kraken_rest_client.cpp`,
 `src/kraken_types.cpp`) — which breaks a class of consumer the header shim cannot
-help: those that do **not** link krakenapi's CMake targets, and instead build
-their own static libraries by compiling specific krakenapi source paths directly.
+help: those that do **not** link cryptocogs's CMake targets, and instead build
+their own static libraries by compiling specific cryptocogs source paths directly.
 
 The motivating consumer is **flywheel** (see
 [`flywheel/docs/plans/krakenapi_upgrade_plan.md`](../../../flywheel/docs/plans/krakenapi_upgrade_plan.md)),
@@ -38,8 +38,8 @@ new TUs:
 
 ### Load-bearing decisions
 
-- **Not added to `src/CMakeLists.txt`.** krakenapi's own libraries
-  (`exchange_common`, `exchange_http`, `krakenapi`) already compile those TUs
+- **Not added to `src/CMakeLists.txt`.** cryptocogs's own libraries
+  (`exchange_common`, `exchange_http`, `cryptocogs`) already compile those TUs
   directly; compiling these copies in the same build would duplicate symbols.
   The shim files exist purely for *external* builds that hardcode the old paths.
 - **`tick_price.cpp` goes in the REST shim only.** Its only out-of-line symbol is
@@ -54,11 +54,11 @@ new TUs:
 ## Test
 
 `tests/unit/test_compat_source_shim.cpp` (+ `compat_ws_shim` / `compat_rest_shim`
-targets), gated `KRAKENAPI_BUILD_KRAKEN AND KRAKENAPI_BUILD_COMPAT_SHIM`, built
-with `KRAKENAPI_SUPPRESS_DEPRECATION`. It **reproduces a consumer's build**: two
+targets), gated `CRYPTOCOGS_BUILD_KRAKEN AND CRYPTOCOGS_BUILD_COMPAT_SHIM`, built
+with `CRYPTOCOGS_SUPPRESS_DEPRECATION`. It **reproduces a consumer's build**: two
 static libs compiled from the legacy paths (with the same direct dependencies a
 consumer uses), linked together into one executable that deliberately does **not**
-link `krakenapi`/`exchange_common`/`exchange_http`. This guards both regressions a
+link `cryptocogs`/`exchange_common`/`exchange_http`. This guards both regressions a
 header-only proof cannot: a TU relocating again (compile/link break) and
 `tick_price.cpp` reaching both libs (duplicate-symbol error). Two behavioural
 smoke tests exercise the WS (`make_ws_client(conn)` → ping) and REST
@@ -66,7 +66,7 @@ smoke tests exercise the WS (`make_ws_client(conn)` → ping) and REST
 
 ## Result
 
-Clean krakenapi build; **318/318** ctest pass (incl. the 2 new tests). Verified
+Clean cryptocogs build; **318/318** ctest pass (incl. the 2 new tests). Verified
 downstream: flywheel builds all targets and passes **61/61** ctest against this
 branch via its local-clone option, with **zero** flywheel source/CMake changes.
 
@@ -78,7 +78,7 @@ branch via its local-clone option, with **zero** flywheel source/CMake changes.
   `NOLINT(bugprone-suspicious-include)` and heavily commented. The new test fails
   loudly if a future refactor re-splits a TU without updating the shim.
 - **Risk:** someone later adds these files to `src/CMakeLists.txt` (→ duplicate
-  symbols in krakenapi's own build). Mitigated by an explicit comment in each
+  symbols in cryptocogs's own build). Mitigated by an explicit comment in each
   file and the fact that the source lists are hand-maintained (no globbing).
 - **Deprecation:** these are deprecated like the rest of the shim; they go away
   with the `kraken_*.hpp` forwarders at the next major. No `#pragma message` is

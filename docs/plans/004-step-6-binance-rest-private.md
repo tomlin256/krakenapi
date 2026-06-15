@@ -111,7 +111,7 @@ Verified against the as-built Step 4/5 code; these resolve drift between plan
    `std::optional<std::string>`**, not `double`. Binance enforces exact
    decimals (LOT_SIZE/PRICE_FILTER); formatting a `double` reintroduces the
    FP-noise bug `TickPrice` exists to prevent — but `TickPrice` lives in
-   `exchange::kraken::` and `binanceapi`/`krakenapi` are peer libraries that
+   `exchange::kraken::` and `binance`/`cryptocogs` are peer libraries that
    must not cross-include. Moving `TickPrice` to `exchange/common/` is a
    worthwhile **future** refactor, explicitly out of scope here. Response
    monetary fields stay `double` via `std::stod` (established Step 5
@@ -228,7 +228,7 @@ All inline free functions, matching `kraken/types.hpp` style.
 ### CMake — `tests/unit/CMakeLists.txt`
 ```cmake
 add_executable(test_binance_types test_binance_types.cpp)
-target_link_libraries(test_binance_types binanceapi GTest::gtest_main)
+target_link_libraries(test_binance_types binance GTest::gtest_main)
 gtest_discover_tests(test_binance_types)
 ```
 
@@ -623,7 +623,7 @@ Tests:
 ### CMake — `tests/unit/CMakeLists.txt`
 ```cmake
 add_executable(test_binance_client test_binance_client.cpp)
-target_link_libraries(test_binance_client binanceapi GTest::gtest_main)
+target_link_libraries(test_binance_client binance GTest::gtest_main)
 gtest_discover_tests(test_binance_client)
 ```
 

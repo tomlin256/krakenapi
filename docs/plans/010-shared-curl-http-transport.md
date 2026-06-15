@@ -13,7 +13,7 @@
 > only their constructors out-of-line — **both `rest_client.cpp` files dropped
 > from ~100 lines to ~30, zero `curl_*` calls in either** (`nm`-verified: the
 > `curl_easy_perform` symbol lives only in `libexchange_http.a`, not in
-> `libkrakenapi.a`/`libbinanceapi.a`). Kraken's `make_test_client` stayed
+> `libkraken.a`/`libbinance.a`). Kraken's `make_test_client` stayed
 > body-only (the client adapts it to `{200, body}` internally), so **every
 > existing Kraken test compiled unchanged**; only Binance's four test lambdas
 > changed `-> std::pair<int,std::string>` to `-> HttpResponse`. **One correctness
@@ -127,7 +127,7 @@ legitimately differ.
   unchanged except `perform_` now returns `HttpResponse` (use `.status`/`.body`).
 - `make_binance_test_client` performer element type → `HttpResponse`; update its
   few test call sites if the type name is referenced.
-- **Done**: full build + `ctest` green (300); `binanceapi` no longer compiles any
+- **Done**: full build + `ctest` green (300); `binance` no longer compiles any
   `curl_*` in `rest_client.cpp`.
 - **Checkpoint**: `refactor: BinanceRestClient uses shared CurlHttpClient`.
 

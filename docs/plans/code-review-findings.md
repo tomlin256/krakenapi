@@ -1,4 +1,4 @@
-# krakenapi — Code Review Findings
+# cryptocogs — Code Review Findings
 
 **Date:** 2026-03-28
 **Scope:** Full codebase review — safety, thread-safety, error handling, performance, test coverage

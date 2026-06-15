@@ -15,9 +15,9 @@ clean release:
   compiled those legacy source paths directly.
 
 Both existed solely for the **flywheel** project, which has since migrated fully
-onto the `exchange::kraken::*` surface (flywheel `main`: "link krakenapi's real
+onto the `exchange::kraken::*` surface (flywheel `main`: "link cryptocogs's real
 targets, drop hardcoded source-compat paths" / "flywheel fully off the shim" /
-"treat krakenapi deprecations as errors"). With no consumer left, the entire shim
+"treat cryptocogs deprecations as errors"). With no consumer left, the entire shim
 is dead weight.
 
 ## What changed
@@ -33,12 +33,12 @@ is dead weight.
 
 **Removed (build wiring):**
 
-- `CMakeLists.txt`: the `KRAKENAPI_BUILD_COMPAT_SHIM` option, its
-  `KRAKENAPI_BUILD_KRAKEN` dependency guard, and the shim-header `install(FILES …)`
+- `CMakeLists.txt`: the `CRYPTOCOGS_BUILD_COMPAT_SHIM` option, its
+  `CRYPTOCOGS_BUILD_KRAKEN` dependency guard, and the shim-header `install(FILES …)`
   block.
 - `tests/unit/CMakeLists.txt`: the `test_compat_shim` target (header shim) and the
   `compat_ws_shim` / `compat_rest_shim` / `test_compat_source_shim` targets
-  (source shim), plus their `KRAKENAPI_SUPPRESS_DEPRECATION` defines.
+  (source shim), plus their `CRYPTOCOGS_SUPPRESS_DEPRECATION` defines.
 
 **Migrated to `exchange::kraken::*` (the two examples that still used the shim):**
 
@@ -50,7 +50,7 @@ is dead weight.
   `exchange::kraken::ws::make_kraken_ws_client(conn)`.
 
 **Docs:** `README.md` and `CLAUDE.md` swept — every example migrated off `kraken::`,
-the `KRAKENAPI_BUILD_COMPAT_SHIM` rows and shim file/test entries removed, the
+the `CRYPTOCOGS_BUILD_COMPAT_SHIM` rows and shim file/test entries removed, the
 "upgrade" note reworded to "removed in v0.1.1", and the test counts corrected
 (below). `docs/plans.md` flags plans 002 and 013 as "removed in 014". Project
 version bumped `0.1.0` → `0.1.1`.
@@ -65,8 +65,8 @@ build was re-verified against **ixwebsocket v12.0.0** (bumped from v11.4.6 on
 ## Result
 
 Clean build; **312 / 312** ctest pass (the 4 `test_compat_shim` and 2
-`test_compat_source_shim` cases are gone). Per-tree: `-DKRAKENAPI_BUILD_KRAKEN=OFF`
-→ 147, `-DKRAKENAPI_BUILD_BINANCE=OFF` → 176. No `compat` test remains registered.
+`test_compat_source_shim` cases are gone). Per-tree: `-DCRYPTOCOGS_BUILD_KRAKEN=OFF`
+→ 147, `-DCRYPTOCOGS_BUILD_BINANCE=OFF` → 176. No `compat` test remains registered.
 
 ## Self-review
 

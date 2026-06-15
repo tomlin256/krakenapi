@@ -36,7 +36,7 @@ do not exist:
 2. **The WS client is header-only.** There is no `src/binance/ws_client.cpp`:
    `BinanceStreamClient` / `BinanceWsApiClient` are bare `using` aliases for
    `ExchangeWsClient`, and the factories are `inline` (Step 9 confirmed this —
-   `binanceapi` is single-source `rest_client.cpp`). The guide drops §10's
+   `binance` is single-source `rest_client.cpp`). The guide drops §10's
    checklist item 8 to an "almost never needed" note.
 3. **Real fixture/test names**: `binance_rest_example_json.hpp`,
    `binance_account_example_json.hpp`, `binance_ws_stream_example_json.hpp`,

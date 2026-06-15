@@ -7,7 +7,7 @@
 > checkpoint must include a full build and full `ctest` run — both green —
 > before moving on.
 
-**Goal**: Implement [Step 2b](001-multi-exchange-abstraction.md#step-2b--ship-the-kraken-backwards-compatibility-shim) of plan 001 — ship the deprecated `kraken::` compatibility shim described in [001-appendix-compat-shim.md](001-appendix-compat-shim.md), so existing `krakenapi` consumers compile and run unchanged against the refactored library.
+**Goal**: Implement [Step 2b](001-multi-exchange-abstraction.md#step-2b--ship-the-kraken-backwards-compatibility-shim) of plan 001 — ship the deprecated `kraken::` compatibility shim described in [001-appendix-compat-shim.md](001-appendix-compat-shim.md), so existing `cryptocogs` consumers compile and run unchanged against the refactored library.
 
 ---
 
@@ -20,10 +20,10 @@
 | Phase 3 — compat compile-proof + behavioural tests | **Done** — `test_compat_shim.cpp` (see the as-implemented note at the end of Phase 3) |
 
 **Done elsewhere / superseded**:
-- **`install()` / packaging** — was punted here, then done in [plan 012](012-install-and-package-config.md): `cmake --install` ships the libs, public headers, and a `find_package(krakenapi)` package config; the shim headers are installed when `KRAKENAPI_BUILD_COMPAT_SHIM` is on.
+- **`install()` / packaging** — was punted here, then done in [plan 012](012-install-and-package-config.md): `cmake --install` ships the libs, public headers, and a `find_package(cryptocogs)` package config; the shim headers are installed when `CRYPTOCOGS_BUILD_COMPAT_SHIM` is on.
 - **The `tests/compat/` example-relocation** (original Phase 3.1) — superseded; see the as-implemented note.
 
-The default `KRAKENAPI_BUILD_COMPAT_SHIM=ON` now does real work: it gates the
+The default `CRYPTOCOGS_BUILD_COMPAT_SHIM=ON` now does real work: it gates the
 compile-proof. The remaining phase text below is the original plan; Phase 3 was
 implemented in a simpler, more thorough form.
 
@@ -104,11 +104,11 @@ Full build + `ctest --output-on-failure` green. At this point `kraken::` appears
 ### 2.1 — Add the CMake option
 In top-level `CMakeLists.txt`, alongside the existing options:
 ```cmake
-option(KRAKENAPI_BUILD_COMPAT_SHIM
+option(CRYPTOCOGS_BUILD_COMPAT_SHIM
        "Install deprecated kraken_*.hpp compatibility headers (source-compat for pre-refactor callers)"
        ON)
 ```
-(Plan 001 §F lists this as one of four eventual options; the other three — `KRAKENAPI_BUILD_KRAKEN/BINANCE/TESTS` — and the dependency-rule guards belong to Step 8, not here. Adding only this one, scoped to what 2b needs, keeps the change minimal and avoids speculatively wiring guards for libraries that don't exist yet.)
+(Plan 001 §F lists this as one of four eventual options; the other three — `CRYPTOCOGS_BUILD_KRAKEN/BINANCE/TESTS` — and the dependency-rule guards belong to Step 8, not here. Adding only this one, scoped to what 2b needs, keeps the change minimal and avoids speculatively wiring guards for libraries that don't exist yet.)
 
 ### 2.2 — Create `include/kraken_compat.hpp` (Layer 2 — the namespace shim)
 Reopens `namespace kraken { … }` on top of the new layout. Structure per the appendix's design, **with verified names**:
@@ -142,7 +142,7 @@ Replace the body of each with the canonical pattern (the three already-shimmed o
 
 ```cpp
 #pragma once
-#ifndef KRAKENAPI_SUPPRESS_DEPRECATION
+#ifndef CRYPTOCOGS_SUPPRESS_DEPRECATION
 #  pragma message("kraken_rest_client.hpp is deprecated; include exchange/kraken/rest_client.hpp. See docs/plans/001-appendix-migration-guide.md (removed in vNEXT_MAJOR).")
 #endif
 #include "exchange/kraken/rest_client.hpp"
@@ -164,17 +164,17 @@ Full build + `ctest --output-on-failure` green — **including** `rest_client_ex
 
 ## Phase 3 — Compat tests (formalize the proof)
 
-**Done when**: `tests/compat/` exists with the preserved originals as a dedicated compile-proof target; `tests/unit/test_compat_shim.cpp` behaviourally exercises both `make_ws_client` forwarders and the REST round-trip; everything is gated on `KRAKENAPI_BUILD_COMPAT_SHIM`; a clean reconfigure with the option **OFF** builds the library + new-API tests with the old paths verifiably absent.
+**Done when**: `tests/compat/` exists with the preserved originals as a dedicated compile-proof target; `tests/unit/test_compat_shim.cpp` behaviourally exercises both `make_ws_client` forwarders and the REST round-trip; everything is gated on `CRYPTOCOGS_BUILD_COMPAT_SHIM`; a clean reconfigure with the option **OFF** builds the library + new-API tests with the old paths verifiably absent.
 
 ### 3.1 — `tests/compat/`
 - `git mv tests/examples/rest_client_example.cpp tests/examples/ws_client_example.cpp tests/compat/`
-- Add a `tests/compat/CMakeLists.txt` (or block in `tests/CMakeLists.txt`) that compiles both as object libraries / executables **with `-DKRAKENAPI_SUPPRESS_DEPRECATION`** (per the appendix — keeps the suite warning-clean while still proving the surface compiles). Link against `krakenapi spdlog::spdlog CLI11::CLI11 example_backward` exactly as they did at their old `tests/examples/` location — zero source edits, only their CMake registration moves.
+- Add a `tests/compat/CMakeLists.txt` (or block in `tests/CMakeLists.txt`) that compiles both as object libraries / executables **with `-DCRYPTOCOGS_SUPPRESS_DEPRECATION`** (per the appendix — keeps the suite warning-clean while still proving the surface compiles). Link against `cryptocogs spdlog::spdlog CLI11::CLI11 example_backward` exactly as they did at their old `tests/examples/` location — zero source edits, only their CMake registration moves.
 - Remove their old `add_executable` blocks from `tests/CMakeLists.txt`.
 
 *(Optional, noted in self-review below rather than required: a second one-line target compiling one of the two **without** the suppress macro, proving the `#pragma message` actually fires — appendix calls this "optional".)*
 
 ### 3.2 — `tests/unit/test_compat_shim.cpp`
-New GoogleTest file, three behavioural assertions per [the appendix §5](001-appendix-compat-shim.md#5-tests--proving-the-shim-is-transparent), built with `-DKRAKENAPI_SUPPRESS_DEPRECATION`:
+New GoogleTest file, three behavioural assertions per [the appendix §5](001-appendix-compat-shim.md#5-tests--proving-the-shim-is-transparent), built with `-DCRYPTOCOGS_SUPPRESS_DEPRECATION`:
 
 1. **Public REST round-trip** — `make_test_client(...)` + `kraken::rest::GetServerTimeRequest{}` → assert `resp.ok` and parsed `unixtime` field, mirroring `test_client.cpp`'s existing pattern but through the old namespace.
 2. **WS subscribe via the mock-connection forwarder** — `MockWsConnection` (reuse the one now living in the migrated `test_ws_client.cpp`, or a minimal local equivalent — see self-review) injected through **`kraken::ws::make_ws_client(conn)`** (exercises the `[[deprecated]]` conn-form forwarder from 2.2) → `fire_open()`, `inject_message(<captured ticker frame>)`, assert the callback fires with a populated `kraken::ws::TickerMessage`.
@@ -183,10 +183,10 @@ New GoogleTest file, three behavioural assertions per [the appendix §5](001-app
 All-mock, deterministic, no `sleep` — consistent with `[[guidelines/cpp.md]]`'s "Tests Must Be Deterministic" and the project's existing `MockWsConnection` pattern.
 
 ### 3.3 — Wire `tests/CMakeLists.txt`
-Wrap 3.1 and 3.2's registrations in `if(KRAKENAPI_BUILD_COMPAT_SHIM) … endif()`. Add `test_compat_shim` to `tests/unit/CMakeLists.txt` (links `krakenapi GTest::gtest_main`, compiled with `target_compile_definitions(... PRIVATE KRAKENAPI_SUPPRESS_DEPRECATION)`), registered via `gtest_discover_tests`.
+Wrap 3.1 and 3.2's registrations in `if(CRYPTOCOGS_BUILD_COMPAT_SHIM) … endif()`. Add `test_compat_shim` to `tests/unit/CMakeLists.txt` (links `cryptocogs GTest::gtest_main`, compiled with `target_compile_definitions(... PRIVATE CRYPTOCOGS_SUPPRESS_DEPRECATION)`), registered via `gtest_discover_tests`.
 
 ### 3.4 — Verify the OFF path
-`cmake -B build-shim-off -DKRAKENAPI_BUILD_COMPAT_SHIM=OFF && cmake --build build-shim-off` — confirm:
+`cmake -B build-shim-off -DCRYPTOCOGS_BUILD_COMPAT_SHIM=OFF && cmake --build build-shim-off` — confirm:
 - None of the 7 old-path headers, `kraken_compat.hpp`, `tests/compat/*`, or `test_compat_shim` targets exist/build.
 - The library + all new-API (`exchange::kraken::`) tests still build and pass.
 
@@ -200,10 +200,10 @@ Full build + `ctest --output-on-failure` green with the shim ON; documented OFF-
 
 Rather than relocating the two preserved examples into `tests/compat/` (3.1) and
 splitting the proof across files, Phase 3 was implemented as a **single, more
-thorough** `tests/unit/test_compat_shim.cpp`, gated `if(KRAKENAPI_BUILD_KRAKEN
-AND KRAKENAPI_BUILD_COMPAT_SHIM)` and compiled with
-`KRAKENAPI_SUPPRESS_DEPRECATION` (so the forwarders' `#pragma message` stays
-quiet), linking `krakenapi ixwebsocket GTest::gtest_main`:
+thorough** `tests/unit/test_compat_shim.cpp`, gated `if(CRYPTOCOGS_BUILD_KRAKEN
+AND CRYPTOCOGS_BUILD_COMPAT_SHIM)` and compiled with
+`CRYPTOCOGS_SUPPRESS_DEPRECATION` (so the forwarders' `#pragma message` stays
+quiet), linking `cryptocogs ixwebsocket GTest::gtest_main`:
 
 - **Compile-proof**: it `#include`s **all seven** old-path forwarders
   (`kraken_types/rest_api/rest_client/ws_api/ws_client/ix_ws_connection.hpp` +
@@ -222,7 +222,7 @@ quiet), linking `krakenapi ixwebsocket GTest::gtest_main`:
   and a WS client built through the **`[[deprecated]]` `kraken::ws::make_ws_client(
   conn)`** forwarder sending a `kraken::ws::PingRequest` via the shared
   `MockWsConnection`.
-- **OFF-path verified**: `-DKRAKENAPI_BUILD_COMPAT_SHIM=OFF` drops the
+- **OFF-path verified**: `-DCRYPTOCOGS_BUILD_COMPAT_SHIM=OFF` drops the
   `test_compat_shim` target and builds the library + new-API tests clean (304
   tests with the shim ON → 300 with it OFF).
 
@@ -238,15 +238,15 @@ and 3.2's separate file split are superseded by the above and were **not** done.
 | Risk | Likelihood | Mitigation |
 |---|---|---|
 | Mechanical migration (Phase 1) misses a `kraken::` reference the compiler doesn't catch (e.g. inside a string, comment, or `using namespace` that silently resolves to the wrong overload) | Low–Medium | The build is the gate — anything the compiler can catch, it will. For `using namespace kraken::rest` ambiguities specifically: Step 2's existing re-exports (`using exchange::rest::HttpRequest;` etc., confirmed present in `exchange/kraken/rest_api.hpp` / `ws_client.hpp` / `ws_api.hpp`) mean most dual-resolution risk is already retired — the namespaces were designed to coexist. |
-| `[[deprecated]]` warnings firing inside our **own** `tests/compat/` build (intentional — they're calling deprecated names on purpose) could be mistaken for new bugs by anyone watching CI output, or could trip `-Werror` if the project ever adds it | Low | `-DKRAKENAPI_SUPPRESS_DEPRECATION` on those specific targets (3.1, 3.2) keeps that build leg warning-clean; the *absence* of suppression on a deliberate one-line proof target (noted as optional in 3.1) is the intentional, documented exception. |
-| `exchange_common` is specced in plan 001 §F as a future `INTERFACE` (header-only) target, yet `src/exchange/common/ws_client.cpp` (Phase 1.4's relocation target) clearly needs to compile *somewhere* with real object code | Medium (pre-existing design tension, not introduced here) | Out of scope for 2b — the file already compiles into the single `krakenapi` STATIC target today and will continue to after the path-only move; behaviour is unchanged. Step 8 ("wire all guards together") is where `exchange_common`'s final shape gets resolved (e.g. it may need to become a static lib after all, or `ws_client.cpp` may need to compile into both `krakenapi` and `binanceapi`). Flagging it now so it isn't a surprise at Step 8. |
+| `[[deprecated]]` warnings firing inside our **own** `tests/compat/` build (intentional — they're calling deprecated names on purpose) could be mistaken for new bugs by anyone watching CI output, or could trip `-Werror` if the project ever adds it | Low | `-DCRYPTOCOGS_SUPPRESS_DEPRECATION` on those specific targets (3.1, 3.2) keeps that build leg warning-clean; the *absence* of suppression on a deliberate one-line proof target (noted as optional in 3.1) is the intentional, documented exception. |
+| `exchange_common` is specced in plan 001 §F as a future `INTERFACE` (header-only) target, yet `src/exchange/common/ws_client.cpp` (Phase 1.4's relocation target) clearly needs to compile *somewhere* with real object code | Medium (pre-existing design tension, not introduced here) | Out of scope for 2b — the file already compiles into the single `cryptocogs` STATIC target today and will continue to after the path-only move; behaviour is unchanged. Step 8 ("wire all guards together") is where `exchange_common`'s final shape gets resolved (e.g. it may need to become a static lib after all, or `ws_client.cpp` may need to compile into both `cryptocogs` and `binance`). Flagging it now so it isn't a surprise at Step 8. |
 | `test_compat_shim.cpp`'s mock-WS assertion (3.2.2) needs a `MockWsConnection` — the existing one lives as a private class inside `test_ws_client.cpp` | Low | Either duplicate a minimal local mock (small, ~40 lines, matches project's existing per-file mock pattern — `test_ws_client.cpp`'s own banner says tests are self-contained) or extract a shared test-only header. Given the project's stated preference for "real implementations over mocks" *of production code* (this mock is infrastructure, not the thing under test) and minimal abstraction, duplication-in-place is the more consistent choice — deferred to implementation time once the exact assertions are drafted. |
 | Phase 2's header rewrite of the *already-shimmed* 3 files (`kraken_ws_client.hpp` etc.) removes their existing inline `make_ws_client` forwarders — if anything in the *migrated* (Phase 1) test/example code still calls `kraken::ws::make_ws_client(...)` directly (rather than the new `make_kraken_ws_client`), Phase 1's own checkpoint would already have caught it (compile error) — but worth double-checking no migrated file slipped through with an old factory call before Phase 2 removes the old inline forwarder it was relying on | Low | `grep -rn "kraken::ws::make_ws_client" tests/unit tests/examples` immediately before starting Phase 2 — should return zero hits outside the two preserved files. Cheap, mechanical pre-flight check. |
 
 ### Assumptions
 
 1. The two preserved example files (`rest_client_example.cpp`, `ws_client_example.cpp`) are the *only* `tests/examples/` files that were byte-identical to pre-refactor — confirmed via `git diff --stat 8bc0316 HEAD`. If Rob has a different pair in mind for the compat-proof (e.g. wants `kraken_example.cpp` instead, since `CLAUDE.md` calls it the "combined REST + WebSocket demo"), that's a one-line change to which files Phase 1.3 skips and Phase 3.1 moves — flagging the assumption rather than guessing.
-2. `KRAKENAPI_SUPPRESS_DEPRECATION` is a new macro this plan introduces (no existing precedent in the tree — confirmed via grep). Its name is fixed by the appendix design; this plan does not deviate from it.
+2. `CRYPTOCOGS_SUPPRESS_DEPRECATION` is a new macro this plan introduces (no existing precedent in the tree — confirmed via grep). Its name is fixed by the appendix design; this plan does not deviate from it.
 3. The removal-version placeholder (`vNEXT_MAJOR` in the `#pragma message` text) stays a placeholder — plan 001's compat-shim appendix says the actual version gets stated "in the shim headers and README" as part of release prep, which is Step 8/9 territory, not 2b.
 4. Phase 1's `.cpp` deletions are deferred to Phase 2 (not done in Phase 1) specifically so each phase's checkpoint is independently buildable and green — Phase 1 alone leaves duplication in place but *complete and correct*; Phase 2 alone removes it. Splitting them the other way (delete first, migrate second) would leave an intermediate broken state.
 

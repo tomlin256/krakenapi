@@ -1,4 +1,4 @@
-# CLAUDE.md — krakenapi
+# CLAUDE.md — cryptocogs
 
 A type-safe C++ library for the [Kraken](https://kraken.com) and
 [Binance](https://binance.com) Spot REST and WebSocket APIs. The compiler links
@@ -10,9 +10,9 @@ each request type to its exact response type — no casts, no stringly-typed key
 >   `exchange::ws::`), compiled as `libexchange_common.a` and never edited by an
 >   adapter;
 > - two **adapters** built on it — **Kraken** (`exchange::kraken::*`,
->   `libkrakenapi.a`) and **Binance** (`exchange::binance::*`, `libbinanceapi.a`)
+>   `libkraken.a`) and **Binance** (`exchange::binance::*`, `libbinance.a`)
 >   — peers that each link the scaffold but never each other, behind independent
->   `KRAKENAPI_BUILD_KRAKEN` / `KRAKENAPI_BUILD_BINANCE` flags.
+>   `CRYPTOCOGS_BUILD_KRAKEN` / `CRYPTOCOGS_BUILD_BINANCE` flags.
 >
 > The pre-refactor `kraken_*.hpp` / `kraken::` compatibility shim was **removed in
 > v0.1.1** ([plan 014](docs/plans/014-remove-compat-shim.md)) — `exchange::kraken::*`
@@ -27,8 +27,8 @@ each request type to its exact response type — no casts, no stringly-typed key
 ## Project structure
 
 ```
-krakenapi/
-├── CMakeLists.txt                       # Top-level build; fetches deps; KRAKENAPI_BUILD_* options
+cryptocogs/
+├── CMakeLists.txt                       # Top-level build; fetches deps; CRYPTOCOGS_BUILD_* options
 ├── include/
 │   ├── exchange/
 │   │   ├── common/                      # Exchange-agnostic scaffold — exchange::, ::rest::, ::ws::
@@ -64,7 +64,7 @@ krakenapi/
 │   │                                    #     binance_ws_api_frame_descriptor, make_binance_ws_api_client(), WS_API_URL
 ├── src/
 │   ├── CMakeLists.txt                   # Three peer libs: exchange_common (always),
-│   │                                    #   krakenapi (KRAKEN), binanceapi (BINANCE)
+│   │                                    #   kraken (KRAKEN), binance (BINANCE)
 │   ├── exchange/common/
 │   │   ├── ws_client.cpp                # ExchangeWsClient non-template impl → libexchange_common.a
 │   │   ├── tick_price.cpp               # TickPrice::from_json → libexchange_common.a
@@ -83,7 +83,7 @@ krakenapi/
     │   ├── ws_client_example.cpp        # KrakenWsClient all public channels + connection reuse demo
     │   ├── rest_client_example.cpp      # CLI11 demo of every public REST endpoint via KrakenRestClient
     │   ├── kraken_example.cpp           # REST + WebSocket combined demo
-    │   ├── binance/                     # Binance demos (each behind KRAKENAPI_BUILD_BINANCE)
+    │   ├── binance/                     # Binance demos (each behind CRYPTOCOGS_BUILD_BINANCE)
     │   │   ├── binance_rest_client_example.cpp   # CLI11 demo of every public Binance REST endpoint
     │   │   ├── binance_ws_client_example.cpp     # All 8 market-data streams + connection-reuse demo
     │   │   └── binance_ws_api_example.cpp        # Trading WS API ping (live-verified)
@@ -130,25 +130,25 @@ krakenapi/
 
 | Option | Default | Effect |
 |---|---|---|
-| `KRAKENAPI_BUILD_KRAKEN` | `ON` | Build the Kraken adapter (`libkrakenapi.a`) and its tests/examples |
-| `KRAKENAPI_BUILD_BINANCE` | `ON` | Build the Binance adapter (`libbinanceapi.a`) and its tests/examples |
-| `KRAKENAPI_BUILD_TESTS` | `ON` | Build unit tests and example programs |
-| `KRAKENAPI_INSTALL` | top-level: `ON` | Generate `install()` rules + the `krakenapi` CMake package config ([plan 012](docs/plans/012-install-and-package-config.md)). Defaults off when krakenapi is a `FetchContent` subproject |
+| `CRYPTOCOGS_BUILD_KRAKEN` | `ON` | Build the Kraken adapter (`libkraken.a`) and its tests/examples |
+| `CRYPTOCOGS_BUILD_BINANCE` | `ON` | Build the Binance adapter (`libbinance.a`) and its tests/examples |
+| `CRYPTOCOGS_BUILD_TESTS` | `ON` | Build unit tests and example programs |
+| `CRYPTOCOGS_INSTALL` | top-level: `ON` | Generate `install()` rules + the `cryptocogs` CMake package config ([plan 012](docs/plans/012-install-and-package-config.md)). Defaults off when cryptocogs is a `FetchContent` subproject |
 
-The two exchange flags are independent: `-DKRAKENAPI_BUILD_KRAKEN=OFF` builds a
+The two exchange flags are independent: `-DCRYPTOCOGS_BUILD_KRAKEN=OFF` builds a
 Binance-only tree (and vice versa). Both default `ON`. `exchange_common` (the
 generic `ExchangeWsClient` implementation) is always built — both adapters link
 it. Turning both exchanges off emits a "nothing will be built" warning.
 
 **Installing**: `cmake --install build --prefix <p>` lays down the four static
 libs, the public headers (component-gated by the build flags), and a package
-config so a downstream project can `find_package(krakenapi)` +
-`target_link_libraries(app krakenapi::krakenapi)`. The header-only `nlohmann_json`
+config so a downstream project can `find_package(cryptocogs)` +
+`target_link_libraries(app cryptocogs::kraken)`. The header-only `nlohmann_json`
 is **vendored** into the prefix (it is FetchContent'd and so can't be an export
 dependency); OpenSSL/libcurl resolve via `find_dependency`. ixwebsocket, GTest,
 and backward-cpp are deliberately **not** installed (ixwebsocket is fetched only
-under `KRAKENAPI_BUILD_TESTS`). Use `-DKRAKENAPI_BUILD_TESTS=OFF` for a clean,
-krakenapi-only install. See [plan 012](docs/plans/012-install-and-package-config.md).
+under `CRYPTOCOGS_BUILD_TESTS`). Use `-DCRYPTOCOGS_BUILD_TESTS=OFF` for a clean,
+cryptocogs-only install. See [plan 012](docs/plans/012-install-and-package-config.md).
 
 ### Common build commands
 
@@ -165,7 +165,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 
 # Skip tests and examples
-cmake -B build -DKRAKENAPI_BUILD_TESTS=OFF
+cmake -B build -DCRYPTOCOGS_BUILD_TESTS=OFF
 cmake --build build
 ```
 
@@ -175,8 +175,8 @@ cmake --build build
 |---|---|
 | `build/src/libexchange_common.a` | Generic `ExchangeWsClient` impl — always built; both adapters link it (`PUBLIC`) |
 | `build/src/libexchange_http.a` | Shared `CurlHttpClient` libcurl transport — always built; both REST adapters link it (`PUBLIC`) |
-| `build/src/libkrakenapi.a` | Kraken adapter static library — link this for Kraken (transitively pulls `exchange_common`) |
-| `build/src/libbinanceapi.a` | Binance adapter static library — link this for Binance (transitively pulls `exchange_common`) |
+| `build/src/libkraken.a` | Kraken adapter static library — link this for Kraken (transitively pulls `exchange_common`) |
+| `build/src/libbinance.a` | Binance adapter static library — link this for Binance (transitively pulls `exchange_common`) |
 | `build/bin/public_rest` | Public REST demo |
 | `build/bin/private_rest` | Private REST demo |
 | `build/bin/public_ws` | Public WebSocket demo (low-level) |
@@ -214,9 +214,9 @@ There are twelve test executables (312 tests total) — six Kraken/common, six B
 | `build/bin/test_binance_ws_client` | `test_binance_ws_client.cpp` | Binance stream + trading-WS-API lifecycle with `MockWsConnection` |
 
 Tests do **not** require network access or credentials — all I/O is mocked.
-The flag matrix splits cleanly: `-DKRAKENAPI_BUILD_KRAKEN=OFF` runs 147 (the
+The flag matrix splits cleanly: `-DCRYPTOCOGS_BUILD_KRAKEN=OFF` runs 147 (the
 Binance suite plus the exchange-agnostic `TickPrice` tests, which build in any
-tree); `-DKRAKENAPI_BUILD_BINANCE=OFF` runs the 176 Kraken/common tests.
+tree); `-DCRYPTOCOGS_BUILD_BINANCE=OFF` runs the 176 Kraken/common tests.
 
 ### Test suite breakdown
 
@@ -993,7 +993,7 @@ Place the banner before `#pragma once` (for headers) or before the first `#inclu
 - JSON serialisation uses `to_json()` / `from_json()` static methods on each struct. Prefer `j.value("key", default)` over `j.at("key")` for fields that may be absent in responses.
 - Enum conversions are done by free functions `to_string(Enum)` and `foo_from_string(const std::string&)`. The canonical four (`Side`, `OrderType`, `TimeInForce`, `OrderStatus`) live in `exchange/common/types.hpp`; Kraken-only enums (`PriceType`, `TriggerReference`, `StpType`, `FeePreference`) and Kraken's hyphenated `OrderType` overrides (`kraken_order_type_to_string`/`from_string`) live in `exchange/kraken/types.hpp`. All throw `std::invalid_argument` on unknown values.
 - Monetary / volume fields returned by the REST API arrive as JSON **strings** (e.g., `"1.5"`) — deserialise with `std::stod(j.value("field", "0"))` rather than `.get<double>()`. For prices that must round-trip to an *exact* decimal string (e.g. for order placement), use `TickPrice` instead of raw `double` formatting — see [Shared types reference](#tickprice--exact-decimal-price-representation).
-- The build produces **four** static libraries — two always-built common libs plus the two adapters. `exchange_common` compiles the exchange-agnostic non-template code — `src/exchange/common/ws_client.cpp` (generic WS dispatch) and `tick_price.cpp` (`TickPrice::from_json`) — and links only `nlohmann_json` (`PUBLIC`), **not** OpenSSL/libcurl (the WS engine needs no HTTP/crypto). `exchange_http` compiles `src/exchange/common/http_client.cpp` (the shared `CurlHttpClient` REST transport) and links `CURL::libcurl` + `nlohmann_json` (`PUBLIC`) — kept separate so `exchange_common` stays curl-free (plan 010). `krakenapi` (`src/kraken/rest_client.cpp`) and `binanceapi` (`src/binance/rest_client.cpp`) are **peers**: each links `exchange_common`, `exchange_http`, and OpenSSL (`PUBLIC`), and **neither links the other**. OpenSSL is `PUBLIC` because `auth.hpp` exposes inline HMAC/SHA in a public header; libcurl reaches consumers transitively through `exchange_http`. After plan 010 the two `rest_client.cpp` files hold only their constructors — the curl handling lives once in `CurlHttpClient`. None of the libraries link ixwebsocket; callers that use `IxWsConnection` must link `ixwebsocket` separately.
+- The build produces **four** static libraries — two always-built common libs plus the two adapters. `exchange_common` compiles the exchange-agnostic non-template code — `src/exchange/common/ws_client.cpp` (generic WS dispatch) and `tick_price.cpp` (`TickPrice::from_json`) — and links only `nlohmann_json` (`PUBLIC`), **not** OpenSSL/libcurl (the WS engine needs no HTTP/crypto). `exchange_http` compiles `src/exchange/common/http_client.cpp` (the shared `CurlHttpClient` REST transport) and links `CURL::libcurl` + `nlohmann_json` (`PUBLIC`) — kept separate so `exchange_common` stays curl-free (plan 010). `kraken` (`src/kraken/rest_client.cpp`) and `binance` (`src/binance/rest_client.cpp`) are **peers**: each links `exchange_common`, `exchange_http`, and OpenSSL (`PUBLIC`), and **neither links the other**. OpenSSL is `PUBLIC` because `auth.hpp` exposes inline HMAC/SHA in a public header; libcurl reaches consumers transitively through `exchange_http`. After plan 010 the two `rest_client.cpp` files hold only their constructors — the curl handling lives once in `CurlHttpClient`. None of the libraries link ixwebsocket; callers that use `IxWsConnection` must link `ixwebsocket` separately.
 - IXWebSocket and spdlog are **not** linked into any of the three libraries; they are used only by examples and tests.
 - Template methods for `ExchangeWsClient` live in `exchange/common/ws_client.inl` (included at the bottom of the `.hpp`). Non-template methods live in `src/exchange/common/ws_client.cpp`. Both are exchange-agnostic — Kraken contributes no `.cpp`/`.inl` for the WS client, only `kraken_frame_descriptor()` and its request/response types. Keep this split consistent when adding new methods.
 - Push callbacks stored in `subscriptions_` are type-erased to `std::function<void(const json&)>` internally; the typed lambda wrapper is created once in the template method and stored at subscription time.

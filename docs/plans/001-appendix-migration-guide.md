@@ -1,4 +1,4 @@
-# 001 Appendix — Migration Guide for Existing `krakenapi` Users
+# 001 Appendix — Migration Guide for Existing `cryptocogs` Users
 
 Companion to [001-multi-exchange-abstraction.md](001-multi-exchange-abstraction.md).
 
@@ -83,13 +83,13 @@ Rule of thumb: include `exchange/kraken/<area>.hpp` and the common headers come 
 
 ## 7. Fast path — the shipped compatibility shim (recommended)
 
-**The library ships a deprecated compatibility shim** (CMake option `KRAKENAPI_BUILD_COMPAT_SHIM`, default **ON**). With it, your existing `#include "kraken_*.hpp"` lines and `kraken::…` code compile and run **completely unchanged** — including the factory calls — because the shipped shim adds real forwarder functions, not just aliases. This is the recommended path: adopt the new version, keep building, migrate at your pace, then configure with `-DKRAKENAPI_BUILD_COMPAT_SHIM=OFF` to confirm you have fully migrated. See [001-appendix-compat-shim.md](001-appendix-compat-shim.md) for the design and the step-by-step adoption workflow.
+**The library ships a deprecated compatibility shim** (CMake option `CRYPTOCOGS_BUILD_COMPAT_SHIM`, default **ON**). With it, your existing `#include "kraken_*.hpp"` lines and `kraken::…` code compile and run **completely unchanged** — including the factory calls — because the shipped shim adds real forwarder functions, not just aliases. This is the recommended path: adopt the new version, keep building, migrate at your pace, then configure with `-DCRYPTOCOGS_BUILD_COMPAT_SHIM=OFF` to confirm you have fully migrated. See [001-appendix-compat-shim.md](001-appendix-compat-shim.md) for the design and the step-by-step adoption workflow.
 
 You normally do **not** need to write your own shim. The hand-rolled version below is only a fallback for callers who have turned the shipped shim **off** but still want a partial local bridge — note it cannot cover the two factory edits in §8 (a local namespace *alias* can't host forwarder functions; the shipped shim uses real namespaces and does cover them).
 
 ```cpp
 // kraken_compat.hpp — LOCAL fallback only; prefer the shipped shim above.
-// Lets pre-refactor code keep using kraken::… when KRAKENAPI_BUILD_COMPAT_SHIM=OFF.
+// Lets pre-refactor code keep using kraken::… when CRYPTOCOGS_BUILD_COMPAT_SHIM=OFF.
 #pragma once
 #include "exchange/kraken/rest_client.hpp"
 #include "exchange/kraken/rest_api.hpp"

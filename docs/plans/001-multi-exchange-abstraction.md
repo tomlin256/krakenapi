@@ -1,6 +1,6 @@
 # 001 — Multi-Exchange Abstraction
 
-**Goal**: Generalise the krakenapi request/response scaffold so that Kraken and Binance (and future exchanges) share a single set of client, connection, and response-envelope types. Only authentication schemes, endpoint paths, and message formats differ per exchange.
+**Goal**: Generalise the cryptocogs request/response scaffold so that Kraken and Binance (and future exchanges) share a single set of client, connection, and response-envelope types. Only authentication schemes, endpoint paths, and message formats differ per exchange.
 
 ---
 
@@ -22,7 +22,7 @@ This file is the architecture overview and step plan. Two companion docs hold th
 
 - **[001-appendix-binance-message-formats.md](001-appendix-binance-message-formats.md)** — every Binance REST and WebSocket message captured verbatim from the live API docs, annotated with field types and the dispatch routing key. This is the source material for the test fixtures (the Binance analog of `tests/unit/ws_client_example_json.hpp`).
 - **[001-appendix-testing-strategy.md](001-appendix-testing-strategy.md)** — the test approach mirrored from the existing Kraken suite: captured-frame fixture headers, `from_json` parse tests asserting every field, request-build tests, `identify_message`/frame-descriptor dispatch tests, and mock-performer / `MockWsConnection` end-to-end tests. Lists every new Binance test file and what it covers.
-- **[001-appendix-migration-guide.md](001-appendix-migration-guide.md)** — how existing `krakenapi` callers move from the `kraken::` / `kraken_*.hpp` surface to the new `exchange::…` / `exchange/…` layout: include-path and namespace mapping tables, function renames, test-harness migration, and worked before/after diffs.
+- **[001-appendix-migration-guide.md](001-appendix-migration-guide.md)** — how existing `cryptocogs` callers move from the `kraken::` / `kraken_*.hpp` surface to the new `exchange::…` / `exchange/…` layout: include-path and namespace mapping tables, function renames, test-harness migration, and worked before/after diffs.
 - **[001-appendix-compat-shim.md](001-appendix-compat-shim.md)** — the **shipped** deprecated compatibility shim that lets pre-refactor code compile and run with zero edits (transparent forwarding headers + namespace shim with factory forwarders), its deprecation signalling, CMake opt-out, transparency tests, and the client adoption workflow (drop in → verify → migrate at leisure → flip the shim off).
 
 ---
@@ -448,30 +448,30 @@ Optional, generic (not exchange-specific) extension: give `IxWsConnection`'s con
 Four `option()` declarations in the top-level `CMakeLists.txt` control what is built, all defaulting to `ON`:
 
 ```cmake
-option(KRAKENAPI_BUILD_KRAKEN       "Build the Kraken exchange adapter"         ON)
-option(KRAKENAPI_BUILD_BINANCE      "Build the Binance exchange adapter"         ON)
-option(KRAKENAPI_BUILD_TESTS        "Build tests and examples"                   ON)
-option(KRAKENAPI_BUILD_COMPAT_SHIM  "Ship the deprecated kraken:: compat shim"  ON)
+option(CRYPTOCOGS_BUILD_KRAKEN       "Build the Kraken exchange adapter"         ON)
+option(CRYPTOCOGS_BUILD_BINANCE      "Build the Binance exchange adapter"         ON)
+option(CRYPTOCOGS_BUILD_TESTS        "Build tests and examples"                   ON)
+option(CRYPTOCOGS_BUILD_COMPAT_SHIM  "Ship the deprecated kraken:: compat shim"  ON)
 ```
 
 **Dependency rules** — checked at configure time with explicit `if`/`message(WARNING …)` guards placed immediately after the `option()` declarations:
 
 ```cmake
-if(KRAKENAPI_BUILD_COMPAT_SHIM AND NOT KRAKENAPI_BUILD_KRAKEN)
+if(CRYPTOCOGS_BUILD_COMPAT_SHIM AND NOT CRYPTOCOGS_BUILD_KRAKEN)
     message(WARNING
-        "KRAKENAPI_BUILD_COMPAT_SHIM requires KRAKENAPI_BUILD_KRAKEN; disabling shim.")
-    set(KRAKENAPI_BUILD_COMPAT_SHIM OFF CACHE BOOL "" FORCE)
+        "CRYPTOCOGS_BUILD_COMPAT_SHIM requires CRYPTOCOGS_BUILD_KRAKEN; disabling shim.")
+    set(CRYPTOCOGS_BUILD_COMPAT_SHIM OFF CACHE BOOL "" FORCE)
 endif()
 
-if(NOT KRAKENAPI_BUILD_KRAKEN AND NOT KRAKENAPI_BUILD_BINANCE)
+if(NOT CRYPTOCOGS_BUILD_KRAKEN AND NOT CRYPTOCOGS_BUILD_BINANCE)
     message(WARNING
-        "Both KRAKENAPI_BUILD_KRAKEN and KRAKENAPI_BUILD_BINANCE are OFF — nothing will be built.")
+        "Both CRYPTOCOGS_BUILD_KRAKEN and CRYPTOCOGS_BUILD_BINANCE are OFF — nothing will be built.")
 endif()
 ```
 
 **`src/CMakeLists.txt` structure** — ~~the common scaffold is a pure INTERFACE target~~
 
-> **Correction (architectural — discovered post-Step-1)**: `exchange_common` **cannot** be header-only `INTERFACE`. `ExchangeWsClient`'s non-template methods are real compiled object code living in `src/exchange/common/ws_client.cpp` — already built today, folded directly into `krakenapi`'s sources (see `src/CMakeLists.txt` as it stands now). It needs `nlohmann_json` transitively but, notably, *not* OpenSSL/libcurl. So `exchange_common` must be `STATIC` and compile that file; Step 9 is what extracts it from `krakenapi` into its own target. Each exchange is still its own static library guarded by its flag, now linking `exchange_common PUBLIC`:
+> **Correction (architectural — discovered post-Step-1)**: `exchange_common` **cannot** be header-only `INTERFACE`. `ExchangeWsClient`'s non-template methods are real compiled object code living in `src/exchange/common/ws_client.cpp` — already built today, folded directly into `cryptocogs`'s sources (see `src/CMakeLists.txt` as it stands now). It needs `nlohmann_json` transitively but, notably, *not* OpenSSL/libcurl. So `exchange_common` must be `STATIC` and compile that file; Step 9 is what extracts it from `cryptocogs` into its own target. Each exchange is still its own static library guarded by its flag, now linking `exchange_common PUBLIC`:
 
 ```cmake
 # Always present — compiles ExchangeWsClient's exchange-agnostic non-template methods
@@ -483,75 +483,75 @@ target_include_directories(exchange_common PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 target_link_libraries(exchange_common PUBLIC nlohmann_json::nlohmann_json)
-add_library(krakenapi::common ALIAS exchange_common)
+add_library(cryptocogs::common ALIAS exchange_common)
 
-if(KRAKENAPI_BUILD_KRAKEN)
-    add_library(krakenapi STATIC
+if(CRYPTOCOGS_BUILD_KRAKEN)
+    add_library(cryptocogs STATIC
         kraken/rest_client.cpp
         kraken/types.cpp
     )
-    target_link_libraries(krakenapi
+    target_link_libraries(cryptocogs
         PUBLIC  exchange_common
         PRIVATE OpenSSL::SSL OpenSSL::Crypto CURL::libcurl
     )
-    add_library(krakenapi::krakenapi ALIAS krakenapi)
+    add_library(cryptocogs::kraken ALIAS cryptocogs)
 endif()
 
-if(KRAKENAPI_BUILD_BINANCE)
-    add_library(binanceapi STATIC
+if(CRYPTOCOGS_BUILD_BINANCE)
+    add_library(binance STATIC
         binance/rest_client.cpp
         # binance/ws_client.cpp only if Step 7/8 end up needing genuinely
         # non-template Binance WS code — Kraken needed none (KrakenWsClient
         # is a bare alias; make_kraken_ws_client is inline), so budget for none.
     )
-    target_link_libraries(binanceapi
+    target_link_libraries(binance
         PUBLIC  exchange_common
         PRIVATE OpenSSL::SSL OpenSSL::Crypto CURL::libcurl
     )
-    add_library(krakenapi::binanceapi ALIAS binanceapi)
+    add_library(cryptocogs::binance ALIAS binance)
 endif()
 ```
 
-The two exchange libraries are peers — neither links against the other. Both depend on `exchange_common` and the same system libraries. OpenSSL and libcurl are `PRIVATE` so callers that link `krakenapi` or `binanceapi` do not need to repeat those dependencies in their own `target_link_libraries`.
+The two exchange libraries are peers — neither links against the other. Both depend on `exchange_common` and the same system libraries. OpenSSL and libcurl are `PRIVATE` so callers that link `cryptocogs` or `binance` do not need to repeat those dependencies in their own `target_link_libraries`.
 
-**`tests/CMakeLists.txt` structure** — all test and example targets are nested inside the exchange guards, themselves inside the existing `KRAKENAPI_BUILD_TESTS` guard:
+**`tests/CMakeLists.txt` structure** — all test and example targets are nested inside the exchange guards, themselves inside the existing `CRYPTOCOGS_BUILD_TESTS` guard:
 
 ```cmake
-if(KRAKENAPI_BUILD_TESTS)
+if(CRYPTOCOGS_BUILD_TESTS)
     # FetchContent for spdlog + GTest — unconditional within this block.
     # Guard with NOT TARGET checks so re-configure is safe:
     #   if(NOT TARGET spdlog::spdlog) ... endif()
     #   if(NOT TARGET GTest::gtest_main) ... endif()
 
-    if(KRAKENAPI_BUILD_KRAKEN)
+    if(CRYPTOCOGS_BUILD_KRAKEN)
         # Unit tests: kraken_unit_tests
         #   sources: test_signature.cpp  test_rest_requests.cpp
         #            test_rest_responses.cpp  test_client.cpp  test_ws_client.cpp
-        #   links:   krakenapi::krakenapi  GTest::gtest_main
+        #   links:   cryptocogs::kraken  GTest::gtest_main
 
         # Examples (tests/examples/kraken/):
         #   public_rest  private_rest  public_ws  private_ws
         #   ws_client_example  kraken_example
-        #   each links: krakenapi::krakenapi  spdlog::spdlog
+        #   each links: cryptocogs::kraken  spdlog::spdlog
         #   WS examples also link: ixwebsocket
 
-        if(KRAKENAPI_BUILD_COMPAT_SHIM)
+        if(CRYPTOCOGS_BUILD_COMPAT_SHIM)
             # Unit tests: test_compat_shim
             # Compat compile-proof: tests/compat/ (pre-refactor sources, unmodified)
         endif()
     endif()
 
-    if(KRAKENAPI_BUILD_BINANCE)
+    if(CRYPTOCOGS_BUILD_BINANCE)
         # Unit tests: binance_unit_tests
         #   sources: test_binance_auth.cpp  test_binance_rest_requests.cpp
         #            test_binance_rest_responses.cpp  test_binance_ws_client.cpp
-        #   links:   krakenapi::binanceapi  GTest::gtest_main
+        #   links:   cryptocogs::binance  GTest::gtest_main
 
         # Examples (tests/examples/binance/):
         #   binance_rest_client_example
-        #     links: krakenapi::binanceapi  spdlog::spdlog  CLI11::CLI11
+        #     links: cryptocogs::binance  spdlog::spdlog  CLI11::CLI11
         #   binance_ws_client_example
-        #     links: krakenapi::binanceapi  ixwebsocket  spdlog::spdlog  CLI11::CLI11
+        #     links: cryptocogs::binance  ixwebsocket  spdlog::spdlog  CLI11::CLI11
     endif()
 endif()
 ```
@@ -561,11 +561,11 @@ endif()
 | Step | What the guard enables |
 |---|---|
 | 1 | No guard — `exchange_common` **STATIC** target (compiles `exchange/common/ws_client.cpp`) is always built |
-| 2–2b, 3 | `KRAKENAPI_BUILD_KRAKEN` guards the Kraken library, all Kraken tests, Kraken examples, and the compat shim — Step 3's `IRestAuth` conformance work touches only Kraken sources, so it sits squarely inside this guard |
-| 4–8 | `KRAKENAPI_BUILD_BINANCE` guards all Binance library work, tests, and examples |
+| 2–2b, 3 | `CRYPTOCOGS_BUILD_KRAKEN` guards the Kraken library, all Kraken tests, Kraken examples, and the compat shim — Step 3's `IRestAuth` conformance work touches only Kraken sources, so it sits squarely inside this guard |
+| 4–8 | `CRYPTOCOGS_BUILD_BINANCE` guards all Binance library work, tests, and examples |
 | 9 | Wires all guards together; validates dependency rules at configure time |
 
-Turning `KRAKENAPI_BUILD_TESTS=OFF` suppresses all tests and examples regardless of exchange flags. Exchange flags only gate library targets and their dependent tests/examples — they are orthogonal to `KRAKENAPI_BUILD_TESTS`.
+Turning `CRYPTOCOGS_BUILD_TESTS=OFF` suppresses all tests and examples regardless of exchange flags. Exchange flags only gate library targets and their dependent tests/examples — they are orthogonal to `CRYPTOCOGS_BUILD_TESTS`.
 
 ---
 
@@ -590,17 +590,17 @@ Created `include/exchange/kraken/{auth,types,rest_api,ws_api,rest_client,ws_clie
 
 ### Step 2b — Ship the Kraken backwards-compatibility shim
 
-**Done when**: a verbatim pre-refactor translation unit compiles and runs unchanged with the shim on; `-DKRAKENAPI_BUILD_COMPAT_SHIM=OFF` makes the old paths disappear. Full design: [001-appendix-compat-shim.md](001-appendix-compat-shim.md).
+**Done when**: a verbatim pre-refactor translation unit compiles and runs unchanged with the shim on; `-DCRYPTOCOGS_BUILD_COMPAT_SHIM=OFF` makes the old paths disappear. Full design: [001-appendix-compat-shim.md](001-appendix-compat-shim.md).
 
-- Add `option(KRAKENAPI_BUILD_COMPAT_SHIM … ON)`; when ON, the `krakenapi::krakenapi` install rules also install the shim headers (no client CMake change needed).
+- Add `option(CRYPTOCOGS_BUILD_COMPAT_SHIM … ON)`; when ON, the `cryptocogs::kraken` install rules also install the shim headers (no client CMake change needed).
 - Create `include/kraken_compat.hpp` — the namespace shim: reopens `namespace kraken { … }` with `using`-directives for the bulk re-exports, targeted `using` for generic bases, and a `[[deprecated]]` `KrakenWsClient` alias. Real namespaces are required here so forwarder functions are legal — this is what lets the shipped shim cover factory renames that the guide's alias-only shim cannot.
 
   > **Correction — `make_ws_client` forwarders, as shipped**: this bullet originally claimed *both* `[[deprecated]] make_ws_client` overloads live in `kraken_compat.hpp`, with the connection-based one calling `make_exchange_ws_client(conn, identify_message)` directly. Neither holds. There are still two forwarders, but transport linkage forces them into **two different files**: the *connection-based* overload lives here in `kraken_compat.hpp` and **delegates** to `make_kraken_ws_client(conn, error_handler)`; the *URL-based* overload needs `IxWsConnection`/ixwebsocket (this header doesn't link it — it's reachable from pure-REST entry points) and instead lives in `kraken_ix_ws_connection.hpp`, delegating to `make_exchange_ws_client(url, kraken_frame_descriptor, error_handler)`. Both delegate to the real entry points rather than re-deriving them ("so the shim cannot drift from real behaviour" — a comment in the shipped code), and both correctly name the `MessageIdentifier` `kraken_frame_descriptor` — *not* `identify_message` (§A's naming note). Full rationale: [001-appendix-compat-shim.md](001-appendix-compat-shim.md).
-- Create the forwarding headers at the original paths (`kraken_types.hpp`, `kraken_rest_api.hpp`, `kraken_rest_client.hpp`, `kraken_ws_api.hpp`, `kraken_ws_client.hpp`, `kraken_ix_ws_connection.hpp`, `ws_reconnect_session.hpp`) — each a `#pragma message` (guarded by `KRAKENAPI_SUPPRESS_DEPRECATION`) + include of the new header + include of `kraken_compat.hpp`.
+- Create the forwarding headers at the original paths (`kraken_types.hpp`, `kraken_rest_api.hpp`, `kraken_rest_client.hpp`, `kraken_ws_api.hpp`, `kraken_ws_client.hpp`, `kraken_ix_ws_connection.hpp`, `ws_reconnect_session.hpp`) — each a `#pragma message` (guarded by `CRYPTOCOGS_SUPPRESS_DEPRECATION`) + include of the new header + include of `kraken_compat.hpp`.
 - **Tests**:
   - `tests/compat/` — keep the **unmodified** pre-refactor `rest_client_example.cpp` and `ws_client_example.cpp` (old includes + `kraken::` names); compile them against the shim (compile-proof of an intact surface).
-  - `tests/unit/test_compat_shim.cpp` — behavioural: a public REST round-trip via `make_test_client` through `kraken::rest::…`; a WS subscribe via `MockWsConnection` through `kraken::ws::make_ws_client(conn)` (exercises the forwarder), asserting the callback fires with a `kraken::ws::TickerMessage`; a `static_assert` that `make_ws_client(url)` resolves. Built with `-DKRAKENAPI_SUPPRESS_DEPRECATION`.
-  - All gated on `KRAKENAPI_BUILD_COMPAT_SHIM=ON`. Full build + `ctest` green; then a clean configure with the option **OFF** builds the library + new-API tests with the old paths absent.
+  - `tests/unit/test_compat_shim.cpp` — behavioural: a public REST round-trip via `make_test_client` through `kraken::rest::…`; a WS subscribe via `MockWsConnection` through `kraken::ws::make_ws_client(conn)` (exercises the forwarder), asserting the callback fires with a `kraken::ws::TickerMessage`; a `static_assert` that `make_ws_client(url)` resolves. Built with `-DCRYPTOCOGS_SUPPRESS_DEPRECATION`.
+  - All gated on `CRYPTOCOGS_BUILD_COMPAT_SHIM=ON`. Full build + `ctest` green; then a clean configure with the option **OFF** builds the library + new-API tests with the old paths absent.
 
 ### Step 3 — Make `KrakenRestClient` conform to the `IRestAuth` architecture ✅ *done*
 
@@ -687,7 +687,7 @@ Endpoints to implement (in `include/exchange/binance/rest_api.hpp`):
   - `ticker/price`, `ticker/24hr`, `bookTicker` accept a single `symbol` or a `symbols=[...]` list; with a list the response becomes a JSON **array** of the object. Support both (single object vs array) in `from_json`.
 - Create `tests/unit/binance_rest_example_json.hpp` — captured response fixtures (the REST analog of `ws_client_example_json.hpp`; see testing-strategy doc). Populate from the appendix.
 - Create `tests/unit/test_binance_rest_requests.cpp` (path/method/query) and `test_binance_rest_responses.cpp` (`from_json` field assertions against the fixtures).
-- Add `tests/examples/binance/binance_rest_client_example.cpp` — the direct analog of `tests/examples/kraken/rest_client_example.cpp`: a CLI11 app with one subcommand per public endpoint (`ping`, `time`, `exchangeinfo`, `ticker [--symbols …]`, `book <symbol> [--limit N]`, `klines <symbol> --interval 1m`, `trades <symbol> [--limit N]`), each `run_*(BinanceRestClient&, args)` executing the typed request and logging the parsed fields via spdlog. `main()` mirrors the Kraken example: `curl_global_init` → construct `BinanceRestClient` → dispatch by subcommand → `curl_global_cleanup`. Public endpoints only — no credentials. Links `binanceapi spdlog::spdlog CLI11::CLI11 example_backward`.
+- Add `tests/examples/binance/binance_rest_client_example.cpp` — the direct analog of `tests/examples/kraken/rest_client_example.cpp`: a CLI11 app with one subcommand per public endpoint (`ping`, `time`, `exchangeinfo`, `ticker [--symbols …]`, `book <symbol> [--limit N]`, `klines <symbol> --interval 1m`, `trades <symbol> [--limit N]`), each `run_*(BinanceRestClient&, args)` executing the typed request and logging the parsed fields via spdlog. `main()` mirrors the Kraken example: `curl_global_init` → construct `BinanceRestClient` → dispatch by subcommand → `curl_global_cleanup`. Public endpoints only — no credentials. Links `binance spdlog::spdlog CLI11::CLI11 example_backward`.
 - **Tests**: All unit tests pass; example compiles and runs against live Binance (no credentials needed).
 
 **Done**: implemented via [plan 003](003-step-5-binance-rest-public.md) in five checkpoint commits (5.1–5.5). All 8 request/response types live in `include/exchange/binance/rest_api.hpp`, inheriting the **local** `exchange::binance::rest::TypedPublicRequest<R>` (plan 003 design decision 1 — the client's SFINAE gates on the local `PublicRequest`, mirroring Kraken). Fixtures in `tests/unit/binance_rest_example_json.hpp`; 32 new tests across `test_binance_rest_requests.cpp` + `test_binance_rest_responses.cpp` (full suite 211 green). CLI example verified live: all 7 subcommands returned 2xx against `api.binance.com`. Out of scope per plan 003: `bookTicker`, `BinanceExchangeInfo` filter/permission fields.
@@ -733,10 +733,10 @@ Endpoints to implement:
 - `make_binance_stream_client(url)` factory — one-liner over the common `make_exchange_ws_client(url, binance_stream_frame_descriptor)`, mirroring `make_kraken_ws_client`'s shape exactly (including the `error_handler` parameter — see §A's corrected code sample). No new transport or reconnect code: `IxWsConnection` and `WsReconnectSession` are reused unchanged from `exchange/common/` (see §E). ixwebsocket auto-pongs Binance's 20 s server pings; `WsReconnectSession` handles the mandatory ~24 h reconnect, with the resubscribe set supplied by the caller's `ConnectFn`.
 - Create `tests/unit/binance_ws_stream_example_json.hpp` — captured push frames + subscribe ack (the direct analog of `ws_client_example_json.hpp`).
 - Create `tests/unit/test_binance_ws_client.cpp` — `binance_stream_frame_descriptor` dispatch tests (`FrameDescriptor::kind`/`correlation_id`/`route_key` assertions, one per event type — the `kraken_frame_descriptor` test pattern), `from_json` field assertions, and `MockWsConnection` subscribe-lifecycle tests (fire_open → subscribe ack by id → inject push frame → callback fires → cancel).
-- Add `tests/examples/binance/binance_ws_client_example.cpp` — the direct analog of `tests/examples/kraken/ws_client_example.cpp`: a CLI11 app with one subcommand per stream (`aggtrade <symbol>`, `trade <symbol>`, `kline <symbol> --interval 1m`, `ticker <symbol>`, `miniticker <symbol>`, `bookticker <symbol>`, `depth <symbol> [--levels N]`), each `run_*()` creating a client via `make_binance_stream_client(STREAM_URL)`, subscribing with the typed `TypedStreamSubscribeRequest` + a push callback that logs frames, then unsubscribing via the handle. Mirror the Kraken example's **connection-reuse demo** with the Binance-natural equivalent: subscribe to *several streams on one client* over the single combined-stream connection (e.g. `aggTrade` + `bookTicker` for the same symbol), showing multiple active `SubscriptionHandle`s sharing one socket. Public streams only — no credentials. Links `binanceapi ixwebsocket spdlog::spdlog CLI11::CLI11 example_backward`.
+- Add `tests/examples/binance/binance_ws_client_example.cpp` — the direct analog of `tests/examples/kraken/ws_client_example.cpp`: a CLI11 app with one subcommand per stream (`aggtrade <symbol>`, `trade <symbol>`, `kline <symbol> --interval 1m`, `ticker <symbol>`, `miniticker <symbol>`, `bookticker <symbol>`, `depth <symbol> [--levels N]`), each `run_*()` creating a client via `make_binance_stream_client(STREAM_URL)`, subscribing with the typed `TypedStreamSubscribeRequest` + a push callback that logs frames, then unsubscribing via the handle. Mirror the Kraken example's **connection-reuse demo** with the Binance-natural equivalent: subscribe to *several streams on one client* over the single combined-stream connection (e.g. `aggTrade` + `bookTicker` for the same symbol), showing multiple active `SubscriptionHandle`s sharing one socket. Public streams only — no credentials. Links `binance ixwebsocket spdlog::spdlog CLI11::CLI11 example_backward`.
 - **Tests**: All unit tests pass.
 
-**Done**: implemented via [plan 005](005-step-7-binance-ws-streams.md) in five checkpoint commits (7.1–7.5: `7d461fc`, `5409a69`, `da8eda5`, `b833587`, `195d482`) with **zero changes to the generic `ExchangeWsClient`**. Everything lives in one header-only `include/exchange/binance/ws_streams.hpp`, namespace `exchange::binance::ws` (plan 005 decision 1): `binance_stream_frame_descriptor` (`"stream"` key → `PushMessage` routed by stream name; `"id"`+`result`/`error` → `MethodResponse` with stringified `correlation_id`, matching the client's `std::to_string(req_id)` pending-key), `BinanceStreamAck : exchange::ws::BaseWsResponse` (decision 3), all 9 event types with explicit terse-key → named-member `from_json` (decision 9), 8 stream-name helpers owning the ASCII lowercasing (decision 7), `TypedStreamSubscribeRequest<PushMsg>` + 8 per-stream aliases, and the conn-based `make_binance_stream_client` factory mirroring Kraken's (decision 2). Every event `from_json` unwraps the combined-stream `{"stream","data"}` envelope via `detail::stream_payload`, accepting wrapped and bare frames alike (decision 4) — needed because the generic client hands the *whole* frame to push callbacks. Dispatch is descriptor-only — no Binance `identify_message`/`MessageKind` (decision 5); one stream per SUBSCRIBE so the ack's missing stream echo can't desynchronise routing (decision 6). The one non-additive touch: `BinanceBookLevel` hoisted from `rest_api.hpp` to `types.hpp` with a `using` re-export, REST depth tests as the regression net (decision 8). **Build note**: the generic `ExchangeWsClient` implementation (`src/exchange/common/ws_client.cpp`) is compiled into `libkrakenapi.a`, not `libbinanceapi.a`, so `test_binance_ws_client` and `binance_ws_client_example` link `binanceapi krakenapi` (commented at both sites — no Kraken-specific code is referenced); Step 9's `exchange_common` extraction is the proper fix. Fixtures in `tests/unit/binance_ws_stream_example_json.hpp`; `MockWsConnection` extracted to `tests/unit/mock_ws_connection.hpp` (shared with the Kraken suite, verbatim); 22 new tests in `test_binance_ws_client.cpp` (descriptor, ack, events, request frames, helpers, and 4 mock-connection lifecycle tests incl. error-ack-installs-no-callback, pre-open queuing, and two streams on one connection) — full suite 255 → 277 green. Example live-verified: all 8 subcommands exited 0 against `wss://stream.binance.com/stream`, and `multi` confirmed independent mid-run cancellation (bookTicker kept streaming after the aggTrade cancel) on a single socket. Out of scope per plan 005 decision 10: user-data streams/listenKey, the WS API trading endpoint (Step 8), SUBSCRIBE batching, exotic-stream helpers (`!ticker@arr`, `@depth@100ms` — reachable via raw strings), `LIST_SUBSCRIPTIONS`/`SET_PROPERTY`, a wired reconnect/resubscribe demo, and ping/pong handling (ixwebsocket auto-pongs).
+**Done**: implemented via [plan 005](005-step-7-binance-ws-streams.md) in five checkpoint commits (7.1–7.5: `7d461fc`, `5409a69`, `da8eda5`, `b833587`, `195d482`) with **zero changes to the generic `ExchangeWsClient`**. Everything lives in one header-only `include/exchange/binance/ws_streams.hpp`, namespace `exchange::binance::ws` (plan 005 decision 1): `binance_stream_frame_descriptor` (`"stream"` key → `PushMessage` routed by stream name; `"id"`+`result`/`error` → `MethodResponse` with stringified `correlation_id`, matching the client's `std::to_string(req_id)` pending-key), `BinanceStreamAck : exchange::ws::BaseWsResponse` (decision 3), all 9 event types with explicit terse-key → named-member `from_json` (decision 9), 8 stream-name helpers owning the ASCII lowercasing (decision 7), `TypedStreamSubscribeRequest<PushMsg>` + 8 per-stream aliases, and the conn-based `make_binance_stream_client` factory mirroring Kraken's (decision 2). Every event `from_json` unwraps the combined-stream `{"stream","data"}` envelope via `detail::stream_payload`, accepting wrapped and bare frames alike (decision 4) — needed because the generic client hands the *whole* frame to push callbacks. Dispatch is descriptor-only — no Binance `identify_message`/`MessageKind` (decision 5); one stream per SUBSCRIBE so the ack's missing stream echo can't desynchronise routing (decision 6). The one non-additive touch: `BinanceBookLevel` hoisted from `rest_api.hpp` to `types.hpp` with a `using` re-export, REST depth tests as the regression net (decision 8). **Build note**: the generic `ExchangeWsClient` implementation (`src/exchange/common/ws_client.cpp`) is compiled into `libkraken.a`, not `libbinance.a`, so `test_binance_ws_client` and `binance_ws_client_example` link `binance cryptocogs` (commented at both sites — no Kraken-specific code is referenced); Step 9's `exchange_common` extraction is the proper fix. Fixtures in `tests/unit/binance_ws_stream_example_json.hpp`; `MockWsConnection` extracted to `tests/unit/mock_ws_connection.hpp` (shared with the Kraken suite, verbatim); 22 new tests in `test_binance_ws_client.cpp` (descriptor, ack, events, request frames, helpers, and 4 mock-connection lifecycle tests incl. error-ack-installs-no-callback, pre-open queuing, and two streams on one connection) — full suite 255 → 277 green. Example live-verified: all 8 subcommands exited 0 against `wss://stream.binance.com/stream`, and `multi` confirmed independent mid-run cancellation (bookTicker kept streaming after the aggTrade cancel) on a single socket. Out of scope per plan 005 decision 10: user-data streams/listenKey, the WS API trading endpoint (Step 8), SUBSCRIBE batching, exotic-stream helpers (`!ticker@arr`, `@depth@100ms` — reachable via raw strings), `LIST_SUBSCRIPTIONS`/`SET_PROPERTY`, a wired reconnect/resubscribe demo, and ping/pong handling (ixwebsocket auto-pongs).
 
 ### Step 8 — Binance WebSocket API (bidirectional trading)
 
@@ -751,7 +751,7 @@ Endpoints to implement:
 - Create `tests/unit/binance_ws_api_example_json.hpp` fixtures (success + error replies) and add `binance_ws_api_frame_descriptor` + `from_json` + `MockWsConnection` execute-lifecycle tests to `test_binance_ws_client.cpp`.
 - **Tests**: All unit tests pass.
 
-**Done**: implemented via [plan 006](006-step-8-binance-ws-api.md) in five checkpoint commits (8.1–8.5: `398d2a8`, `0201b3f`, `d9592c7`, `b3504b0`, `480eba6`) with **zero changes to the generic `ExchangeWsClient`** — the entire WS API surface rides its existing `execute`/`execute_async` path. Everything lives in one header-only `include/exchange/binance/ws_api.hpp`, namespace `exchange::binance::ws` (plan 006 decision 1) — a sibling of `ws_streams.hpp`, co-includable since the shared re-export `using`-declarations are identical. `binance_ws_api_frame_descriptor` (the WS-API `MessageIdentifier`) classifies *every* reply as a `MethodResponse` — there is no `channel`/push concept on this endpoint — with `correlation_id = stringify(id)` (string ids pass through verbatim, int ids via `std::to_string`, matching the client's `std::to_string(req_id)` pending-key); a null/absent id is `Unknown` (decision 10). `BinanceWsApiResponse : exchange::ws::BaseWsResponse` is the shared envelope (`status`, optional `id`, optional `error_code`, parsed `rate_limits`); `detail::parse_ws_api_envelope` derives `success = !error && status < 400`, so the generic `make_ws_response` lights `WsResponse::ok` for free (decision 3). Per-request signing is `detail::ws_sign_params` (decision 7): it injects `apiKey`/`timestamp`/optional `recvWindow`, renders the payload from the *same* nlohmann object the wire frame is built from — alphabetical for free via nlohmann's `std::map` backing, pinned by a reverse-insertion test — with string values raw and non-strings via `dump()`, then HMAC-SHA256s it through the reused `rest::detail::hmac_sha256`/`to_hex` and writes back `signature` (excluded from its own payload). `BinanceWsCredentials` is a straight alias for `rest::BinanceCredentials` (decision 6); each request carries a `timestamp{0}` field (`0` → now at `to_json()` time) so tests assert exact signed frames without clock injection (decision 8), and the `id` stays *outside* `params` so the signature is independent of req_id assignment. The three method pairs — `BinanceWsPingRequest → BinanceWsPongMessage`, `BinanceWsNewOrderRequest → BinanceWsNewOrderResponse` (`order.place`), `BinanceWsCancelOrderRequest → BinanceWsCancelOrderResponse` (`order.cancel`) — reuse the Step 6 REST result structs (`rest::BinanceNewOrderResponse`/`BinanceCancelOrderResponse`) as their `result` payloads (decision 5), and the order requests mirror the REST field sets (caller-formatted decimal strings, same enum converters). `BinanceWsApiClient` is the `ExchangeWsClient` alias and `make_binance_ws_api_client(conn, eh)` the conn-based factory, mirroring `make_binance_stream_client` (decision 2). **Build note**: identical to Step 7 — the generic `ExchangeWsClient` impl lives in `libkrakenapi.a`, so `test_binance_ws_client` and `binance_ws_api_example` link `binanceapi krakenapi` (commented at both sites); Step 9's `exchange_common` extraction is the proper fix. Fixtures in `tests/unit/binance_ws_api_example_json.hpp` (ping synthetic; `order.place` success/error verbatim from the appendix §4; `order.cancel` synthetic — the §2 DELETE shape inside the §4 envelope); 23 new tests in `test_binance_ws_client.cpp` (4 descriptor, 3 envelope, 1 ping frame, 4 signing, 3 `order.place`, 3 `order.cancel`, and 5 `MockWsConnection` execute-lifecycle: ping/order round-trips, error-resolves-no-hang, pre-open queuing, and the blocking-path timeout) — full suite 277 → 300 green. The ping example (`tests/examples/binance/binance_ws_api_example.cpp`, decision 11 — ping is public, no credentials) live-verified: exit 0 against `wss://ws-api.binance.com/ws-api/v3` with `status 200` and a parsed `REQUEST_WEIGHT` rate limit. **Known limitation** (flagged in plan 006 self-review): Binance publishes no official worked signature vector for the sorted-`params` scheme, so the signing tests recompute the expectation with the same primitives — they pin the *construction*, not the rule; the live `order.place`/`order.cancel` calls (outside this plan's scope) are the true validation, with a testnet smoke run the natural follow-up. Out of scope per plan 006 decision 12: the `session.logon`/Ed25519 session-auth flow, `order.test`, smart order routing (`sor.*`), OCO/`orderList`, `account.status`/`myTrades` over WS, user-data streams, `returnRateLimits` toggling, a testnet target, and a wired reconnect demo.
+**Done**: implemented via [plan 006](006-step-8-binance-ws-api.md) in five checkpoint commits (8.1–8.5: `398d2a8`, `0201b3f`, `d9592c7`, `b3504b0`, `480eba6`) with **zero changes to the generic `ExchangeWsClient`** — the entire WS API surface rides its existing `execute`/`execute_async` path. Everything lives in one header-only `include/exchange/binance/ws_api.hpp`, namespace `exchange::binance::ws` (plan 006 decision 1) — a sibling of `ws_streams.hpp`, co-includable since the shared re-export `using`-declarations are identical. `binance_ws_api_frame_descriptor` (the WS-API `MessageIdentifier`) classifies *every* reply as a `MethodResponse` — there is no `channel`/push concept on this endpoint — with `correlation_id = stringify(id)` (string ids pass through verbatim, int ids via `std::to_string`, matching the client's `std::to_string(req_id)` pending-key); a null/absent id is `Unknown` (decision 10). `BinanceWsApiResponse : exchange::ws::BaseWsResponse` is the shared envelope (`status`, optional `id`, optional `error_code`, parsed `rate_limits`); `detail::parse_ws_api_envelope` derives `success = !error && status < 400`, so the generic `make_ws_response` lights `WsResponse::ok` for free (decision 3). Per-request signing is `detail::ws_sign_params` (decision 7): it injects `apiKey`/`timestamp`/optional `recvWindow`, renders the payload from the *same* nlohmann object the wire frame is built from — alphabetical for free via nlohmann's `std::map` backing, pinned by a reverse-insertion test — with string values raw and non-strings via `dump()`, then HMAC-SHA256s it through the reused `rest::detail::hmac_sha256`/`to_hex` and writes back `signature` (excluded from its own payload). `BinanceWsCredentials` is a straight alias for `rest::BinanceCredentials` (decision 6); each request carries a `timestamp{0}` field (`0` → now at `to_json()` time) so tests assert exact signed frames without clock injection (decision 8), and the `id` stays *outside* `params` so the signature is independent of req_id assignment. The three method pairs — `BinanceWsPingRequest → BinanceWsPongMessage`, `BinanceWsNewOrderRequest → BinanceWsNewOrderResponse` (`order.place`), `BinanceWsCancelOrderRequest → BinanceWsCancelOrderResponse` (`order.cancel`) — reuse the Step 6 REST result structs (`rest::BinanceNewOrderResponse`/`BinanceCancelOrderResponse`) as their `result` payloads (decision 5), and the order requests mirror the REST field sets (caller-formatted decimal strings, same enum converters). `BinanceWsApiClient` is the `ExchangeWsClient` alias and `make_binance_ws_api_client(conn, eh)` the conn-based factory, mirroring `make_binance_stream_client` (decision 2). **Build note**: identical to Step 7 — the generic `ExchangeWsClient` impl lives in `libkraken.a`, so `test_binance_ws_client` and `binance_ws_api_example` link `binance cryptocogs` (commented at both sites); Step 9's `exchange_common` extraction is the proper fix. Fixtures in `tests/unit/binance_ws_api_example_json.hpp` (ping synthetic; `order.place` success/error verbatim from the appendix §4; `order.cancel` synthetic — the §2 DELETE shape inside the §4 envelope); 23 new tests in `test_binance_ws_client.cpp` (4 descriptor, 3 envelope, 1 ping frame, 4 signing, 3 `order.place`, 3 `order.cancel`, and 5 `MockWsConnection` execute-lifecycle: ping/order round-trips, error-resolves-no-hang, pre-open queuing, and the blocking-path timeout) — full suite 277 → 300 green. The ping example (`tests/examples/binance/binance_ws_api_example.cpp`, decision 11 — ping is public, no credentials) live-verified: exit 0 against `wss://ws-api.binance.com/ws-api/v3` with `status 200` and a parsed `REQUEST_WEIGHT` rate limit. **Known limitation** (flagged in plan 006 self-review): Binance publishes no official worked signature vector for the sorted-`params` scheme, so the signing tests recompute the expectation with the same primitives — they pin the *construction*, not the rule; the live `order.place`/`order.cancel` calls (outside this plan's scope) are the true validation, with a testnet smoke run the natural follow-up. Out of scope per plan 006 decision 12: the `session.logon`/Ed25519 session-auth flow, `order.test`, smart order routing (`sor.*`), OCO/`orderList`, `account.status`/`myTrades` over WS, user-data streams, `returnRateLimits` toggling, a testnet target, and a wired reconnect demo.
 
 ### Step 9 — CMake, build validation, final cleanup
 
@@ -761,28 +761,28 @@ Endpoints to implement:
   - Add the four `option()` declarations and dependency-rule guards from §F.
   - Ensure `add_subdirectory(src)` is present (the existing `add_subdirectory(tests)` is unchanged and picks up the exchange guards from there).
   - The `find_package(OpenSSL REQUIRED)` and `find_package(CURL REQUIRED)` calls stay unconditional — both exchange libs need them, and CMake's package cache makes duplicate `find_package` free.
-- **`src/CMakeLists.txt`** — replace the existing single `krakenapi` library definition with the three-target structure from §F:
-  - `exchange_common` **STATIC** target (always present — see §F's correction: it compiles `exchange/common/ws_client.cpp`, the one piece of exchange-agnostic non-template `ExchangeWsClient` code, and provides the `include/exchange/common/` headers to all dependents via `$<BUILD_INTERFACE:…>`). This is a genuine *extraction*: that file is compiled directly into `krakenapi` today (check `src/CMakeLists.txt` — its `add_library(krakenapi STATIC …)` already lists `exchange/common/ws_client.cpp`); Step 9 is what moves it out.
-  - `krakenapi` STATIC target inside `if(KRAKENAPI_BUILD_KRAKEN)` — **sheds** `exchange/common/ws_client.cpp` (now supplied via the `exchange_common PUBLIC` link instead) and keeps just its own `kraken/rest_client.cpp` + `kraken/types.cpp`. There is no `kraken/ws_client.cpp` to rename — `KrakenWsClient` is a bare `using` alias for `ExchangeWsClient` with an `inline` factory, contributing zero non-template code (see the corrected proposed layout). OpenSSL and libcurl stay `PRIVATE`.
-  - `binanceapi` STATIC target inside `if(KRAKENAPI_BUILD_BINANCE)`, using `binance/rest_client.cpp` — and `binance/ws_client.cpp` *only if* Steps 6/7 turn out to need genuinely non-template Binance WS code. Default expectation, by analogy with Kraken, is that they won't (both factories should be `inline` one-liners over `make_exchange_ws_client`). Same `PUBLIC exchange_common` / `PRIVATE` OpenSSL+libcurl link pattern as `krakenapi`.
+- **`src/CMakeLists.txt`** — replace the existing single `cryptocogs` library definition with the three-target structure from §F:
+  - `exchange_common` **STATIC** target (always present — see §F's correction: it compiles `exchange/common/ws_client.cpp`, the one piece of exchange-agnostic non-template `ExchangeWsClient` code, and provides the `include/exchange/common/` headers to all dependents via `$<BUILD_INTERFACE:…>`). This is a genuine *extraction*: that file is compiled directly into `cryptocogs` today (check `src/CMakeLists.txt` — its `add_library(cryptocogs STATIC …)` already lists `exchange/common/ws_client.cpp`); Step 9 is what moves it out.
+  - `cryptocogs` STATIC target inside `if(CRYPTOCOGS_BUILD_KRAKEN)` — **sheds** `exchange/common/ws_client.cpp` (now supplied via the `exchange_common PUBLIC` link instead) and keeps just its own `kraken/rest_client.cpp` + `kraken/types.cpp`. There is no `kraken/ws_client.cpp` to rename — `KrakenWsClient` is a bare `using` alias for `ExchangeWsClient` with an `inline` factory, contributing zero non-template code (see the corrected proposed layout). OpenSSL and libcurl stay `PRIVATE`.
+  - `binance` STATIC target inside `if(CRYPTOCOGS_BUILD_BINANCE)`, using `binance/rest_client.cpp` — and `binance/ws_client.cpp` *only if* Steps 6/7 turn out to need genuinely non-template Binance WS code. Default expectation, by analogy with Kraken, is that they won't (both factories should be `inline` one-liners over `make_exchange_ws_client`). Same `PUBLIC exchange_common` / `PRIVATE` OpenSSL+libcurl link pattern as `cryptocogs`.
   - Neither exchange library links the other — they are peers that both depend on `exchange_common`.
 - **`tests/CMakeLists.txt`** — restructure test and example targets to use the nested guard layout from §F:
-  - Move all existing Kraken test and example targets inside `if(KRAKENAPI_BUILD_KRAKEN)`. No logic changes — just wrap the existing definitions.
-  - Move compat test targets (`test_compat_shim`, `tests/compat/` compile-proof) inside a further `if(KRAKENAPI_BUILD_COMPAT_SHIM)` within the Kraken block.
-  - Add Binance test and example targets inside `if(KRAKENAPI_BUILD_BINANCE)`:
-    - `binance_unit_tests` executable: `test_binance_auth.cpp`, `test_binance_rest_requests.cpp`, `test_binance_rest_responses.cpp`, `test_binance_ws_client.cpp` — links `krakenapi::binanceapi GTest::gtest_main`.
-    - `binance_rest_client_example` (from `tests/examples/binance/`) — links `krakenapi::binanceapi spdlog::spdlog CLI11::CLI11`.
-    - `binance_ws_client_example` (from `tests/examples/binance/`) — links `krakenapi::binanceapi ixwebsocket spdlog::spdlog CLI11::CLI11`.
+  - Move all existing Kraken test and example targets inside `if(CRYPTOCOGS_BUILD_KRAKEN)`. No logic changes — just wrap the existing definitions.
+  - Move compat test targets (`test_compat_shim`, `tests/compat/` compile-proof) inside a further `if(CRYPTOCOGS_BUILD_COMPAT_SHIM)` within the Kraken block.
+  - Add Binance test and example targets inside `if(CRYPTOCOGS_BUILD_BINANCE)`:
+    - `binance_unit_tests` executable: `test_binance_auth.cpp`, `test_binance_rest_requests.cpp`, `test_binance_rest_responses.cpp`, `test_binance_ws_client.cpp` — links `cryptocogs::binance GTest::gtest_main`.
+    - `binance_rest_client_example` (from `tests/examples/binance/`) — links `cryptocogs::binance spdlog::spdlog CLI11::CLI11`.
+    - `binance_ws_client_example` (from `tests/examples/binance/`) — links `cryptocogs::binance ixwebsocket spdlog::spdlog CLI11::CLI11`.
     - Register both `binance_unit_tests` with `add_test()` so `ctest` picks them up.
-  - FetchContent for spdlog and GTest stays at the top of the `if(KRAKENAPI_BUILD_TESTS)` block, unconditional but guarded with `if(NOT TARGET …)` checks to survive re-configure.
-- Verify configure-time guard output: `cmake -B build -DKRAKENAPI_BUILD_BINANCE=OFF` should build only the Kraken library and tests, with no Binance targets present; `-DKRAKENAPI_BUILD_KRAKEN=OFF -DKRAKENAPI_BUILD_BINANCE=OFF` should emit the "nothing will be built" warning.
+  - FetchContent for spdlog and GTest stays at the top of the `if(CRYPTOCOGS_BUILD_TESTS)` block, unconditional but guarded with `if(NOT TARGET …)` checks to survive re-configure.
+- Verify configure-time guard output: `cmake -B build -DCRYPTOCOGS_BUILD_BINANCE=OFF` should build only the Kraken library and tests, with no Binance targets present; `-DCRYPTOCOGS_BUILD_KRAKEN=OFF -DCRYPTOCOGS_BUILD_BINANCE=OFF` should emit the "nothing will be built" warning.
 - Remove any dead code or stale comments from the refactor.
 - Run `ctest --output-on-failure` — all tests pass.
 - Verify **all** examples compile against the restructured headers (both Kraken and the two new Binance examples).
 - Update `CLAUDE.md` to reflect new namespace layout, file structure, and patterns.
 - Update `README.md` and link the migration guide ([001-appendix-migration-guide.md](001-appendix-migration-guide.md)) from the release notes so existing callers find it. Confirm the `exchange::kraken::*` re-exports from Step 2 are present so the guide's compatibility shim actually compiles.
 
-**Done**: implemented via [plan 007](007-step-9-cmake-build-validation.md) in three checkpoint commits (9.1–9.3: `9e73dc1`, `28179fd`, `edf4081`). The generic `ExchangeWsClient` implementation (`src/exchange/common/ws_client.cpp`) is now a standalone `exchange_common` STATIC library (alias `krakenapi::common`; PUBLIC `nlohmann_json` + the `include/` tree, and notably *not* OpenSSL/libcurl) — a genuine extraction, `nm`-verified: all 161 `ExchangeWsClient` symbols moved into `libexchange_common.a` and are now absent from `libkrakenapi.a`. `krakenapi` (`kraken/{rest_client,types}.cpp`) and `binanceapi` (`binance/rest_client.cpp`) are **peers**, each linking `exchange_common PUBLIC`; neither links the other. The four `option()` toggles (`KRAKEN`/`BINANCE`/`TESTS`/`COMPAT_SHIM`, all default `ON`) plus the two configure-time dependency guards (compat-shim-requires-Kraken → warn + force OFF; both-exchanges-off → "nothing will be built") are wired per §F. The three Binance WS targets that previously borrowed `krakenapi` for the generic impl — `test_binance_ws_client`, `binance_ws_client_example`, `binance_ws_api_example` — now link `binanceapi` only, reaching the engine transitively through `exchange_common`; that false dependency is gone. **One §F correction (plan 007 decision 4, made during 9.1)**: OpenSSL/libcurl stay **PUBLIC**, not PRIVATE — §F assumed the crypto lived in a `.cpp`, but `auth.hpp` defines the HMAC/SHA helpers inline in a public header against libcrypto and `rest_client.hpp` `#include`s `<curl/curl.h>`, so they are genuine public compile/link requirements (PRIVATE broke `private_rest.cpp`); `OpenSSL::Crypto` is now named explicitly. All test and example targets were wrapped in their `KRAKENAPI_BUILD_KRAKEN`/`_BINANCE` guards across `tests/CMakeLists.txt` + `tests/unit/CMakeLists.txt` (the legacy `kapi` reference lib moved inside the Kraken guard; `test_ws_reconnect_session` left untouched — it is header-only and links no exchange lib). Validation was a six-cell configure/build/`ctest` flag matrix run in throwaway build dirs: cell 3 (`-DKRAKENAPI_BUILD_KRAKEN=OFF`) is the headline proof — a Binance-only tree builds `libbinanceapi.a` + `libexchange_common.a` with **no `libkrakenapi.a`** present and all 129 Binance tests green; cell 2 (`BINANCE=OFF`) gives 129+171 = the full 300; cells 4–6 confirmed the two warnings and the `TESTS=OFF` library-only build. The full 300-test suite is unchanged and green at every checkpoint (no library source was modified — only archive membership and link edges). `CLAUDE.md` (build-options/outputs tables, the three-library conventions paragraph, the `src/` tree) and `README.md` (a build-targets/options section + a migration-guide link for pre-refactor callers) were updated; the `kraken_*.hpp` shim headers and `exchange::kraken::*` re-exports were confirmed present. Out of scope (tracked elsewhere): the compat-shim install/compile-proof wiring ([plan 002](002-step-2b-compat-shim.md), still Draft — Step 9 only makes the option's guard correct), `install()`/packaging, moving the inline crypto into a `.cpp` to make OpenSSL genuinely PRIVATE, and the Step 10 onboarding guide.
+**Done**: implemented via [plan 007](007-step-9-cmake-build-validation.md) in three checkpoint commits (9.1–9.3: `9e73dc1`, `28179fd`, `edf4081`). The generic `ExchangeWsClient` implementation (`src/exchange/common/ws_client.cpp`) is now a standalone `exchange_common` STATIC library (alias `cryptocogs::common`; PUBLIC `nlohmann_json` + the `include/` tree, and notably *not* OpenSSL/libcurl) — a genuine extraction, `nm`-verified: all 161 `ExchangeWsClient` symbols moved into `libexchange_common.a` and are now absent from `libkraken.a`. `cryptocogs` (`kraken/{rest_client,types}.cpp`) and `binance` (`binance/rest_client.cpp`) are **peers**, each linking `exchange_common PUBLIC`; neither links the other. The four `option()` toggles (`KRAKEN`/`BINANCE`/`TESTS`/`COMPAT_SHIM`, all default `ON`) plus the two configure-time dependency guards (compat-shim-requires-Kraken → warn + force OFF; both-exchanges-off → "nothing will be built") are wired per §F. The three Binance WS targets that previously borrowed `cryptocogs` for the generic impl — `test_binance_ws_client`, `binance_ws_client_example`, `binance_ws_api_example` — now link `binance` only, reaching the engine transitively through `exchange_common`; that false dependency is gone. **One §F correction (plan 007 decision 4, made during 9.1)**: OpenSSL/libcurl stay **PUBLIC**, not PRIVATE — §F assumed the crypto lived in a `.cpp`, but `auth.hpp` defines the HMAC/SHA helpers inline in a public header against libcrypto and `rest_client.hpp` `#include`s `<curl/curl.h>`, so they are genuine public compile/link requirements (PRIVATE broke `private_rest.cpp`); `OpenSSL::Crypto` is now named explicitly. All test and example targets were wrapped in their `CRYPTOCOGS_BUILD_KRAKEN`/`_BINANCE` guards across `tests/CMakeLists.txt` + `tests/unit/CMakeLists.txt` (the legacy `kapi` reference lib moved inside the Kraken guard; `test_ws_reconnect_session` left untouched — it is header-only and links no exchange lib). Validation was a six-cell configure/build/`ctest` flag matrix run in throwaway build dirs: cell 3 (`-DCRYPTOCOGS_BUILD_KRAKEN=OFF`) is the headline proof — a Binance-only tree builds `libbinance.a` + `libexchange_common.a` with **no `libkraken.a`** present and all 129 Binance tests green; cell 2 (`BINANCE=OFF`) gives 129+171 = the full 300; cells 4–6 confirmed the two warnings and the `TESTS=OFF` library-only build. The full 300-test suite is unchanged and green at every checkpoint (no library source was modified — only archive membership and link edges). `CLAUDE.md` (build-options/outputs tables, the three-library conventions paragraph, the `src/` tree) and `README.md` (a build-targets/options section + a migration-guide link for pre-refactor callers) were updated; the `kraken_*.hpp` shim headers and `exchange::kraken::*` re-exports were confirmed present. Out of scope (tracked elsewhere): the compat-shim install/compile-proof wiring ([plan 002](002-step-2b-compat-shim.md), still Draft — Step 9 only makes the option's guard correct), `install()`/packaging, moving the inline crypto into a `.cpp` to make OpenSSL genuinely PRIVATE, and the Step 10 onboarding guide.
 
 ### Step 10 — Write the agent onboarding guide for new exchanges
 
@@ -824,7 +824,7 @@ Each item lists the files to create and the Binance file to use as the reference
 | 7 | WS client header + factory | `include/exchange/<name>/ws_client.hpp` | `exchange/binance/ws_client.hpp` |
 | 8 | WS source | `src/<name>/ws_client.cpp` (non-template methods, if any) | `src/binance/ws_client.cpp` |
 | 9 | WS fixture header + unit tests | `tests/unit/<name>_ws_example_json.hpp`, `test_<name>_ws_client.cpp` | `binance_ws_stream_example_json.hpp`, `test_binance_ws_client.cpp` |
-| 10 | CMake wiring | `KRAKENAPI_BUILD_<NAME>` option in `CMakeLists.txt`; library target in `src/CMakeLists.txt`; test and example targets in `tests/CMakeLists.txt` — following the §F pattern | Binance blocks in each `CMakeLists.txt` |
+| 10 | CMake wiring | `CRYPTOCOGS_BUILD_<NAME>` option in `CMakeLists.txt`; library target in `src/CMakeLists.txt`; test and example targets in `tests/CMakeLists.txt` — following the §F pattern | Binance blocks in each `CMakeLists.txt` |
 | 11 | REST CLI example | `tests/examples/<name>/rest_client_example.cpp` | `tests/examples/binance/binance_rest_client_example.cpp` |
 | 12 | WS CLI example | `tests/examples/<name>/ws_client_example.cpp` | `tests/examples/binance/binance_ws_client_example.cpp` |
 
@@ -833,7 +833,7 @@ Each item lists the files to create and the Binance file to use as the reference
 The guide must remind the agent of the project-wide rules that apply to every new adapter (not obvious from context alone):
 
 - File banner on every `.hpp`, `.inl`, `.cpp` (year, project name, MIT licence block — see `CLAUDE.md`).
-- `KRAKENAPI_BUILD_<NAME>` option defaults to `ON`; add the compat-shim dependency rule if applicable.
+- `CRYPTOCOGS_BUILD_<NAME>` option defaults to `ON`; add the compat-shim dependency rule if applicable.
 - Numbers from REST responses arrive as JSON strings — use `std::stod(j.value("field", "0"))`, not `.get<double>()`.
 - All optional fields are `std::optional<T>`; omitted fields must not be serialised in `to_json()`.
 - Unit tests use `MockWsConnection` for all WS tests — no network access.
@@ -847,7 +847,7 @@ The agent declares the integration complete only when:
 1. `cmake -B build && cmake --build build` succeeds from a clean directory with all exchange flags `ON`.
 2. `ctest --output-on-failure` passes every test, including the new exchange's auth, REST, and WS suites.
 3. Both CLI examples (`rest_client_example`, `ws_client_example`) run against the live exchange and produce parsed output (no credentials needed for public endpoints).
-4. `cmake -B build -DKRAKENAPI_BUILD_<NAME>=OFF && cmake --build build` succeeds with no trace of the new exchange's targets.
+4. `cmake -B build -DCRYPTOCOGS_BUILD_<NAME>=OFF && cmake --build build` succeeds with no trace of the new exchange's targets.
 
 **Done**: implemented via [plan 008](008-step-10-agent-onboarding-guide.md) in two checkpoint commits (10.1 `3dcccee`, 10.2 — this). The guide is [`docs/agent-add-exchange.md`](../agent-add-exchange.md): a self-contained, commit-pinned playbook with the four §10 sections (inputs · implementation checklist · conventions · done-criteria) plus a §0 build/test loop and a §2 architecture primer covering the load-bearing contracts an agent must satisfy — the `Typed{Public,Private}Request<R>` response binding, the `RestResponse<T>`/`parse_*_response` envelope, the canonical-enum re-export, and above all the `MessageIdentifier` (`<name>_frame_descriptor → FrameDescriptor`) the generic `ExchangeWsClient` needs versus the *optional* `identify_message`/`MessageKind`. Three corrections to §10's pre-Binance sketch were folded in and verified against the tree: **auth is header-only** (no `src/binance/auth.cpp`), **the WS client is header-only** (no `src/binance/ws_client.cpp` — bare `using` alias + inline factory), and the real fixture/test filenames (`binance_{rest,account,ws_stream,ws_api}_example_json.hpp`, `test_binance_{auth,types,rest_requests,rest_responses,client,ws_client}.cpp`). Every cited file path resolves and every cited commit hash (`b20dc35`, `4350ce6`, `145bf70`, `352efd0`, `c8e42c4`, `8b63fa9`, `7d461fc`, `b833587`, `398d2a8`, `d9592c7`, `9e73dc1`, `28179fd`, `13671f1`) `git cat-file`-resolves — mechanically checked in 10.2, including a spot-check that the load-bearing line numbers (`rest.hpp:77/87`, `rest_api.hpp:71`, `auth.hpp:91`, `types.hpp:47`) still point at the right declarations. The two paths that resolve as *absent* (`src/binance/{auth,ws_client}.cpp`) are cited precisely because the guide tells the agent they should not exist. Linked from `CLAUDE.md` (new "Adding a whole new exchange" pointer). The full 300-test suite is unchanged — this step added only documentation. **This completes plan 001**: the common scaffold, the Kraken migration + compat shim, the full Binance adapter (REST public/private, WS streams, WS trading API), the three-library CMake split, and now the onboarding guide are all done.
 
@@ -874,7 +874,7 @@ The agent declares the integration complete only when:
 2. Binance `recvWindow` defaults to 5000 ms and is not exposed on every request struct — callers can set it on `BinanceCredentials`.
 3. Binance user data streams (listen key mechanism) are out of scope for this plan; only named market streams and the WS API are covered.
 4. Example programs link against ixwebsocket for real connections; unit tests remain fully mock-based.
-5. Three CMake targets are produced: `krakenapi::common` (**STATIC**, not header-only `INTERFACE` — see §F's correction; it compiles `exchange/common/ws_client.cpp`, the one piece of exchange-agnostic non-template `ExchangeWsClient` code — always present), `krakenapi::krakenapi` (`libkrakenapi.a`, gated on `KRAKENAPI_BUILD_KRAKEN`), and `krakenapi::binanceapi` (`libbinanceapi.a`, gated on `KRAKENAPI_BUILD_BINANCE`). All flags default to `ON`. The repo name stays `krakenapi` for now.
+5. Three CMake targets are produced: `cryptocogs::common` (**STATIC**, not header-only `INTERFACE` — see §F's correction; it compiles `exchange/common/ws_client.cpp`, the one piece of exchange-agnostic non-template `ExchangeWsClient` code — always present), `cryptocogs::kraken` (`libkraken.a`, gated on `CRYPTOCOGS_BUILD_KRAKEN`), and `cryptocogs::binance` (`libbinance.a`, gated on `CRYPTOCOGS_BUILD_BINANCE`). All flags default to `ON`. The repo name stays `cryptocogs` for now.
 
 ### Deferred items
 

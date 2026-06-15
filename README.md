@@ -1,4 +1,4 @@
-# krakenapi
+# cryptocogs
 
 A type-safe C++ library for the [Kraken](https://kraken.com) **and**
 [Binance](https://binance.com) Spot REST and WebSocket APIs.
@@ -6,7 +6,7 @@ A type-safe C++ library for the [Kraken](https://kraken.com) **and**
 The compiler links each request type to its exact response type — no casts, no
 stringly-typed keys. Both exchanges are built on one shared, exchange-agnostic
 engine; each is an independent static library you can enable or disable at
-configure time (`KRAKENAPI_BUILD_KRAKEN` / `KRAKENAPI_BUILD_BINANCE`, both `ON`
+configure time (`CRYPTOCOGS_BUILD_KRAKEN` / `CRYPTOCOGS_BUILD_BINANCE`, both `ON`
 by default). Adding a third exchange follows a documented
 [playbook](docs/agent-add-exchange.md).
 
@@ -19,8 +19,8 @@ by default). Adding a third exchange follows a documented
 sudo apt install libssl-dev libcurl4-openssl-dev
 
 # 2. Clone and build
-git clone https://github.com/tomlin256/krakenapi.git
-cd krakenapi
+git clone https://github.com/tomlin256/cryptocogs.git
+cd cryptocogs
 cmake -B build && cmake --build build
 
 # 3. Run an example — Kraken
@@ -261,7 +261,7 @@ Shows how the REST and WebSocket layers share types from `exchange/kraken/types.
 
 ## Binance
 
-The Binance adapter (`exchange::binance::*`, library `krakenapi::binanceapi`)
+The Binance adapter (`exchange::binance::*`, library `cryptocogs::binance`)
 covers Spot **REST** (public market data + private account/trading), **WebSocket
 market streams**, and a bidirectional **WebSocket trading API** — all on the same
 typed engine as Kraken. Three example programs (all public, no credentials):
@@ -320,36 +320,36 @@ The full Binance type/endpoint/channel reference — including the trading WS AP
 
 The build produces three peer static libraries: `exchange_common` (the generic
 WebSocket-client engine, always built) and two adapters that each link it,
-`krakenapi::krakenapi` (Kraken) and `krakenapi::binanceapi` (Binance). Link
+`cryptocogs::kraken` (Kraken) and `cryptocogs::binance` (Binance). Link
 whichever adapter(s) you use — each one transitively pulls in `exchange_common`,
 OpenSSL, and libcurl, so you do not name those yourself.
 
 | CMake option | Default | Effect |
 |---|---|---|
-| `KRAKENAPI_BUILD_KRAKEN` | `ON` | Build the Kraken adapter + its tests/examples |
-| `KRAKENAPI_BUILD_BINANCE` | `ON` | Build the Binance adapter + its tests/examples |
-| `KRAKENAPI_BUILD_TESTS` | `ON` | Build unit tests and example programs |
+| `CRYPTOCOGS_BUILD_KRAKEN` | `ON` | Build the Kraken adapter + its tests/examples |
+| `CRYPTOCOGS_BUILD_BINANCE` | `ON` | Build the Binance adapter + its tests/examples |
+| `CRYPTOCOGS_BUILD_TESTS` | `ON` | Build unit tests and example programs |
 
-The two exchange flags are independent — `-DKRAKENAPI_BUILD_KRAKEN=OFF` builds a
+The two exchange flags are independent — `-DCRYPTOCOGS_BUILD_KRAKEN=OFF` builds a
 Binance-only tree, and vice versa.
 
 ### CMake (FetchContent)
 
 ```cmake
 include(FetchContent)
-FetchContent_Declare(krakenapi
-    GIT_REPOSITORY https://github.com/tomlin256/krakenapi.git
+FetchContent_Declare(cryptocogs
+    GIT_REPOSITORY https://github.com/tomlin256/cryptocogs.git
     GIT_TAG        main
 )
-FetchContent_MakeAvailable(krakenapi)
+FetchContent_MakeAvailable(cryptocogs)
 
-target_link_libraries(my_app PRIVATE krakenapi::krakenapi)   # and/or krakenapi::binanceapi
+target_link_libraries(my_app PRIVATE cryptocogs::kraken)   # and/or cryptocogs::binance
 ```
 
 ### Installing & `find_package`
 
 ```bash
-cmake -B build -DKRAKENAPI_BUILD_TESTS=OFF
+cmake -B build -DCRYPTOCOGS_BUILD_TESTS=OFF
 cmake --build build
 cmake --install build --prefix /your/prefix
 ```
@@ -358,23 +358,23 @@ This installs the four static libraries, the public headers, and a CMake package
 config. A downstream project then just:
 
 ```cmake
-find_package(krakenapi REQUIRED)        # add -DCMAKE_PREFIX_PATH=/your/prefix
-target_link_libraries(my_app PRIVATE krakenapi::krakenapi)   # and/or krakenapi::binanceapi
+find_package(cryptocogs REQUIRED)        # add -DCMAKE_PREFIX_PATH=/your/prefix
+target_link_libraries(my_app PRIVATE cryptocogs::kraken)   # and/or cryptocogs::binance
 ```
 
 The install is **self-contained**: OpenSSL and libcurl are resolved via
 `find_dependency`, and the header-only `nlohmann_json` is vendored into the
 prefix — a consumer needs no separate `nlohmann_json` (if you already use your
-own, note that the bundled copy sits on krakenapi's include path). `IxWsConnection`
+own, note that the bundled copy sits on cryptocogs's include path). `IxWsConnection`
 (the real WebSocket transport) still needs `ixwebsocket` linked separately, as it
 is not part of the installed package. The install rules are gated by
-`KRAKENAPI_INSTALL` (on for a top-level build, off when krakenapi is pulled in via
+`CRYPTOCOGS_INSTALL` (on for a top-level build, off when cryptocogs is pulled in via
 `FetchContent`).
 
 ### Linker flags (manual)
 
 ```
--L/path/to/krakenapi/build/src -lkrakenapi -lexchange_common -lexchange_http -lcurl -lssl -lcrypto
+-L/path/to/cryptocogs/build/src -lkraken -lexchange_common -lexchange_http -lcurl -lssl -lcrypto
 ```
 
 For WebSocket support, also link against ixwebsocket:
@@ -581,8 +581,8 @@ across twelve executables (six Kraken/common, six Binance):
 | `test_binance_rest_requests` / `test_binance_rest_responses` / `test_binance_client` | REST request building, JSON parsing, signed round-trip |
 | `test_binance_ws_client` | Binance market-stream + trading-WS-API lifecycle with `MockWsConnection` |
 
-With `-DKRAKENAPI_BUILD_KRAKEN=OFF`, 147 tests build and run (the Binance suite
-plus the exchange-agnostic `TickPrice` tests); with `-DKRAKENAPI_BUILD_BINANCE=OFF`,
+With `-DCRYPTOCOGS_BUILD_KRAKEN=OFF`, 147 tests build and run (the Binance suite
+plus the exchange-agnostic `TickPrice` tests); with `-DCRYPTOCOGS_BUILD_BINANCE=OFF`,
 the 176 Kraken/common tests.
 
 ---

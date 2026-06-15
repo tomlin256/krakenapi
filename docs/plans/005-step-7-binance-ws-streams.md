@@ -24,7 +24,7 @@ drive Binance streams with zero client changes.
    of the common client types, URL constant, event types, ack,
    `binance_stream_frame_descriptor`, `TypedStreamSubscribeRequest<PushMsg>`,
    aliases, and the conn-based factory all live here. No new `.cpp` enters
-   `binanceapi` (everything is inline, like Kraken's `ws_api.hpp`), and the
+   `binance` (everything is inline, like Kraken's `ws_api.hpp`), and the
    header does **not** include `ix_ws_connection.hpp` — so includers don't
    inherit an ixwebsocket dependency.
 
@@ -185,7 +185,7 @@ to the appendix like the REST ones): `kSubscribeAckJson`
 ### Tests — new `tests/unit/test_binance_ws_client.cpp` (+ CMake executable)
 
 `add_executable(test_binance_ws_client test_binance_ws_client.cpp)` linked
-`binanceapi GTest::gtest_main` (pattern of the other Binance binaries).
+`binance GTest::gtest_main` (pattern of the other Binance binaries).
 
 - Descriptor: success ack → `MethodResponse`, `correlation_id=="1"`; error
   ack → `MethodResponse`, `correlation_id=="7"`; wrapped push →
@@ -383,7 +383,7 @@ are fine here — this is a live example, not a unit test.)
 ```cmake
 add_executable(binance_ws_client_example examples/binance/binance_ws_client_example.cpp)
 target_link_libraries(binance_ws_client_example
-    binanceapi ixwebsocket spdlog::spdlog CLI11::CLI11 example_backward
+    binance ixwebsocket spdlog::spdlog CLI11::CLI11 example_backward
 )
 ```
 (matches `binance_rest_client_example` + the ixwebsocket link the Kraken WS

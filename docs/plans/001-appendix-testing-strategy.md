@@ -60,7 +60,7 @@ Beyond the mocked unit tests, the deliverable includes two **runnable client exa
 | `examples/binance_rest_client_example.cpp` | `rest_client_example.cpp` | `BinanceRestClient` against every public REST endpoint, one CLI11 subcommand each (`ping`, `time`, `exchangeinfo`, `ticker`, `book`, `klines`, `trades`); `curl_global_init`/`cleanup` lifecycle; spdlog field logging. |
 | `examples/binance_ws_client_example.cpp` | `ws_client_example.cpp` | `make_binance_stream_client(url)` + typed `TypedStreamSubscribeRequest` subscriptions, one CLI11 subcommand per stream; push-callback logging; `SubscriptionHandle::cancel()`; **multi-stream-on-one-connection** demo (the Binance-natural form of the Kraken connection-reuse demo). |
 
-Both are wired into `tests/CMakeLists.txt` exactly like their Kraken counterparts (Step 8): the REST example links `binanceapi spdlog CLI11 example_backward`; the WS example additionally links `ixwebsocket`. They are covered by the build (CI compiles all examples); the WS example is *not* part of `ctest` since it opens a live socket — same treatment as `ws_client_example`.
+Both are wired into `tests/CMakeLists.txt` exactly like their Kraken counterparts (Step 8): the REST example links `binance spdlog CLI11 example_backward`; the WS example additionally links `ixwebsocket`. They are covered by the build (CI compiles all examples); the WS example is *not* part of `ctest` since it opens a live socket — same treatment as `ws_client_example`.
 
 ## Per-step deliverables (summary)
 

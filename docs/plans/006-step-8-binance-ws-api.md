@@ -27,7 +27,7 @@ explicitly deferred by plan 001.
    same namespace — the two surfaces are independently includable and
    co-includable (duplicate `using` re-exports of the same common names are
    legal identical redeclarations; the unit binary includes both and proves
-   it). No new `.cpp` enters `binanceapi`; no ixwebsocket include.
+   it). No new `.cpp` enters `binance`; no ixwebsocket include.
 
 2. **Factory mirrors plan 005 decision 2 exactly** — conn-based in the header:
 
@@ -296,8 +296,8 @@ with zero changes to the generic client.
   adapter).
 
 ### CMake
-None — `test_binance_ws_client` already links `binanceapi krakenapi`
-(the generic `ExchangeWsClient` impl lives in `libkrakenapi.a` until Step 9's
+None — `test_binance_ws_client` already links `binance cryptocogs`
+(the generic `ExchangeWsClient` impl lives in `libkraken.a` until Step 9's
 `exchange_common` extraction).
 
 ### Checkpoint commit
@@ -320,7 +320,7 @@ exit `ok ? 0 : 1`. Wall-clock timeout acceptable (live example, not a test).
 
 ### CMake (`tests/CMakeLists.txt`)
 Same pattern + comment as `binance_ws_client_example`
-(`binanceapi krakenapi ixwebsocket spdlog::spdlog CLI11::CLI11 example_backward`).
+(`binance cryptocogs ixwebsocket spdlog::spdlog CLI11::CLI11 example_backward`).
 
 ### Verification
 Full build + full ctest green, then the live `ping` run.
@@ -358,7 +358,7 @@ separate `docs: mark plan 006 done` commit, per precedent.
   times out). Binance omits the id only for malformed JSON, which our
   `to_json()` cannot produce. Same accepted note as plan 005.
 - **`ws_api.hpp` pulls OpenSSL headers** (via `auth.hpp`) into its includers.
-  `binanceapi` already links OpenSSL; `ws_streams.hpp` users are unaffected.
+  `binance` already links OpenSSL; `ws_streams.hpp` users are unaffected.
   Cosmetic, noted.
 - **Namespace co-habitation**: both Binance WS headers re-export the same
   common names into `exchange::binance::ws` — identical using-declarations

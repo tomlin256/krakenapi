@@ -151,11 +151,11 @@ std::string symbols_query_value(const std::vector<std::string>& symbols);
 ### CMake — `tests/unit/CMakeLists.txt`
 ```cmake
 add_executable(test_binance_rest_requests test_binance_rest_requests.cpp)
-target_link_libraries(test_binance_rest_requests binanceapi GTest::gtest_main)
+target_link_libraries(test_binance_rest_requests binance GTest::gtest_main)
 gtest_discover_tests(test_binance_rest_requests)
 
 add_executable(test_binance_rest_responses test_binance_rest_responses.cpp)
-target_link_libraries(test_binance_rest_responses binanceapi GTest::gtest_main)
+target_link_libraries(test_binance_rest_responses binance GTest::gtest_main)
 gtest_discover_tests(test_binance_rest_responses)
 ```
 
@@ -429,7 +429,7 @@ CLI11 app, one subcommand per endpoint, mirroring
 ```cmake
 add_executable(binance_rest_client_example examples/binance/binance_rest_client_example.cpp)
 target_link_libraries(binance_rest_client_example
-    binanceapi spdlog::spdlog CLI11::CLI11 example_backward
+    binance spdlog::spdlog CLI11::CLI11 example_backward
 )
 ```
 

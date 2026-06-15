@@ -47,11 +47,11 @@ Three peer static libraries:
 
 - `exchange_common` — the generic engine, always built. **Never edited by an
   adapter.**
-- `krakenapi`, `binanceapi` — peers, each linking `exchange_common PUBLIC`;
+- `kraken`, `binance` — peers, each linking `exchange_common PUBLIC`;
   neither links the other.
 
-Your new exchange becomes a **fourth peer** library, `<name>api`, behind a
-`KRAKENAPI_BUILD_<NAME>` flag (default `ON`). When the flag is `OFF`, none of its
+Your new exchange becomes a **fourth peer** library, `<name>`, behind a
+`CRYPTOCOGS_BUILD_<NAME>` flag (default `ON`). When the flag is `OFF`, none of its
 targets exist. See [checklist item 8](#3--implementation-checklist) and
 reference commits `9e73dc1`, `28179fd`.
 
@@ -245,22 +245,22 @@ pattern from (and a commit for the non-obvious ones). `<name>` is your slug.
 | 6 | **WS structs + `<name>_frame_descriptor`** *(+ separate `ws_streams.hpp` if the exchange splits stream vs. trading protocols)* | `include/exchange/<name>/ws_api.hpp` *(`ws_streams.hpp`)* | `exchange/binance/ws_api.hpp`, `exchange/binance/ws_streams.hpp` · `7d461fc`, `398d2a8` |
 | 7 | **WS client alias + factory** (header-only) | in `ws_api.hpp` / `ws_streams.hpp` — bare `using` alias + `inline make_<name>_*_client` | inline factories in `exchange/binance/ws_api.hpp` + `ws_streams.hpp`; separate-header style: `exchange/kraken/ws_client.hpp` |
 | — | **WS source** — *almost never needed*; only if you have genuinely non-template WS code | `src/<name>/ws_client.cpp` | *(Binance has none — header-only)* |
-| 8 | **CMake wiring** | `KRAKENAPI_BUILD_<NAME>` option + guard in `CMakeLists.txt`; `<name>api` target in `src/CMakeLists.txt`; test + example targets behind the guard in `tests/CMakeLists.txt` + `tests/unit/CMakeLists.txt` | Binance blocks in each · `9e73dc1`, `28179fd` |
+| 8 | **CMake wiring** | `CRYPTOCOGS_BUILD_<NAME>` option + guard in `CMakeLists.txt`; `<name>` target in `src/CMakeLists.txt`; test + example targets behind the guard in `tests/CMakeLists.txt` + `tests/unit/CMakeLists.txt` | Binance blocks in each · `9e73dc1`, `28179fd` |
 | 9 | **WS fixtures + tests** | `tests/unit/<name>_ws_example_json.hpp`, `test_<name>_ws_client.cpp` | `binance_ws_stream_example_json.hpp`, `binance_ws_api_example_json.hpp`, `test_binance_ws_client.cpp` · `b833587`, `d9592c7` |
 | 10 | **REST CLI example** | `tests/examples/<name>/<name>_rest_client_example.cpp` | `tests/examples/binance/binance_rest_client_example.cpp` |
 | 11 | **WS CLI example** | `tests/examples/<name>/<name>_ws_client_example.cpp` | `tests/examples/binance/binance_ws_client_example.cpp`, `binance_ws_api_example.cpp` |
 
 ### CMake specifics (item 8)
 
-- `src/CMakeLists.txt`: `add_library(<name>api STATIC <name>/rest_client.cpp)`
-  inside `if(KRAKENAPI_BUILD_<NAME>)`; link
+- `src/CMakeLists.txt`: `add_library(<name> STATIC <name>/rest_client.cpp)`
+  inside `if(CRYPTOCOGS_BUILD_<NAME>)`; link
   `PUBLIC exchange_common OpenSSL::SSL OpenSSL::Crypto CURL::libcurl`
   (OpenSSL/curl are **PUBLIC** — your `auth.hpp`/`rest_client.hpp` expose them
   inline; see `9e73dc1`).
-- `tests/*`: wrap your test/example targets in `if(KRAKENAPI_BUILD_<NAME>)`.
-  Link tests `<name>api GTest::gtest_main`. WS tests/examples need **only**
-  `<name>api` (it reaches the engine via `exchange_common` — do **not** add
-  `krakenapi`). WS examples also link `ixwebsocket spdlog::spdlog CLI11::CLI11
+- `tests/*`: wrap your test/example targets in `if(CRYPTOCOGS_BUILD_<NAME>)`.
+  Link tests `<name> GTest::gtest_main`. WS tests/examples need **only**
+  `<name>` (it reaches the engine via `exchange_common` — do **not** add
+  `kraken`). WS examples also link `ixwebsocket spdlog::spdlog CLI11::CLI11
   example_backward`.
 
 ### Test patterns (no network — ever)
@@ -283,7 +283,7 @@ These apply to every adapter and are easy to miss:
 
 - **File banner** on every `.hpp`/`.inl`/`.cpp` — the exact MIT block from
   `CLAUDE.md`, before `#pragma once`. (Markdown docs are exempt.)
-- **`KRAKENAPI_BUILD_<NAME>` defaults `ON`.** If your exchange needs a compat
+- **`CRYPTOCOGS_BUILD_<NAME>` defaults `ON`.** If your exchange needs a compat
   shim, add the matching configure-time dependency rule.
 - **REST numbers arrive as JSON strings** — deserialise monetary/qty fields with
   `std::stod(j.value("field", "0"))`, never `.get<double>()`. For prices that
@@ -310,7 +310,7 @@ Declare the integration complete only when **all** hold:
    auth, REST, and WS suites.
 3. Both CLI examples run against the **live** exchange and print parsed output
    (public endpoints need no credentials).
-4. `cmake -B build -DKRAKENAPI_BUILD_<NAME>=OFF && cmake --build build` succeeds
+4. `cmake -B build -DCRYPTOCOGS_BUILD_<NAME>=OFF && cmake --build build` succeeds
    with **no trace** of your exchange's targets — the decoupling proof, exactly
    as Step 9's matrix cell 3 proved for Binance.
 
