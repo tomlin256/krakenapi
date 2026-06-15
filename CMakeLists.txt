@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15...4.2)
-project(KRAKENAPI VERSION 0.1.1 LANGUAGES CXX)
+project(CRYPTOCOGS VERSION 0.2.0 LANGUAGES CXX)
 
 # Allow fetched dependencies that declare cmake_minimum_required < 3.5
 # (CMake 4.x removed compatibility below 3.5)
@@ -18,25 +18,25 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Library options
 #-------------------------------------------------------------------------------
 
-option(KRAKENAPI_BUILD_KRAKEN  "Build the Kraken exchange adapter"  ON)
-option(KRAKENAPI_BUILD_BINANCE "Build the Binance exchange adapter" ON)
-option(KRAKENAPI_BUILD_TESTS "Build tests" ON)
+option(CRYPTOCOGS_BUILD_KRAKEN  "Build the Kraken exchange adapter"  ON)
+option(CRYPTOCOGS_BUILD_BINANCE "Build the Binance exchange adapter" ON)
+option(CRYPTOCOGS_BUILD_TESTS "Build tests" ON)
 
 # Dependency rules between the exchange/feature flags, checked at configure time.
-if(NOT KRAKENAPI_BUILD_KRAKEN AND NOT KRAKENAPI_BUILD_BINANCE)
+if(NOT CRYPTOCOGS_BUILD_KRAKEN AND NOT CRYPTOCOGS_BUILD_BINANCE)
     message(WARNING
-        "Both KRAKENAPI_BUILD_KRAKEN and KRAKENAPI_BUILD_BINANCE are OFF — nothing will be built.")
+        "Both CRYPTOCOGS_BUILD_KRAKEN and CRYPTOCOGS_BUILD_BINANCE are OFF — nothing will be built.")
 endif()
 
 # Generate install + package-config rules by default for a top-level build;
-# off when krakenapi is pulled in as a subproject (e.g. via FetchContent), so it
+# off when cryptocogs is pulled in as a subproject (e.g. via FetchContent), so it
 # never pollutes a parent project's install.
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set(_kapi_install_default ON)
 else()
     set(_kapi_install_default OFF)
 endif()
-option(KRAKENAPI_INSTALL "Generate install rules and a CMake package config" ${_kapi_install_default})
+option(CRYPTOCOGS_INSTALL "Generate install rules and a CMake package config" ${_kapi_install_default})
 
 #-------------------------------------------------------------------------------
 # Find OpenSSL
@@ -54,7 +54,7 @@ find_package(CURL REQUIRED)
 # A sensible json library
 #
 # JSON_Install OFF: nlohmann ships its own install rules; we don't want them
-# polluting a krakenapi install — its headers are vendored explicitly from the
+# polluting a cryptocogs install — its headers are vendored explicitly from the
 # install block below.
 #-------------------------------------------------------------------------------
 
@@ -72,10 +72,10 @@ FetchContent_MakeAvailable(nlohmann_json)
 
 add_subdirectory(src)
 
-if(KRAKENAPI_BUILD_TESTS)
+if(CRYPTOCOGS_BUILD_TESTS)
   #-----------------------------------------------------------------------------
   # ixwebsocket — used only by examples + tests (no core library links it), so
-  # it is fetched here and never installed by krakenapi.
+  # it is fetched here and never installed by cryptocogs.
   #-----------------------------------------------------------------------------
   FetchContent_Declare(
     ixwebsocket
@@ -105,27 +105,27 @@ endif()
 #-------------------------------------------------------------------------------
 # Install + CMake package config (plan 012)
 #
-# Lets a downstream project `find_package(krakenapi)` and link
-# `krakenapi::krakenapi` / `krakenapi::binanceapi` against an installed prefix.
-# The library targets are added to the krakenapiTargets export in src/.
+# Lets a downstream project `find_package(cryptocogs)` and link
+# `cryptocogs::kraken` / `cryptocogs::binance` against an installed prefix.
+# The library targets are added to the cryptocogsTargets export in src/.
 #-------------------------------------------------------------------------------
 
-if(KRAKENAPI_INSTALL)
+if(CRYPTOCOGS_INSTALL)
   include(CMakePackageConfigHelpers)
 
-  install(EXPORT krakenapiTargets
-          NAMESPACE   krakenapi::
-          FILE        krakenapiTargets.cmake
-          DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/krakenapi)
+  install(EXPORT cryptocogsTargets
+          NAMESPACE   cryptocogs::
+          FILE        cryptocogsTargets.cmake
+          DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/cryptocogs)
 
   # Public headers — component-gated to match the build flags.
   install(DIRECTORY include/exchange/common
           DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/exchange)
-  if(KRAKENAPI_BUILD_KRAKEN)
+  if(CRYPTOCOGS_BUILD_KRAKEN)
     install(DIRECTORY include/exchange/kraken
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/exchange)
   endif()
-  if(KRAKENAPI_BUILD_BINANCE)
+  if(CRYPTOCOGS_BUILD_BINANCE)
     install(DIRECTORY include/exchange/binance
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/exchange)
   endif()
@@ -138,15 +138,15 @@ if(KRAKENAPI_INSTALL)
           DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
   configure_package_config_file(
-      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/krakenapiConfig.cmake.in
-      ${CMAKE_CURRENT_BINARY_DIR}/krakenapiConfig.cmake
-      INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/krakenapi)
+      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/cryptocogsConfig.cmake.in
+      ${CMAKE_CURRENT_BINARY_DIR}/cryptocogsConfig.cmake
+      INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/cryptocogs)
   write_basic_package_version_file(
-      ${CMAKE_CURRENT_BINARY_DIR}/krakenapiConfigVersion.cmake
+      ${CMAKE_CURRENT_BINARY_DIR}/cryptocogsConfigVersion.cmake
       VERSION       ${PROJECT_VERSION}
       COMPATIBILITY SameMajorVersion)
   install(FILES
-          ${CMAKE_CURRENT_BINARY_DIR}/krakenapiConfig.cmake
-          ${CMAKE_CURRENT_BINARY_DIR}/krakenapiConfigVersion.cmake
-          DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/krakenapi)
+          ${CMAKE_CURRENT_BINARY_DIR}/cryptocogsConfig.cmake
+          ${CMAKE_CURRENT_BINARY_DIR}/cryptocogsConfigVersion.cmake
+          DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/cryptocogs)
 endif()

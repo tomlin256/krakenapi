@@ -2,7 +2,7 @@
 # Common scaffold — generic, exchange-agnostic ExchangeWsClient implementation.
 #
 # This is the one piece of non-template WS-client code shared across every
-# exchange adapter. It is a genuine extraction from krakenapi (Step 9): both
+# exchange adapter. It is a genuine extraction from cryptocogs (Step 9): both
 # exchange libraries link it PUBLIC, so a Binance-only build never references
 # the Kraken library. It needs nlohmann_json transitively, but NOT OpenSSL or
 # libcurl — the generic dispatch loop does no crypto or HTTP itself.
@@ -12,7 +12,7 @@ add_library(exchange_common STATIC
     exchange/common/ws_client.cpp
     exchange/common/tick_price.cpp
 )
-add_library(krakenapi::common ALIAS exchange_common)
+add_library(cryptocogs::common ALIAS exchange_common)
 target_include_directories(exchange_common PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
     $<INSTALL_INTERFACE:include>
@@ -38,7 +38,7 @@ target_link_libraries(exchange_common PUBLIC
 add_library(exchange_http STATIC
     exchange/common/http_client.cpp
 )
-add_library(krakenapi::http ALIAS exchange_http)
+add_library(cryptocogs::http ALIAS exchange_http)
 target_include_directories(exchange_http PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
     $<INSTALL_INTERFACE:include>
@@ -51,15 +51,15 @@ target_link_libraries(exchange_http PUBLIC
 # Kraken exchange adapter
 #-------------------------------------------------------------------------------
 
-if(KRAKENAPI_BUILD_KRAKEN)
-    add_library(krakenapi STATIC
+if(CRYPTOCOGS_BUILD_KRAKEN)
+    add_library(kraken STATIC
         kraken/rest_client.cpp
     )
-    add_library(krakenapi::krakenapi ALIAS krakenapi)
+    add_library(cryptocogs::kraken ALIAS kraken)
     # exchange_http supplies the shared CurlHttpClient (and libcurl, PUBLIC).
     # OpenSSL stays PUBLIC because auth.hpp's inline HMAC/SHA is exposed in a
     # public header.
-    target_link_libraries(krakenapi
+    target_link_libraries(kraken
         PUBLIC exchange_common exchange_http OpenSSL::SSL OpenSSL::Crypto
     )
 endif()
@@ -68,39 +68,39 @@ endif()
 # Binance exchange adapter (Step 4+)
 #-------------------------------------------------------------------------------
 
-if(KRAKENAPI_BUILD_BINANCE)
-    add_library(binanceapi STATIC
+if(CRYPTOCOGS_BUILD_BINANCE)
+    add_library(binance STATIC
         binance/rest_client.cpp
         # No binance/ws_client.cpp: the Binance WS streams + API are header-only
         # (BinanceStreamClient / BinanceWsApiClient are bare aliases for
         # ExchangeWsClient; their factories are inline). The generic impl comes
         # from exchange_common, exactly as it does for Kraken.
     )
-    add_library(krakenapi::binanceapi ALIAS binanceapi)
+    add_library(cryptocogs::binance ALIAS binance)
     # exchange_http supplies the shared CurlHttpClient (and libcurl, PUBLIC).
     # OpenSSL stays PUBLIC because auth.hpp's inline HMAC/SHA is exposed in a
     # public header.
-    target_link_libraries(binanceapi
+    target_link_libraries(binance
         PUBLIC exchange_common exchange_http OpenSSL::SSL OpenSSL::Crypto
     )
 endif()
 
 #-------------------------------------------------------------------------------
-# Install the library targets into the krakenapiTargets export set (plan 012).
+# Install the library targets into the cryptocogsTargets export set (plan 012).
 # The export itself + headers + package config are installed from the top-level
 # CMakeLists. The two common libs are always present; the adapters only if their
 # flag built them.
 #-------------------------------------------------------------------------------
 
-if(KRAKENAPI_INSTALL)
-    set(_kapi_targets exchange_common exchange_http)
-    if(TARGET krakenapi)
-        list(APPEND _kapi_targets krakenapi)
+if(CRYPTOCOGS_INSTALL)
+    set(_cryptocogs_targets exchange_common exchange_http)
+    if(TARGET kraken)
+        list(APPEND _cryptocogs_targets kraken)
     endif()
-    if(TARGET binanceapi)
-        list(APPEND _kapi_targets binanceapi)
+    if(TARGET binance)
+        list(APPEND _cryptocogs_targets binance)
     endif()
-    install(TARGETS ${_kapi_targets}
-            EXPORT      krakenapiTargets
+    install(TARGETS ${_cryptocogs_targets}
+            EXPORT      cryptocogsTargets
             ARCHIVE     DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()

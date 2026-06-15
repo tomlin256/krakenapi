@@ -13,7 +13,7 @@ gtest_discover_tests(test_tick_price)
 # Kraken unit tests
 #-------------------------------------------------------------------------------
 
-if(KRAKENAPI_BUILD_KRAKEN)
+if(CRYPTOCOGS_BUILD_KRAKEN)
     add_executable(kraken_unit_tests
         test_rest_requests.cpp
         test_rest_responses.cpp
@@ -23,24 +23,24 @@ if(KRAKENAPI_BUILD_KRAKEN)
     )
     target_link_libraries(kraken_unit_tests
         kapi
-        krakenapi
+        kraken
         GTest::gtest_main
     )
     gtest_discover_tests(kraken_unit_tests)
 
     # WebSocket client unit tests (no network I/O – mock connection only)
     add_executable(test_ws_client test_ws_client.cpp)
-    target_link_libraries(test_ws_client krakenapi GTest::gtest_main)
+    target_link_libraries(test_ws_client kraken GTest::gtest_main)
     gtest_discover_tests(test_ws_client)
 
     # WebSocket response parsing unit tests (sample JSON → from_json verification)
     add_executable(test_ws_responses test_ws_responses.cpp)
-    target_link_libraries(test_ws_responses krakenapi GTest::gtest_main)
+    target_link_libraries(test_ws_responses kraken GTest::gtest_main)
     gtest_discover_tests(test_ws_responses)
 
     # OrderType to_string/from_string unit tests (generic vs. Kraken wire format)
     add_executable(test_order_type test_order_type.cpp)
-    target_link_libraries(test_order_type krakenapi GTest::gtest_main)
+    target_link_libraries(test_order_type kraken GTest::gtest_main)
     gtest_discover_tests(test_order_type)
 
     # WsReconnectSession unit tests (no network I/O; header-only — links no
@@ -57,35 +57,35 @@ endif()
 # Binance unit tests
 #-------------------------------------------------------------------------------
 
-if(KRAKENAPI_BUILD_BINANCE)
+if(CRYPTOCOGS_BUILD_BINANCE)
     # Binance auth + REST infrastructure unit tests (Step 4)
     add_executable(test_binance_auth test_binance_auth.cpp)
-    target_link_libraries(test_binance_auth binanceapi GTest::gtest_main)
+    target_link_libraries(test_binance_auth binance GTest::gtest_main)
     gtest_discover_tests(test_binance_auth)
 
     # Binance enum converter unit tests (Step 6.1)
     add_executable(test_binance_types test_binance_types.cpp)
-    target_link_libraries(test_binance_types binanceapi GTest::gtest_main)
+    target_link_libraries(test_binance_types binance GTest::gtest_main)
     gtest_discover_tests(test_binance_types)
 
     # Binance REST public market-data unit tests (Step 5.1)
     add_executable(test_binance_rest_requests test_binance_rest_requests.cpp)
-    target_link_libraries(test_binance_rest_requests binanceapi GTest::gtest_main)
+    target_link_libraries(test_binance_rest_requests binance GTest::gtest_main)
     gtest_discover_tests(test_binance_rest_requests)
 
     add_executable(test_binance_rest_responses test_binance_rest_responses.cpp)
-    target_link_libraries(test_binance_rest_responses binanceapi GTest::gtest_main)
+    target_link_libraries(test_binance_rest_responses binance GTest::gtest_main)
     gtest_discover_tests(test_binance_rest_responses)
 
     # Binance signed client round-trip unit tests (Step 6.5 — mock performer only)
     add_executable(test_binance_client test_binance_client.cpp)
-    target_link_libraries(test_binance_client binanceapi GTest::gtest_main)
+    target_link_libraries(test_binance_client binance GTest::gtest_main)
     gtest_discover_tests(test_binance_client)
 
     # Binance WebSocket stream + WS-API unit tests (Steps 7/8 — mock connection
     # only). The generic ExchangeWsClient impl comes from exchange_common via
-    # binanceapi's PUBLIC link — no krakenapi reference.
+    # binance's PUBLIC link — no kraken reference.
     add_executable(test_binance_ws_client test_binance_ws_client.cpp)
-    target_link_libraries(test_binance_ws_client binanceapi GTest::gtest_main)
+    target_link_libraries(test_binance_ws_client binance GTest::gtest_main)
     gtest_discover_tests(test_binance_ws_client)
 endif()
