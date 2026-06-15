@@ -1,5 +1,5 @@
 // =============================================================================
-// krakenapi — A type-safe C++ library for the Kraken Spot REST and WebSocket v2 APIs
+// cryptocogs — A type-safe C++ library for the Kraken and Binance Spot REST and WebSocket APIs
 //
 // Copyright (c) 2026 Rob Tomlin
 //
