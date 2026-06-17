@@ -59,6 +59,8 @@ if(CRYPTOCOGS_BUILD_KRAKEN)
         kraken/auth.cpp
         kraken/rest_api.cpp
         kraken/rest_client.cpp
+        kraken/ws_api.cpp
+        kraken/ws_client.cpp
     )
     add_library(cryptocogs::kraken ALIAS kraken)
     # exchange_http supplies the shared CurlHttpClient (and libcurl, PUBLIC).

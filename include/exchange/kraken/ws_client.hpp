@@ -48,13 +48,9 @@ inline constexpr std::string_view PRIVATE_WS_URL = "wss://ws-auth.kraken.com/v2"
 // Callers call conn->connect() themselves or use the URL overload in
 // exchange/common/ix_ws_connection.hpp (which does it automatically).
 
-inline std::shared_ptr<KrakenWsClient>
+// Defined in src/kraken/ws_client.cpp.
+std::shared_ptr<KrakenWsClient>
 make_kraken_ws_client(std::shared_ptr<IWsConnection>   conn,
-                      std::shared_ptr<IWsErrorHandler>  error_handler = nullptr) {
-    return exchange::ws::make_exchange_ws_client(
-        std::move(conn),
-        kraken_frame_descriptor,
-        std::move(error_handler));
-}
+                      std::shared_ptr<IWsErrorHandler>  error_handler = nullptr);
 
 } // namespace exchange::kraken::ws
