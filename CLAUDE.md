@@ -54,7 +54,7 @@ cryptocogs/
 │   │   │   │                            #     kraken_frame_descriptor
 │   │   │   └── ws_client.hpp            #   KrakenWsClient alias, PUBLIC/PRIVATE_WS_URL, make_kraken_ws_client()
 │   │   └── binance/                     # Binance adapter — exchange::binance::, ::rest::, ::ws::
-│   │       ├── auth.hpp                 #   BinanceCredentials, BinanceAuth (IRestAuth; inline HMAC-SHA256)
+│   │       ├── auth.hpp                 #   BinanceCredentials, BinanceAuth (IRestAuth; HMAC-SHA256)
 │   │       ├── types.hpp                #   Binance enums + converters; re-exports canonical enums
 │   │       ├── rest_api.hpp             #   All Binance REST req/resp types + parse_binance_response<T>
 │   │       ├── rest_client.hpp          #   BinanceRestClient — typed libcurl executor
@@ -62,17 +62,27 @@ cryptocogs/
 │   │       │                            #     BinanceStreamClient alias, make_binance_stream_client(), STREAM_URL
 │   │       └── ws_api.hpp               #   Trading WS API: order.place/cancel/ping, signed params,
 │   │                                    #     binance_ws_api_frame_descriptor, make_binance_ws_api_client(), WS_API_URL
-├── src/
+├── src/                                 # Headers are purely declarative (plan 016): every
+│   │                                    #   non-template body lives in a .cpp here, every
+│   │                                    #   template body in a sibling .inl under include/.
+│   │                                    #   Sole exception: ix_ws_connection.hpp stays
+│   │                                    #   header-only (D1) so the libs never link ixwebsocket.
 │   ├── CMakeLists.txt                   # Three peer libs: exchange_common (always),
 │   │                                    #   kraken (KRAKEN), binance (BINANCE)
 │   ├── exchange/common/
 │   │   ├── ws_client.cpp                # ExchangeWsClient non-template impl → libexchange_common.a
-│   │   ├── tick_price.cpp               # TickPrice::from_json → libexchange_common.a
+│   │   ├── ws.cpp                       # SubscriptionHandle + RateLimitedWsErrorHandler → libexchange_common.a
+│   │   ├── types.cpp                    # Canonical enum converters → libexchange_common.a
+│   │   ├── tick_price.cpp               # TickPrice from()/str()/to_json()/from_json → libexchange_common.a
 │   │   └── http_client.cpp             # CurlHttpClient — shared libcurl transport → libexchange_http.a
-│   ├── kraken/
-│   │   └── rest_client.cpp              # KrakenRestClient ctors (transport is shared CurlHttpClient)
-│   └── binance/
-│       └── rest_client.cpp              # BinanceRestClient ctors (transport is shared; WS is header-only)
+│   ├── kraken/                          # → libkraken.a
+│   │   ├── types.cpp  auth.cpp          #   enum converters, crypto/sign/nonce
+│   │   ├── rest_api.cpp  rest_client.cpp #   request build() + response from_json; client ctors + factory
+│   │   └── ws_api.cpp  ws_client.cpp    #   WS to_json/from_json, identify_message, descriptor; make_kraken_ws_client
+│   └── binance/                         # → libbinance.a
+│       ├── types.cpp  auth.cpp          #   enum converters, HMAC-SHA256 helpers
+│       ├── rest_api.cpp  rest_client.cpp #   request build() + response from_json; client ctors + factory
+│       └── ws_streams.cpp  ws_api.cpp   #   stream events + descriptor + factory; trading API + signing
 └── tests/
     ├── CMakeLists.txt                   # Fetches spdlog/CLI11/backward-cpp; wires examples + unit tests
     ├── examples/
@@ -564,8 +574,9 @@ Captured wire formats live in
 ### Authentication (`exchange/binance/auth.hpp`, `exchange::binance::rest::`)
 
 `BinanceAuth : exchange::rest::IRestAuth` signs private REST requests; the crypto
-helpers (`detail::hmac_sha256`, `detail::to_hex`) are **inline in the header** —
-there is no `auth.cpp`. The signed payload is `query + body`, appended as a
+helpers (`detail::hmac_sha256`, `detail::to_hex`) are declared in the header and
+defined in `src/binance/auth.cpp` (plan 016 — they are also used by the WS-API
+signer). The signed payload is `query + body`, appended as a
 `signature=<hex>` parameter, with `X-MBX-APIKEY` carrying the key.
 
 ### REST (`exchange/binance/{rest_api,rest_client}.hpp`, `exchange::binance::rest::`)
@@ -993,9 +1004,9 @@ Place the banner before `#pragma once` (for headers) or before the first `#inclu
 - JSON serialisation uses `to_json()` / `from_json()` static methods on each struct. Prefer `j.value("key", default)` over `j.at("key")` for fields that may be absent in responses.
 - Enum conversions are done by free functions `to_string(Enum)` and `foo_from_string(const std::string&)`. The canonical four (`Side`, `OrderType`, `TimeInForce`, `OrderStatus`) live in `exchange/common/types.hpp`; Kraken-only enums (`PriceType`, `TriggerReference`, `StpType`, `FeePreference`) and Kraken's hyphenated `OrderType` overrides (`kraken_order_type_to_string`/`from_string`) live in `exchange/kraken/types.hpp`. All throw `std::invalid_argument` on unknown values.
 - Monetary / volume fields returned by the REST API arrive as JSON **strings** (e.g., `"1.5"`) — deserialise with `std::stod(j.value("field", "0"))` rather than `.get<double>()`. For prices that must round-trip to an *exact* decimal string (e.g. for order placement), use `TickPrice` instead of raw `double` formatting — see [Shared types reference](#tickprice--exact-decimal-price-representation).
-- The build produces **four** static libraries — two always-built common libs plus the two adapters. `exchange_common` compiles the exchange-agnostic non-template code — `src/exchange/common/ws_client.cpp` (generic WS dispatch) and `tick_price.cpp` (`TickPrice::from_json`) — and links only `nlohmann_json` (`PUBLIC`), **not** OpenSSL/libcurl (the WS engine needs no HTTP/crypto). `exchange_http` compiles `src/exchange/common/http_client.cpp` (the shared `CurlHttpClient` REST transport) and links `CURL::libcurl` + `nlohmann_json` (`PUBLIC`) — kept separate so `exchange_common` stays curl-free (plan 010). `kraken` (`src/kraken/rest_client.cpp`) and `binance` (`src/binance/rest_client.cpp`) are **peers**: each links `exchange_common`, `exchange_http`, and OpenSSL (`PUBLIC`), and **neither links the other**. OpenSSL is `PUBLIC` because `auth.hpp` exposes inline HMAC/SHA in a public header; libcurl reaches consumers transitively through `exchange_http`. After plan 010 the two `rest_client.cpp` files hold only their constructors — the curl handling lives once in `CurlHttpClient`. None of the libraries link ixwebsocket; callers that use `IxWsConnection` must link `ixwebsocket` separately.
+- The build produces **four** static libraries — two always-built common libs plus the two adapters. `exchange_common` compiles the exchange-agnostic non-template code — `src/exchange/common/{ws_client,ws,types,tick_price}.cpp` (generic WS dispatch, `SubscriptionHandle`/`RateLimitedWsErrorHandler`, canonical enum converters, `TickPrice`) — and links only `nlohmann_json` (`PUBLIC`), **not** OpenSSL/libcurl (the WS engine needs no HTTP/crypto). `exchange_http` compiles `src/exchange/common/http_client.cpp` (the shared `CurlHttpClient` REST transport) and links `CURL::libcurl` + `nlohmann_json` (`PUBLIC`) — kept separate so `exchange_common` stays curl-free (plan 010). `kraken` (six `.cpp` under `src/kraken/`: types, auth, rest_api, rest_client, ws_api, ws_client) and `binance` (six under `src/binance/`: types, auth, rest_api, rest_client, ws_streams, ws_api) are **peers**: each links `exchange_common`, `exchange_http`, and OpenSSL (`PUBLIC`), and **neither links the other**. OpenSSL is `PUBLIC` because `auth.hpp` declares HMAC/SHA helpers in a public header (defined in `auth.cpp`); libcurl reaches consumers transitively through `exchange_http`. After plan 010 the curl handling lives once in `CurlHttpClient`; after plan 016 every adapter header is purely declarative — request/response bodies live in these `.cpp` files and template bodies in sibling `.inl` files. None of the libraries link ixwebsocket; callers that use `IxWsConnection` must link `ixwebsocket` separately.
 - IXWebSocket and spdlog are **not** linked into any of the three libraries; they are used only by examples and tests.
-- Template methods for `ExchangeWsClient` live in `exchange/common/ws_client.inl` (included at the bottom of the `.hpp`). Non-template methods live in `src/exchange/common/ws_client.cpp`. Both are exchange-agnostic — Kraken contributes no `.cpp`/`.inl` for the WS client, only `kraken_frame_descriptor()` and its request/response types. Keep this split consistent when adding new methods.
+- Template methods for `ExchangeWsClient` live in `exchange/common/ws_client.inl` (included at the bottom of the `.hpp`). Non-template methods live in `src/exchange/common/ws_client.cpp`. The generic client itself is exchange-agnostic; each adapter supplies its `*_frame_descriptor()` plus its WS request/response types — whose bodies, post-plan-016, live in the adapter's `ws_api.cpp` (Kraken also has `ws_client.cpp` for `make_kraken_ws_client`; its `TypedSubscribeRequest` template bodies are in `ws_api.inl`). Keep the hpp/inl/cpp split consistent when adding new methods.
 - Push callbacks stored in `subscriptions_` are type-erased to `std::function<void(const json&)>` internally; the typed lambda wrapper is created once in the template method and stored at subscription time.
 - **The deprecated `kraken::` / `kraken_*.hpp` compatibility shim was removed in v0.1.1** ([plan 014](docs/plans/014-remove-compat-shim.md)). `exchange::kraken::*` is the only Kraken surface; the [migration guide](docs/plans/001-appendix-migration-guide.md) maps every old name to its replacement.
 

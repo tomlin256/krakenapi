@@ -21,4 +21,4 @@
 | 013 | [Source-compat shim for legacy `src/kraken_{ws,rest}_client.cpp` paths](plans/013-source-compat-shim.md) | Done · removed in 014 |
 | 014 | [Remove the deprecated `kraken_*.hpp` / `kraken::` compatibility shim (header + source)](plans/014-remove-compat-shim.md) | Done |
 | 015 | [Rename the project `krakenapi` → `cryptocogs`](plans/015-rename-to-cryptocogs.md) | Done |
-| 016 | [Make all headers purely declarative (project-wide hpp/inl/cpp split)](plans/016-declarative-headers.md) | Proposed |
+| 016 | [Make all headers purely declarative (project-wide hpp/inl/cpp split)](plans/016-declarative-headers.md) | Done |

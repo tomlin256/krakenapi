@@ -1,7 +1,7 @@
 # Plan 016 — Make all headers purely declarative (project-wide hpp/inl/cpp split)
 
-**Status:** Proposed (awaiting approval)
-**Branch:** `feature/declarative-headers` (do not implement on `main`)
+**Status:** Done
+**Branch:** `feature/declarative-headers`
 
 ## 1. Motivation
 
