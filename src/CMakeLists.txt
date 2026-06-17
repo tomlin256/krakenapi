@@ -77,6 +77,8 @@ endif()
 
 if(CRYPTOCOGS_BUILD_BINANCE)
     add_library(binance STATIC
+        binance/types.cpp
+        binance/auth.cpp
         binance/rest_client.cpp
         # No binance/ws_client.cpp: the Binance WS streams + API are header-only
         # (BinanceStreamClient / BinanceWsApiClient are bare aliases for
