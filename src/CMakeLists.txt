@@ -57,6 +57,7 @@ if(CRYPTOCOGS_BUILD_KRAKEN)
     add_library(kraken STATIC
         kraken/types.cpp
         kraken/auth.cpp
+        kraken/rest_api.cpp
         kraken/rest_client.cpp
     )
     add_library(cryptocogs::kraken ALIAS kraken)

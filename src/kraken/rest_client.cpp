@@ -29,4 +29,9 @@ KrakenRestClient::KrakenRestClient(std::function<std::string(const HttpRequest&)
       })
 {}
 
+// Factory used by unit tests to inject a mock HTTP performer (body only).
+KrakenRestClient make_test_client(std::function<std::string(const HttpRequest&)> fn) {
+    return KrakenRestClient(std::move(fn));
+}
+
 } // namespace exchange::kraken::rest

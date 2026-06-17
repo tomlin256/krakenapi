@@ -37,41 +37,17 @@ public:
     KrakenRestClient(const KrakenRestClient&) = delete;
     KrakenRestClient& operator=(const KrakenRestClient&) = delete;
 
-    // Execute a public request (no credentials required).
+    // Execute a public request (no credentials required). Defined in rest_client.inl.
     template<typename Req,
              typename = std::enable_if_t<std::is_base_of_v<PublicRequest, Req>>>
     exchange::kraken::RestResponse<typename Req::response_type>
-    execute(const Req& req) {
-        using Resp = typename Req::response_type;
-        try {
-            auto http = req.build();
-            const HttpResponse r = perform_(http);
-            return exchange::kraken::parse_rest_response<Resp>(json::parse(r.body));
-        } catch (const std::exception& e) {
-            // Transport / malformed-body failures fold into the envelope so
-            // `resp.ok` is the single failure check (review M2).
-            exchange::kraken::RestResponse<Resp> err;
-            err.errors.push_back(std::string("request failed: ") + e.what());
-            return err;
-        }
-    }
+    execute(const Req& req);
 
-    // Execute a private request (credentials required).
+    // Execute a private request (credentials required). Defined in rest_client.inl.
     template<typename Req,
              typename = std::enable_if_t<std::is_base_of_v<PrivateRequest, Req>>>
     exchange::kraken::RestResponse<typename Req::response_type>
-    execute(const Req& req, const Credentials& creds) {
-        using Resp = typename Req::response_type;
-        try {
-            auto http = req.build(creds);
-            const HttpResponse r = perform_(http);
-            return exchange::kraken::parse_rest_response<Resp>(json::parse(r.body));
-        } catch (const std::exception& e) {
-            exchange::kraken::RestResponse<Resp> err;
-            err.errors.push_back(std::string("request failed: ") + e.what());
-            return err;
-        }
-    }
+    execute(const Req& req, const Credentials& creds);
 
 private:
     // Test constructor — injects a body-only performer (Kraken keys errors off
@@ -85,8 +61,9 @@ private:
 };
 
 // Factory used by unit tests to inject a mock HTTP performer (body only).
-inline KrakenRestClient make_test_client(std::function<std::string(const HttpRequest&)> fn) {
-    return KrakenRestClient(std::move(fn));
-}
+// Defined in src/kraken/rest_client.cpp.
+KrakenRestClient make_test_client(std::function<std::string(const HttpRequest&)> fn);
 
 } // namespace exchange::kraken::rest
+
+#include "exchange/kraken/rest_client.inl"
