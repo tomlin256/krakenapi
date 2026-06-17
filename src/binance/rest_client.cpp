@@ -27,4 +27,10 @@ BinanceRestClient::BinanceRestClient(
     : perform_(std::move(performer))
 {}
 
+// Factory used by unit tests to inject a mock HTTP performer.
+BinanceRestClient
+make_binance_test_client(std::function<HttpResponse(const HttpRequest&)> fn) {
+    return BinanceRestClient(std::move(fn));
+}
+
 } // namespace exchange::binance::rest

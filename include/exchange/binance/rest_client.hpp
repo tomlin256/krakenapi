@@ -38,44 +38,18 @@ public:
     BinanceRestClient(const BinanceRestClient&) = delete;
     BinanceRestClient& operator=(const BinanceRestClient&) = delete;
 
-    // Execute a public request (no credentials required).
+    // Execute a public request (no credentials required). Defined in rest_client.inl.
     template<typename Req,
              typename = std::enable_if_t<std::is_base_of_v<PublicRequest, Req>>>
     exchange::rest::RestResponse<typename Req::response_type>
-    execute(const Req& req) {
-        using Resp = typename Req::response_type;
-        try {
-            auto http = req.build();
-            const HttpResponse r = perform_(http);
-            return parse_binance_response<Resp>(r.status, json::parse(r.body));
-        } catch (const std::exception& e) {
-            // Transport / malformed-body / signing failures fold into the
-            // envelope so `resp.ok` is the single failure check (review M2).
-            exchange::rest::RestResponse<Resp> err;
-            err.errors.push_back(std::string("request failed: ") + e.what());
-            return err;
-        }
-    }
+    execute(const Req& req);
 
     // Execute a private request (BinanceAuth injects timestamp + signature).
+    // Defined in rest_client.inl.
     template<typename Req,
              typename = std::enable_if_t<std::is_base_of_v<PrivateRequest, Req>>>
     exchange::rest::RestResponse<typename Req::response_type>
-    execute(const Req& req, const BinanceAuth& auth) {
-        using Resp = typename Req::response_type;
-        try {
-            auto http = req.build();
-            auth.sign(http);
-            const HttpResponse r = perform_(http);
-            return parse_binance_response<Resp>(r.status, json::parse(r.body));
-        } catch (const std::exception& e) {
-            // Transport / malformed-body / signing failures (incl. a rejected
-            // non-HMAC algorithm) fold into the envelope (review M2).
-            exchange::rest::RestResponse<Resp> err;
-            err.errors.push_back(std::string("request failed: ") + e.what());
-            return err;
-        }
-    }
+    execute(const Req& req, const BinanceAuth& auth);
 
 private:
     // Test constructor — injects a custom performer so unit tests run without curl.
@@ -90,9 +64,10 @@ private:
 };
 
 // Factory used by unit tests to inject a mock HTTP performer.
-inline BinanceRestClient
-make_binance_test_client(std::function<HttpResponse(const HttpRequest&)> fn) {
-    return BinanceRestClient(std::move(fn));
-}
+// Defined in src/binance/rest_client.cpp.
+BinanceRestClient
+make_binance_test_client(std::function<HttpResponse(const HttpRequest&)> fn);
 
 } // namespace exchange::binance::rest
+
+#include "exchange/binance/rest_client.inl"

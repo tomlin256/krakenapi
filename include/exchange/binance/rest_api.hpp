@@ -11,14 +11,10 @@
 
 // exchange/binance/rest_api.hpp
 // Binance Spot REST API — request bases, response envelope, and endpoint types.
+// Member/function bodies are defined in src/binance/rest_api.cpp (non-template)
+// and binance/rest_api.inl (parse_binance_response<T>).
 //
 // Namespace: exchange::binance::rest
-//
-// Steps 5 and 6 add the concrete endpoint request/response types.
-// This file defines the scaffolding those types build on:
-//   - PublicRequest / PrivateRequest marker bases
-//   - TypedPublicRequest<R> / TypedPrivateRequest<R> (compile-time response binding)
-//   - parse_binance_response<T>() — maps (http_status, json) → RestResponse<T>
 
 #include "exchange/binance/types.hpp"
 #include "exchange/common/rest.hpp"
@@ -61,30 +57,11 @@ struct TypedPrivateRequest : PrivateRequest {
     using response_type = R;
 };
 
-// ── Response envelope ─────────────────────────────────────────────────────────
-//
-// Binance has no wrapping envelope — success response is the bare object/array.
-// Error shape: {"code": <negative_int>, "msg": "<description>"}
-// Success signal: HTTP 2xx AND no "code" field in the response body.
+// ── Response envelope (parse_binance_response<T> defined in rest_api.inl) ─────
 
 template<typename T>
 exchange::rest::RestResponse<T>
-parse_binance_response(int http_status, const json& j) {
-    exchange::rest::RestResponse<T> resp;
-    if (http_status < 400 && !(j.is_object() && j.contains("code"))) {
-        resp.ok     = true;
-        resp.result = T::from_json(j);
-    } else {
-        resp.ok = false;
-        std::string msg;
-        if (j.is_object() && j.contains("msg"))
-            msg = j.value("msg", "unknown error");
-        else
-            msg = "HTTP " + std::to_string(http_status);
-        resp.errors.push_back(std::move(msg));
-    }
-    return resp;
-}
+parse_binance_response(int http_status, const json& j);
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -92,57 +69,30 @@ namespace detail {
 
 // Builds the percent-encoded query value Binance expects for multi-symbol
 // requests, e.g. ["BTCUSDT","ETHBTC"] -> "%5B%22BTCUSDT%22%2C%22ETHBTC%22%5D".
-// Hand-escapes only `[`, `]`, `"`, `,` — sufficient because real Binance
-// symbols are uppercase alphanumeric and need no other escaping. This is not
-// a general-purpose URL encoder and is not shared with Kraken's
-// detail::url_encode.
-inline std::string symbols_query_value(const std::vector<std::string>& symbols) {
-    std::string out = "%5B";
-    for (size_t i = 0; i < symbols.size(); ++i) {
-        if (i) out += "%2C";
-        out += "%22";
-        out += symbols[i];
-        out += "%22";
-    }
-    out += "%5D";
-    return out;
-}
+// Hand-escapes only `[`, `]`, `"`, `,`. Defined in src/binance/rest_api.cpp.
+std::string symbols_query_value(const std::vector<std::string>& symbols);
 
 } // namespace detail
 
 // ── GET /api/v3/ping ─────────────────────────────────────────────────────────
 
 struct BinancePing {
-    static BinancePing from_json(const json&) { return {}; }
+    static BinancePing from_json(const json&);
 };
 
 struct BinancePingRequest : TypedPublicRequest<BinancePing> {
-    HttpRequest build() const override {
-        HttpRequest r;
-        r.method = HttpRequest::Method::GET;
-        r.path   = "/api/v3/ping";
-        return r;
-    }
+    HttpRequest build() const override;
 };
 
 // ── GET /api/v3/time ─────────────────────────────────────────────────────────
 
 struct BinanceServerTime {
     int64_t server_time{0};
-    static BinanceServerTime from_json(const json& j) {
-        BinanceServerTime t;
-        t.server_time = j.value("serverTime", int64_t{0});
-        return t;
-    }
+    static BinanceServerTime from_json(const json& j);
 };
 
 struct BinanceServerTimeRequest : TypedPublicRequest<BinanceServerTime> {
-    HttpRequest build() const override {
-        HttpRequest r;
-        r.method = HttpRequest::Method::GET;
-        r.path   = "/api/v3/time";
-        return r;
-    }
+    HttpRequest build() const override;
 };
 
 // ── GET /api/v3/ticker/price ─────────────────────────────────────────────────
@@ -150,26 +100,12 @@ struct BinanceServerTimeRequest : TypedPublicRequest<BinanceServerTime> {
 struct BinanceTickerPriceEntry {
     std::string symbol;
     double      price{0.0};
-    static BinanceTickerPriceEntry from_json(const json& j) {
-        BinanceTickerPriceEntry e;
-        e.symbol = j.value("symbol", "");
-        e.price  = std::stod(j.value("price", "0"));
-        return e;
-    }
+    static BinanceTickerPriceEntry from_json(const json& j);
 };
 
 struct BinanceTickerPrice {
     std::vector<BinanceTickerPriceEntry> entries;
-    static BinanceTickerPrice from_json(const json& j) {
-        BinanceTickerPrice t;
-        if (j.is_array()) {
-            for (const auto& el : j)
-                t.entries.push_back(BinanceTickerPriceEntry::from_json(el));
-        } else {
-            t.entries.push_back(BinanceTickerPriceEntry::from_json(j));
-        }
-        return t;
-    }
+    static BinanceTickerPrice from_json(const json& j);
 };
 
 struct BinanceTickerPriceRequest : TypedPublicRequest<BinanceTickerPrice> {
@@ -177,17 +113,7 @@ struct BinanceTickerPriceRequest : TypedPublicRequest<BinanceTickerPrice> {
     std::optional<std::vector<std::string>> symbols;
 
     // Prefers `symbol` if set, else `symbols`, else neither.
-    HttpRequest build() const override {
-        HttpRequest r;
-        r.method = HttpRequest::Method::GET;
-        r.path   = "/api/v3/ticker/price";
-        if (symbol) {
-            r.query = "symbol=" + *symbol;
-        } else if (symbols && !symbols->empty()) {
-            r.query = "symbols=" + detail::symbols_query_value(*symbols);
-        }
-        return r;
-    }
+    HttpRequest build() const override;
 };
 
 // ── GET /api/v3/depth ────────────────────────────────────────────────────────
@@ -200,31 +126,14 @@ struct BinanceOrderBook {
     int64_t                       last_update_id{0};
     std::vector<BinanceBookLevel> bids;
     std::vector<BinanceBookLevel> asks;
-    static BinanceOrderBook from_json(const json& j) {
-        BinanceOrderBook b;
-        b.last_update_id = j.value("lastUpdateId", int64_t{0});
-        if (j.contains("bids"))
-            for (const auto& row : j["bids"])
-                b.bids.push_back(BinanceBookLevel::from_json(row));
-        if (j.contains("asks"))
-            for (const auto& row : j["asks"])
-                b.asks.push_back(BinanceBookLevel::from_json(row));
-        return b;
-    }
+    static BinanceOrderBook from_json(const json& j);
 };
 
 struct BinanceOrderBookRequest : TypedPublicRequest<BinanceOrderBook> {
     std::string        symbol;
     std::optional<int> limit;
 
-    HttpRequest build() const override {
-        HttpRequest r;
-        r.method = HttpRequest::Method::GET;
-        r.path   = "/api/v3/depth";
-        r.query  = "symbol=" + symbol;
-        if (limit) r.query += "&limit=" + std::to_string(*limit);
-        return r;
-    }
+    HttpRequest build() const override;
 };
 
 // ── GET /api/v3/trades ───────────────────────────────────────────────────────
@@ -237,42 +146,20 @@ struct BinanceTrade {
     int64_t time{0};
     bool    is_buyer_maker{false};
     bool    is_best_match{false};
-    static BinanceTrade from_json(const json& j) {
-        BinanceTrade t;
-        t.id             = j.value("id", int64_t{0});
-        t.price          = std::stod(j.value("price", "0"));
-        t.qty            = std::stod(j.value("qty", "0"));
-        t.quote_qty      = std::stod(j.value("quoteQty", "0"));
-        t.time           = j.value("time", int64_t{0});
-        t.is_buyer_maker = j.value("isBuyerMaker", false);
-        t.is_best_match  = j.value("isBestMatch", false);
-        return t;
-    }
+    static BinanceTrade from_json(const json& j);
 };
 
 struct BinanceTradesResult {
     std::vector<BinanceTrade> trades;
     // Top-level array response.
-    static BinanceTradesResult from_json(const json& j) {
-        BinanceTradesResult r;
-        for (const auto& el : j)
-            r.trades.push_back(BinanceTrade::from_json(el));
-        return r;
-    }
+    static BinanceTradesResult from_json(const json& j);
 };
 
 struct BinanceRecentTradesRequest : TypedPublicRequest<BinanceTradesResult> {
     std::string        symbol;
     std::optional<int> limit;
 
-    HttpRequest build() const override {
-        HttpRequest r;
-        r.method = HttpRequest::Method::GET;
-        r.path   = "/api/v3/trades";
-        r.query  = "symbol=" + symbol;
-        if (limit) r.query += "&limit=" + std::to_string(*limit);
-        return r;
-    }
+    HttpRequest build() const override;
 };
 
 // ── GET /api/v3/klines ───────────────────────────────────────────────────────
@@ -290,32 +177,13 @@ struct BinanceKline {
     double  taker_buy_base_volume{0.0};
     double  taker_buy_quote_volume{0.0};
     // Parses a 12-element positional row; field 11 ("ignore") is dropped.
-    static BinanceKline from_json(const json& row) {
-        BinanceKline k;
-        k.open_time              = row.at(0).get<int64_t>();
-        k.open                   = std::stod(row.at(1).get<std::string>());
-        k.high                   = std::stod(row.at(2).get<std::string>());
-        k.low                    = std::stod(row.at(3).get<std::string>());
-        k.close                  = std::stod(row.at(4).get<std::string>());
-        k.volume                 = std::stod(row.at(5).get<std::string>());
-        k.close_time             = row.at(6).get<int64_t>();
-        k.quote_asset_volume     = std::stod(row.at(7).get<std::string>());
-        k.num_trades             = row.at(8).get<int64_t>();
-        k.taker_buy_base_volume  = std::stod(row.at(9).get<std::string>());
-        k.taker_buy_quote_volume = std::stod(row.at(10).get<std::string>());
-        return k;
-    }
+    static BinanceKline from_json(const json& row);
 };
 
 struct BinanceKlinesResult {
     std::vector<BinanceKline> klines;
     // Top-level array response.
-    static BinanceKlinesResult from_json(const json& j) {
-        BinanceKlinesResult r;
-        for (const auto& row : j)
-            r.klines.push_back(BinanceKline::from_json(row));
-        return r;
-    }
+    static BinanceKlinesResult from_json(const json& j);
 };
 
 struct BinanceKlinesRequest : TypedPublicRequest<BinanceKlinesResult> {
@@ -325,16 +193,7 @@ struct BinanceKlinesRequest : TypedPublicRequest<BinanceKlinesResult> {
     std::optional<int64_t> end_time;
     std::optional<int>     limit;
 
-    HttpRequest build() const override {
-        HttpRequest r;
-        r.method = HttpRequest::Method::GET;
-        r.path   = "/api/v3/klines";
-        r.query  = "symbol=" + symbol + "&interval=" + interval;
-        if (start_time) r.query += "&startTime=" + std::to_string(*start_time);
-        if (end_time)   r.query += "&endTime=" + std::to_string(*end_time);
-        if (limit)      r.query += "&limit=" + std::to_string(*limit);
-        return r;
-    }
+    HttpRequest build() const override;
 };
 
 // ── GET /api/v3/exchangeInfo ─────────────────────────────────────────────────
@@ -355,48 +214,18 @@ struct BinanceSymbolInfo {
     bool                     oco_allowed{false};
     bool                     is_spot_trading_allowed{false};
     bool                     is_margin_trading_allowed{false};
-    static BinanceSymbolInfo from_json(const json& j) {
-        BinanceSymbolInfo s;
-        s.symbol                    = j.value("symbol", "");
-        s.status                    = j.value("status", "");
-        s.base_asset                = j.value("baseAsset", "");
-        s.base_asset_precision      = j.value("baseAssetPrecision", 0);
-        s.quote_asset               = j.value("quoteAsset", "");
-        s.quote_precision           = j.value("quotePrecision", 0);
-        s.quote_asset_precision     = j.value("quoteAssetPrecision", 0);
-        if (j.contains("orderTypes"))
-            for (const auto& ot : j["orderTypes"])
-                s.order_types.push_back(ot.get<std::string>());
-        s.iceberg_allowed           = j.value("icebergAllowed", false);
-        s.oco_allowed               = j.value("ocoAllowed", false);
-        s.is_spot_trading_allowed   = j.value("isSpotTradingAllowed", false);
-        s.is_margin_trading_allowed = j.value("isMarginTradingAllowed", false);
-        return s;
-    }
+    static BinanceSymbolInfo from_json(const json& j);
 };
 
 struct BinanceExchangeInfo {
     std::string                    timezone;
     int64_t                        server_time{0};
     std::vector<BinanceSymbolInfo> symbols;
-    static BinanceExchangeInfo from_json(const json& j) {
-        BinanceExchangeInfo e;
-        e.timezone    = j.value("timezone", "");
-        e.server_time = j.value("serverTime", int64_t{0});
-        if (j.contains("symbols"))
-            for (const auto& s : j["symbols"])
-                e.symbols.push_back(BinanceSymbolInfo::from_json(s));
-        return e;
-    }
+    static BinanceExchangeInfo from_json(const json& j);
 };
 
 struct BinanceExchangeInfoRequest : TypedPublicRequest<BinanceExchangeInfo> {
-    HttpRequest build() const override {
-        HttpRequest r;
-        r.method = HttpRequest::Method::GET;
-        r.path   = "/api/v3/exchangeInfo";
-        return r;
-    }
+    HttpRequest build() const override;
 };
 
 // ── GET /api/v3/ticker/24hr ──────────────────────────────────────────────────
@@ -423,46 +252,13 @@ struct BinanceTicker24hrEntry {
     int64_t     first_id{0};
     int64_t     last_id{0};
     int64_t     count{0};
-    static BinanceTicker24hrEntry from_json(const json& j) {
-        BinanceTicker24hrEntry e;
-        e.symbol               = j.value("symbol", "");
-        e.price_change         = std::stod(j.value("priceChange", "0"));
-        e.price_change_percent = std::stod(j.value("priceChangePercent", "0"));
-        e.weighted_avg_price   = std::stod(j.value("weightedAvgPrice", "0"));
-        e.prev_close_price     = std::stod(j.value("prevClosePrice", "0"));
-        e.last_price           = std::stod(j.value("lastPrice", "0"));
-        e.last_qty             = std::stod(j.value("lastQty", "0"));
-        e.bid_price            = std::stod(j.value("bidPrice", "0"));
-        e.bid_qty              = std::stod(j.value("bidQty", "0"));
-        e.ask_price            = std::stod(j.value("askPrice", "0"));
-        e.ask_qty              = std::stod(j.value("askQty", "0"));
-        e.open_price           = std::stod(j.value("openPrice", "0"));
-        e.high_price           = std::stod(j.value("highPrice", "0"));
-        e.low_price            = std::stod(j.value("lowPrice", "0"));
-        e.volume               = std::stod(j.value("volume", "0"));
-        e.quote_volume         = std::stod(j.value("quoteVolume", "0"));
-        e.open_time            = j.value("openTime", int64_t{0});
-        e.close_time           = j.value("closeTime", int64_t{0});
-        e.first_id             = j.value("firstId", int64_t{0});
-        e.last_id              = j.value("lastId", int64_t{0});
-        e.count                = j.value("count", int64_t{0});
-        return e;
-    }
+    static BinanceTicker24hrEntry from_json(const json& j);
 };
 
 struct BinanceTicker24hr {
     std::vector<BinanceTicker24hrEntry> entries;
     // Single object (symbol= query) or array (symbols=/no query).
-    static BinanceTicker24hr from_json(const json& j) {
-        BinanceTicker24hr t;
-        if (j.is_array()) {
-            for (const auto& el : j)
-                t.entries.push_back(BinanceTicker24hrEntry::from_json(el));
-        } else {
-            t.entries.push_back(BinanceTicker24hrEntry::from_json(j));
-        }
-        return t;
-    }
+    static BinanceTicker24hr from_json(const json& j);
 };
 
 struct BinanceTicker24hrRequest : TypedPublicRequest<BinanceTicker24hr> {
@@ -470,17 +266,7 @@ struct BinanceTicker24hrRequest : TypedPublicRequest<BinanceTicker24hr> {
     std::optional<std::vector<std::string>> symbols;
 
     // Prefers `symbol` if set, else `symbols`, else neither.
-    HttpRequest build() const override {
-        HttpRequest r;
-        r.method = HttpRequest::Method::GET;
-        r.path   = "/api/v3/ticker/24hr";
-        if (symbol) {
-            r.query = "symbol=" + *symbol;
-        } else if (symbols && !symbols->empty()) {
-            r.query = "symbols=" + detail::symbols_query_value(*symbols);
-        }
-        return r;
-    }
+    HttpRequest build() const override;
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -501,14 +287,7 @@ struct BinanceCommissionRates {
     double buyer{0.0};
     double seller{0.0};
 
-    static BinanceCommissionRates from_json(const json& j) {
-        BinanceCommissionRates r;
-        r.maker  = std::stod(j.value("maker", "0"));
-        r.taker  = std::stod(j.value("taker", "0"));
-        r.buyer  = std::stod(j.value("buyer", "0"));
-        r.seller = std::stod(j.value("seller", "0"));
-        return r;
-    }
+    static BinanceCommissionRates from_json(const json& j);
 };
 
 struct BinanceBalance {
@@ -516,13 +295,7 @@ struct BinanceBalance {
     double      free{0.0};
     double      locked{0.0};
 
-    static BinanceBalance from_json(const json& j) {
-        BinanceBalance b;
-        b.asset  = j.value("asset", "");
-        b.free   = std::stod(j.value("free", "0"));
-        b.locked = std::stod(j.value("locked", "0"));
-        return b;
-    }
+    static BinanceBalance from_json(const json& j);
 };
 
 struct BinanceAccount {
@@ -543,38 +316,11 @@ struct BinanceAccount {
     std::vector<std::string>    permissions;
     int64_t                     uid{0};
 
-    static BinanceAccount from_json(const json& j) {
-        BinanceAccount a;
-        a.maker_commission  = j.value("makerCommission", 0);
-        a.taker_commission  = j.value("takerCommission", 0);
-        a.buyer_commission  = j.value("buyerCommission", 0);
-        a.seller_commission = j.value("sellerCommission", 0);
-        if (j.contains("commissionRates"))
-            a.commission_rates = BinanceCommissionRates::from_json(j.at("commissionRates"));
-        a.can_trade                     = j.value("canTrade", false);
-        a.can_withdraw                  = j.value("canWithdraw", false);
-        a.can_deposit                   = j.value("canDeposit", false);
-        a.brokered                      = j.value("brokered", false);
-        a.require_self_trade_prevention = j.value("requireSelfTradePrevention", false);
-        a.prevent_sor                   = j.value("preventSor", false);
-        a.update_time                   = j.value("updateTime", int64_t{0});
-        a.account_type                  = j.value("accountType", "");
-        for (const auto& el : j.value("balances", json::array()))
-            a.balances.push_back(BinanceBalance::from_json(el));
-        for (const auto& el : j.value("permissions", json::array()))
-            a.permissions.push_back(el.get<std::string>());
-        a.uid = j.value("uid", int64_t{0});
-        return a;
-    }
+    static BinanceAccount from_json(const json& j);
 };
 
 struct BinanceAccountRequest : TypedPrivateRequest<BinanceAccount> {
-    HttpRequest build() const override {
-        HttpRequest r;
-        r.method = HttpRequest::Method::GET;
-        r.path   = "/api/v3/account";
-        return r;
-    }
+    HttpRequest build() const override;
 };
 
 // ── GET /api/v3/openOrders and /api/v3/allOrders ─────────────────────────────
@@ -608,42 +354,14 @@ struct BinanceOrderInfo {
     int64_t     working_time{0};
     std::string self_trade_prevention_mode;
 
-    static BinanceOrderInfo from_json(const json& j) {
-        BinanceOrderInfo o;
-        o.symbol                = j.value("symbol", "");
-        o.order_id              = j.value("orderId", int64_t{0});
-        o.order_list_id         = j.value("orderListId", int64_t{-1});
-        o.client_order_id       = j.value("clientOrderId", "");
-        o.price                 = std::stod(j.value("price", "0"));
-        o.orig_qty              = std::stod(j.value("origQty", "0"));
-        o.executed_qty          = std::stod(j.value("executedQty", "0"));
-        o.cummulative_quote_qty = std::stod(j.value("cummulativeQuoteQty", "0"));
-        o.orig_quote_order_qty  = std::stod(j.value("origQuoteOrderQty", "0"));
-        o.status                = binance_order_status_from_string(j.value("status", ""));
-        o.time_in_force         = binance_tif_from_string(j.value("timeInForce", "GTC"));
-        o.type                  = j.value("type", "");
-        o.side                  = binance_side_from_string(j.value("side", "BUY"));
-        o.stop_price            = std::stod(j.value("stopPrice", "0"));
-        o.iceberg_qty           = std::stod(j.value("icebergQty", "0"));
-        o.time                  = j.value("time", int64_t{0});
-        o.update_time           = j.value("updateTime", int64_t{0});
-        o.is_working            = j.value("isWorking", false);
-        o.working_time          = j.value("workingTime", int64_t{0});
-        o.self_trade_prevention_mode = j.value("selfTradePreventionMode", "");
-        return o;
-    }
+    static BinanceOrderInfo from_json(const json& j);
 };
 
 struct BinanceOpenOrdersResult {
     std::vector<BinanceOrderInfo> orders;
 
     // Top-level array.
-    static BinanceOpenOrdersResult from_json(const json& j) {
-        BinanceOpenOrdersResult r;
-        for (const auto& el : j)
-            r.orders.push_back(BinanceOrderInfo::from_json(el));
-        return r;
-    }
+    static BinanceOpenOrdersResult from_json(const json& j);
 };
 
 // Same row shape and wrapper — distinct name per plan 001's endpoint table.
@@ -652,13 +370,7 @@ using BinanceAllOrdersResult = BinanceOpenOrdersResult;
 struct BinanceOpenOrdersRequest : TypedPrivateRequest<BinanceOpenOrdersResult> {
     std::optional<std::string> symbol;  // omit -> open orders across all symbols
 
-    HttpRequest build() const override {
-        HttpRequest r;
-        r.method = HttpRequest::Method::GET;
-        r.path   = "/api/v3/openOrders";
-        if (symbol) r.query = "symbol=" + *symbol;
-        return r;
-    }
+    HttpRequest build() const override;
 };
 
 struct BinanceAllOrdersRequest : TypedPrivateRequest<BinanceAllOrdersResult> {
@@ -668,17 +380,7 @@ struct BinanceAllOrdersRequest : TypedPrivateRequest<BinanceAllOrdersResult> {
     std::optional<int64_t> end_time;
     std::optional<int>     limit;       // default 500, max 1000
 
-    HttpRequest build() const override {
-        HttpRequest r;
-        r.method = HttpRequest::Method::GET;
-        r.path   = "/api/v3/allOrders";
-        r.query  = "symbol=" + symbol;
-        if (order_id)   r.query += "&orderId=" + std::to_string(*order_id);
-        if (start_time) r.query += "&startTime=" + std::to_string(*start_time);
-        if (end_time)   r.query += "&endTime=" + std::to_string(*end_time);
-        if (limit)      r.query += "&limit=" + std::to_string(*limit);
-        return r;
-    }
+    HttpRequest build() const override;
 };
 
 // ── GET /api/v3/myTrades ─────────────────────────────────────────────────────
@@ -698,35 +400,14 @@ struct BinanceMyTrade {
     bool        is_maker{false};
     bool        is_best_match{false};
 
-    static BinanceMyTrade from_json(const json& j) {
-        BinanceMyTrade t;
-        t.symbol           = j.value("symbol", "");
-        t.id               = j.value("id", int64_t{0});
-        t.order_id         = j.value("orderId", int64_t{0});
-        t.order_list_id    = j.value("orderListId", int64_t{-1});
-        t.price            = std::stod(j.value("price", "0"));
-        t.qty              = std::stod(j.value("qty", "0"));
-        t.quote_qty        = std::stod(j.value("quoteQty", "0"));
-        t.commission       = std::stod(j.value("commission", "0"));
-        t.commission_asset = j.value("commissionAsset", "");
-        t.time             = j.value("time", int64_t{0});
-        t.is_buyer         = j.value("isBuyer", false);
-        t.is_maker         = j.value("isMaker", false);
-        t.is_best_match    = j.value("isBestMatch", false);
-        return t;
-    }
+    static BinanceMyTrade from_json(const json& j);
 };
 
 struct BinanceMyTradesResult {
     std::vector<BinanceMyTrade> trades;
 
     // Top-level array.
-    static BinanceMyTradesResult from_json(const json& j) {
-        BinanceMyTradesResult r;
-        for (const auto& el : j)
-            r.trades.push_back(BinanceMyTrade::from_json(el));
-        return r;
-    }
+    static BinanceMyTradesResult from_json(const json& j);
 };
 
 struct BinanceMyTradesRequest : TypedPrivateRequest<BinanceMyTradesResult> {
@@ -737,18 +418,7 @@ struct BinanceMyTradesRequest : TypedPrivateRequest<BinanceMyTradesResult> {
     std::optional<int64_t> from_id;     // trade id to fetch from
     std::optional<int>     limit;       // default 500, max 1000
 
-    HttpRequest build() const override {
-        HttpRequest r;
-        r.method = HttpRequest::Method::GET;
-        r.path   = "/api/v3/myTrades";
-        r.query  = "symbol=" + symbol;
-        if (order_id)   r.query += "&orderId=" + std::to_string(*order_id);
-        if (start_time) r.query += "&startTime=" + std::to_string(*start_time);
-        if (end_time)   r.query += "&endTime=" + std::to_string(*end_time);
-        if (from_id)    r.query += "&fromId=" + std::to_string(*from_id);
-        if (limit)      r.query += "&limit=" + std::to_string(*limit);
-        return r;
-    }
+    HttpRequest build() const override;
 };
 
 // ── POST /api/v3/order ───────────────────────────────────────────────────────
@@ -760,15 +430,7 @@ struct BinanceFill {
     std::string commission_asset;
     int64_t     trade_id{0};
 
-    static BinanceFill from_json(const json& j) {
-        BinanceFill f;
-        f.price            = std::stod(j.value("price", "0"));
-        f.qty              = std::stod(j.value("qty", "0"));
-        f.commission       = std::stod(j.value("commission", "0"));
-        f.commission_asset = j.value("commissionAsset", "");
-        f.trade_id         = j.value("tradeId", int64_t{0});
-        return f;
-    }
+    static BinanceFill from_json(const json& j);
 };
 
 // Covers all three newOrderRespType shapes: ACK fields are always present;
@@ -796,39 +458,7 @@ struct BinanceNewOrderResponse {
     // FULL only (empty otherwise):
     std::vector<BinanceFill> fills;
 
-    static BinanceNewOrderResponse from_json(const json& j) {
-        BinanceNewOrderResponse r;
-        r.symbol          = j.value("symbol", "");
-        r.order_id        = j.value("orderId", int64_t{0});
-        r.order_list_id   = j.value("orderListId", int64_t{-1});
-        r.client_order_id = j.value("clientOrderId", "");
-        r.transact_time   = j.value("transactTime", int64_t{0});
-        if (j.contains("price"))
-            r.price = std::stod(j.at("price").get<std::string>());
-        if (j.contains("origQty"))
-            r.orig_qty = std::stod(j.at("origQty").get<std::string>());
-        if (j.contains("executedQty"))
-            r.executed_qty = std::stod(j.at("executedQty").get<std::string>());
-        if (j.contains("origQuoteOrderQty"))
-            r.orig_quote_order_qty = std::stod(j.at("origQuoteOrderQty").get<std::string>());
-        if (j.contains("cummulativeQuoteQty"))
-            r.cummulative_quote_qty = std::stod(j.at("cummulativeQuoteQty").get<std::string>());
-        if (j.contains("status"))
-            r.status = binance_order_status_from_string(j.at("status").get<std::string>());
-        if (j.contains("timeInForce"))
-            r.time_in_force = binance_tif_from_string(j.at("timeInForce").get<std::string>());
-        if (j.contains("type"))
-            r.type = j.at("type").get<std::string>();
-        if (j.contains("side"))
-            r.side = binance_side_from_string(j.at("side").get<std::string>());
-        if (j.contains("workingTime"))
-            r.working_time = j.at("workingTime").get<int64_t>();
-        if (j.contains("selfTradePreventionMode"))
-            r.self_trade_prevention_mode = j.at("selfTradePreventionMode").get<std::string>();
-        for (const auto& el : j.value("fills", json::array()))
-            r.fills.push_back(BinanceFill::from_json(el));
-        return r;
-    }
+    static BinanceNewOrderResponse from_json(const json& j);
 };
 
 struct BinanceNewOrderRequest : TypedPrivateRequest<BinanceNewOrderResponse> {
@@ -851,26 +481,7 @@ struct BinanceNewOrderRequest : TypedPrivateRequest<BinanceNewOrderResponse> {
     // stance as detail::symbols_query_value. Which params Binance *requires*
     // per order type (e.g. LIMIT needs timeInForce+quantity+price) is
     // enforced server-side; this struct stays a faithful wire mapping.
-    HttpRequest build() const override {
-        HttpRequest r;
-        r.method = HttpRequest::Method::POST;
-        r.path   = "/api/v3/order";
-        r.body   = "symbol=" + symbol;
-        r.body += "&side=" + exchange::binance::binance_side_to_string(side);
-        r.body += "&type=" + exchange::binance::binance_order_type_to_string(type);
-        if (time_in_force)
-            r.body += "&timeInForce=" + exchange::binance::binance_tif_to_string(*time_in_force);
-        if (quantity)            r.body += "&quantity=" + *quantity;
-        if (quote_order_qty)     r.body += "&quoteOrderQty=" + *quote_order_qty;
-        if (price)               r.body += "&price=" + *price;
-        if (new_client_order_id) r.body += "&newClientOrderId=" + *new_client_order_id;
-        if (stop_price)          r.body += "&stopPrice=" + *stop_price;
-        if (iceberg_qty)         r.body += "&icebergQty=" + *iceberg_qty;
-        if (new_order_resp_type)
-            r.body += "&newOrderRespType="
-                    + exchange::binance::binance_order_resp_type_to_string(*new_order_resp_type);
-        return r;
-    }
+    HttpRequest build() const override;
 };
 
 // ── DELETE /api/v3/order and /api/v3/openOrders ──────────────────────────────
@@ -895,26 +506,7 @@ struct BinanceCancelOrderResponse {
     Side        side{Side::Buy};
     std::string self_trade_prevention_mode;
 
-    static BinanceCancelOrderResponse from_json(const json& j) {
-        BinanceCancelOrderResponse r;
-        r.symbol                = j.value("symbol", "");
-        r.orig_client_order_id  = j.value("origClientOrderId", "");
-        r.order_id              = j.value("orderId", int64_t{0});
-        r.order_list_id         = j.value("orderListId", int64_t{-1});
-        r.client_order_id       = j.value("clientOrderId", "");
-        r.transact_time         = j.value("transactTime", int64_t{0});
-        r.price                 = std::stod(j.value("price", "0"));
-        r.orig_qty              = std::stod(j.value("origQty", "0"));
-        r.executed_qty          = std::stod(j.value("executedQty", "0"));
-        r.orig_quote_order_qty  = std::stod(j.value("origQuoteOrderQty", "0"));
-        r.cummulative_quote_qty = std::stod(j.value("cummulativeQuoteQty", "0"));
-        r.status                = binance_order_status_from_string(j.value("status", ""));
-        r.time_in_force         = binance_tif_from_string(j.value("timeInForce", "GTC"));
-        r.type                  = j.value("type", "");
-        r.side                  = binance_side_from_string(j.value("side", "BUY"));
-        r.self_trade_prevention_mode = j.value("selfTradePreventionMode", "");
-        return r;
-    }
+    static BinanceCancelOrderResponse from_json(const json& j);
 };
 
 // Note: DELETE /api/v3/openOrders can interleave OCO cancellation objects
@@ -925,12 +517,7 @@ struct BinanceCancelAllResponse {
     std::vector<BinanceCancelOrderResponse> orders;
 
     // Top-level array.
-    static BinanceCancelAllResponse from_json(const json& j) {
-        BinanceCancelAllResponse r;
-        for (const auto& el : j)
-            r.orders.push_back(BinanceCancelOrderResponse::from_json(el));
-        return r;
-    }
+    static BinanceCancelAllResponse from_json(const json& j);
 };
 
 struct BinanceCancelOrderRequest : TypedPrivateRequest<BinanceCancelOrderResponse> {
@@ -941,32 +528,16 @@ struct BinanceCancelOrderRequest : TypedPrivateRequest<BinanceCancelOrderRespons
 
     // DELETE — params go in the query (BinanceAuth signs query-side for
     // non-POST methods).
-    HttpRequest build() const override {
-        HttpRequest r;
-        r.method = HttpRequest::Method::DELETE;
-        r.path   = "/api/v3/order";
-        r.query  = "symbol=" + symbol;
-        if (order_id)
-            r.query += "&orderId=" + std::to_string(*order_id);
-        if (orig_client_order_id)
-            r.query += "&origClientOrderId=" + *orig_client_order_id;
-        if (new_client_order_id)
-            r.query += "&newClientOrderId=" + *new_client_order_id;
-        return r;
-    }
+    HttpRequest build() const override;
 };
 
 struct BinanceCancelAllOpenOrdersRequest
     : TypedPrivateRequest<BinanceCancelAllResponse> {
     std::string symbol;  // required
 
-    HttpRequest build() const override {
-        HttpRequest r;
-        r.method = HttpRequest::Method::DELETE;
-        r.path   = "/api/v3/openOrders";
-        r.query  = "symbol=" + symbol;
-        return r;
-    }
+    HttpRequest build() const override;
 };
 
 } // namespace exchange::binance::rest
+
+#include "exchange/binance/rest_api.inl"
