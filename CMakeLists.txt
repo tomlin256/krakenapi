@@ -75,7 +75,8 @@ add_subdirectory(src)
 if(CRYPTOCOGS_BUILD_TESTS)
   #-----------------------------------------------------------------------------
   # ixwebsocket — used only by examples + tests (no core library links it), so
-  # it is fetched here and never installed by cryptocogs.
+  # it is fetched here and kept out of the cryptocogs install via
+  # IXWEBSOCKET_INSTALL OFF below (plan 017).
   #-----------------------------------------------------------------------------
   FetchContent_Declare(
     ixwebsocket
@@ -84,6 +85,10 @@ if(CRYPTOCOGS_BUILD_TESTS)
   )
   set(USE_TLS ON CACHE BOOL "" FORCE)
   set(USE_OPEN_SSL ON CACHE BOOL "" FORCE)
+  # ixwebsocket defaults IXWEBSOCKET_INSTALL ON, which would drop its lib,
+  # headers, cmake config and pkgconfig into our prefix. Suppress it — same
+  # treatment as INSTALL_GTEST / JSON_Install (plan 017).
+  set(IXWEBSOCKET_INSTALL OFF CACHE BOOL "" FORCE)
   FetchContent_MakeAvailable(ixwebsocket)
 
   #-----------------------------------------------------------------------------
