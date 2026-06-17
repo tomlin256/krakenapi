@@ -15,50 +15,9 @@
 
 namespace exchange::ws {
 
-// ─────────────────────────────────────────────────────────────────────────────
-// RateLimitedWsErrorHandler
-// ─────────────────────────────────────────────────────────────────────────────
-
-inline RateLimitedWsErrorHandler::RateLimitedWsErrorHandler(
-    std::chrono::milliseconds interval)
-    : interval_us_(std::chrono::duration_cast<std::chrono::microseconds>(interval).count())
-{}
-
-inline void RateLimitedWsErrorHandler::on_malformed_frame(
-    const std::string& /*raw*/, const std::exception& e)
-{
-    const auto count  = ++count_;
-    const auto now_us = std::chrono::duration_cast<std::chrono::microseconds>(
-                            std::chrono::steady_clock::now().time_since_epoch()).count();
-    const auto last   = last_logged_us_.load(std::memory_order_relaxed);
-
-    if (count == 1 || now_us - last >= interval_us_) {
-        last_logged_us_.store(now_us, std::memory_order_relaxed);
-        std::fprintf(stderr,
-            "ExchangeWsClient: failed to parse WebSocket frame"
-            " (total malformed: %llu) — %s\n",
-            static_cast<unsigned long long>(count), e.what());
-    }
-}
-
-inline void RateLimitedWsErrorHandler::on_connection_error(const std::string& reason)
-{
-    std::fprintf(stderr,
-        "ExchangeWsClient: WebSocket connection error — %s\n",
-        reason.c_str());
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SubscriptionHandle::cancel()  —  implemented here because ExchangeWsClient
-// must be fully defined (declared in ws_client.hpp, inl included after it).
-// ─────────────────────────────────────────────────────────────────────────────
-
-inline void SubscriptionHandle::cancel() {
-    if (!active_ || !active_->exchange(false))
-        return;
-    if (auto c = client_.lock())
-        c->cancel_subscription(route_key_, unsub_json_);
-}
+// Note: the non-template bodies for RateLimitedWsErrorHandler and
+// SubscriptionHandle live in src/exchange/common/ws.cpp — this .inl is
+// template-only.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // detail::make_ws_response<T>
@@ -206,20 +165,6 @@ ExchangeWsClient::subscribe(Req req,
         return {std::move(err), SubscriptionHandle{}};
     }
     return fut.get();
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Factory function (conn-based)
-// ─────────────────────────────────────────────────────────────────────────────
-
-inline std::shared_ptr<ExchangeWsClient>
-make_exchange_ws_client(std::shared_ptr<IWsConnection>   conn,
-                        MessageIdentifier                 identifier,
-                        std::shared_ptr<IWsErrorHandler>  error_handler = nullptr) {
-    auto client = std::make_shared<ExchangeWsClient>(
-        std::move(conn), std::move(identifier), std::move(error_handler));
-    client->init();
-    return client;
 }
 
 } // namespace exchange::ws

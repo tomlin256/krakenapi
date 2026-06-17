@@ -109,12 +109,24 @@ private:
     std::mutex                                              subs_mu_;
     std::map<std::string, std::function<void(const json&)>> subscriptions_;
 
-    int64_t gen_req_id() { return next_req_id_.fetch_add(1); }
+    int64_t gen_req_id();
 
     void enqueue_or_send(const std::string& msg);
     void on_open_handler();
     void on_raw_message(const std::string& raw);
 };
+
+// ── Factory (conn-based) ──────────────────────────────────────────────────────
+//
+// Wraps an already-managed IWsConnection with the given identifier and calls
+// init(). Callers call conn->connect() themselves; the URL overload in
+// ix_ws_connection.hpp does it automatically. Defined in
+// src/exchange/common/ws_client.cpp.
+
+std::shared_ptr<ExchangeWsClient>
+make_exchange_ws_client(std::shared_ptr<IWsConnection>   conn,
+                        MessageIdentifier                identifier,
+                        std::shared_ptr<IWsErrorHandler> error_handler = nullptr);
 
 } // namespace exchange::ws
 

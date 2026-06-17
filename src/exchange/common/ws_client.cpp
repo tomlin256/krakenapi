@@ -13,9 +13,7 @@
 
 namespace exchange::ws {
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SubscriptionHandle::cancel()  is implemented in ws_client.inl
-// ─────────────────────────────────────────────────────────────────────────────
+// SubscriptionHandle and RateLimitedWsErrorHandler are implemented in ws.cpp.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ExchangeWsClient
@@ -51,6 +49,8 @@ void ExchangeWsClient::init() {
 void ExchangeWsClient::set_on_disconnect(std::function<void(std::string)> cb) {
     disconnect_cb_ = std::move(cb);
 }
+
+int64_t ExchangeWsClient::gen_req_id() { return next_req_id_.fetch_add(1); }
 
 void ExchangeWsClient::cancel_subscription(const std::string& route_key,
                                             const std::string& unsub_json) {
@@ -140,6 +140,20 @@ void ExchangeWsClient::on_raw_message(const std::string& raw) {
         case FrameKind::Unknown:
             break;
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Factory (conn-based)
+// ─────────────────────────────────────────────────────────────────────────────
+
+std::shared_ptr<ExchangeWsClient>
+make_exchange_ws_client(std::shared_ptr<IWsConnection>   conn,
+                        MessageIdentifier                identifier,
+                        std::shared_ptr<IWsErrorHandler> error_handler) {
+    auto client = std::make_shared<ExchangeWsClient>(
+        std::move(conn), std::move(identifier), std::move(error_handler));
+    client->init();
+    return client;
 }
 
 } // namespace exchange::ws

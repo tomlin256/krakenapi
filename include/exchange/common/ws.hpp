@@ -119,7 +119,7 @@ class SubscriptionHandle {
 public:
     SubscriptionHandle() = default;
 
-    bool is_active() const { return active_ && active_->load(); }
+    bool is_active() const;  // defined in src/exchange/common/ws.cpp
 
     // Remove the push callback and send the pre-built unsubscribe frame.
     // Idempotent — safe to call from any thread, including after the client

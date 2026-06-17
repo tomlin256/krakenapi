@@ -16,6 +16,15 @@
 // Include this header (in addition to ws_client.hpp) when you want the real
 // ixwebsocket transport.  Unit tests that use a mock connection should include
 // only ws_client.hpp to avoid pulling in ixwebsocket.
+//
+// DECLARATIVE-HEADER CARVE-OUT (plan 016, decision D1): unlike every other
+// header, this one keeps its implementation inline. It is the only header that
+// #includes <ixwebsocket/...>, and ixwebsocket is (a) fetched only under
+// CRYPTOCOGS_BUILD_TESTS and (b) deliberately not installed (plan 012). Moving
+// these bodies to a .cpp would force a library that links ixwebsocket and would
+// break downstream consumers that use IxWsConnection header-only (linking their
+// own ixwebsocket). Keeping it header-only preserves the "core static libs are
+// ixwebsocket-free" invariant and the install contract.
 
 #include "exchange/common/ws_client.hpp"
 

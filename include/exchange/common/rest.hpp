@@ -59,11 +59,8 @@ struct RestResponse {
     std::optional<T>         result;
     std::vector<std::string> errors;
 
-    bool has_error() const { return !errors.empty(); }
-    const std::string& first_error() const {
-        static const std::string none;
-        return errors.empty() ? none : errors[0];
-    }
+    bool               has_error() const;    // defined in rest.inl
+    const std::string& first_error() const;  // defined in rest.inl
 };
 
 // ── Typed request bases ──────────────────────────────────────────────────────
@@ -90,3 +87,5 @@ struct TypedPrivateRequest {
 };
 
 } // namespace exchange::rest
+
+#include "exchange/common/rest.inl"

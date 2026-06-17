@@ -10,7 +10,9 @@
 
 add_library(exchange_common STATIC
     exchange/common/ws_client.cpp
+    exchange/common/ws.cpp
     exchange/common/tick_price.cpp
+    exchange/common/types.cpp
 )
 add_library(cryptocogs::common ALIAS exchange_common)
 target_include_directories(exchange_common PUBLIC
