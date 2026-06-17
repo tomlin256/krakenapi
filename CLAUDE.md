@@ -131,7 +131,7 @@ cryptocogs/
 - **Fetched automatically** by `FetchContent` at configure time:
   | Library | Version | Used by |
   |---|---|---|
-  | IXWebSocket | v11.4.6 | WebSocket examples + `IxWsConnection` |
+  | IXWebSocket | v12.0.0 | WebSocket examples + `IxWsConnection` |
   | nlohmann/json | v3.12.0 | All JSON parsing |
   | spdlog | v1.17.0 | Examples and tests |
   | Google Test | v1.16.0 | Unit tests |
@@ -153,12 +153,16 @@ it. Turning both exchanges off emits a "nothing will be built" warning.
 **Installing**: `cmake --install build --prefix <p>` lays down the four static
 libs, the public headers (component-gated by the build flags), and a package
 config so a downstream project can `find_package(cryptocogs)` +
-`target_link_libraries(app cryptocogs::kraken)`. The header-only `nlohmann_json`
+`target_link_libraries(app cryptocogs::kraken)` — and inherit the C++17
+requirement automatically (the targets carry `cxx_std_17`, so a consumer need
+not set `CMAKE_CXX_STANDARD` itself; plan 017). The header-only `nlohmann_json`
 is **vendored** into the prefix (it is FetchContent'd and so can't be an export
 dependency); OpenSSL/libcurl resolve via `find_dependency`. ixwebsocket, GTest,
-and backward-cpp are deliberately **not** installed (ixwebsocket is fetched only
-under `CRYPTOCOGS_BUILD_TESTS`). Use `-DCRYPTOCOGS_BUILD_TESTS=OFF` for a clean,
-cryptocogs-only install. See [plan 012](docs/plans/012-install-and-package-config.md).
+and backward-cpp are **not** installed — each fetched dep's own install is
+suppressed (`IXWEBSOCKET_INSTALL` / `INSTALL_GTEST` / `JSON_Install` OFF), so the
+prefix is cryptocogs-only in any config (no need for `-DCRYPTOCOGS_BUILD_TESTS=OFF`).
+See [plan 012](docs/plans/012-install-and-package-config.md) and
+[plan 017](docs/plans/017-cmake-install-nits.md).
 
 ### Common build commands
 

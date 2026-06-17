@@ -1,7 +1,7 @@
 # Plan 017 — Fix two CMake install nits
 
-**Status:** Proposed (awaiting approval)
-**Branch:** `feature/cmake-install-nits` (do not implement on `main`)
+**Status:** Done
+**Branch:** `feature/cmake-install-nits`
 
 ## 1. Motivation
 
