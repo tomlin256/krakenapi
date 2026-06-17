@@ -27,6 +27,10 @@ target_include_directories(exchange_common PUBLIC
 # copy.
 target_link_libraries(exchange_common PUBLIC
     $<BUILD_INTERFACE:nlohmann_json::nlohmann_json>)
+# Export the C++17 requirement so downstream find_package(cryptocogs) consumers
+# inherit it automatically — the top-level CMAKE_CXX_STANDARD is directory-scoped
+# and does not reach the export (plan 017). cxx_std_17 is a floor, not a pin.
+target_compile_features(exchange_common PUBLIC cxx_std_17)
 
 #-------------------------------------------------------------------------------
 # Common HTTP transport — generic libcurl-backed CurlHttpClient (plan 010).
@@ -48,6 +52,7 @@ target_include_directories(exchange_http PUBLIC
 target_link_libraries(exchange_http PUBLIC
     CURL::libcurl
     $<BUILD_INTERFACE:nlohmann_json::nlohmann_json>)
+target_compile_features(exchange_http PUBLIC cxx_std_17)
 
 #-------------------------------------------------------------------------------
 # Kraken exchange adapter
@@ -69,6 +74,7 @@ if(CRYPTOCOGS_BUILD_KRAKEN)
     target_link_libraries(kraken
         PUBLIC exchange_common exchange_http OpenSSL::SSL OpenSSL::Crypto
     )
+    target_compile_features(kraken PUBLIC cxx_std_17)
 endif()
 
 #-------------------------------------------------------------------------------
@@ -97,6 +103,7 @@ if(CRYPTOCOGS_BUILD_BINANCE)
     target_link_libraries(binance
         PUBLIC exchange_common exchange_http OpenSSL::SSL OpenSSL::Crypto
     )
+    target_compile_features(binance PUBLIC cxx_std_17)
 endif()
 
 #-------------------------------------------------------------------------------
