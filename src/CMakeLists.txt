@@ -81,10 +81,14 @@ if(CRYPTOCOGS_BUILD_BINANCE)
         binance/auth.cpp
         binance/rest_api.cpp
         binance/rest_client.cpp
-        # No binance/ws_client.cpp: the Binance WS streams + API are header-only
-        # (BinanceStreamClient / BinanceWsApiClient are bare aliases for
-        # ExchangeWsClient; their factories are inline). The generic impl comes
-        # from exchange_common, exactly as it does for Kraken.
+        # WS streams + trading API: event/request bodies, frame descriptors,
+        # signing, and the conn-based factories live here (plan 016). The
+        # generic ExchangeWsClient impl still comes from exchange_common —
+        # BinanceStreamClient / BinanceWsApiClient remain bare aliases for it.
+        # None of this links ixwebsocket (the URL factory is in the header-only
+        # ix_ws_connection.hpp carve-out).
+        binance/ws_streams.cpp
+        binance/ws_api.cpp
     )
     add_library(cryptocogs::binance ALIAS binance)
     # exchange_http supplies the shared CurlHttpClient (and libcurl, PUBLIC).

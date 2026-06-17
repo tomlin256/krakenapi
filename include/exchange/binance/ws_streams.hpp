@@ -12,13 +12,10 @@
 // exchange/binance/ws_streams.hpp
 // Binance WebSocket market streams — push event types, subscribe scaffold,
 // frame descriptor, and client factory for the combined-stream endpoint.
+// Member/function bodies are defined in src/binance/ws_streams.cpp (non-template)
+// and binance/ws_streams.inl (template).
 //
 // Namespace: exchange::binance::ws
-//
-// Built entirely on exchange::ws::ExchangeWsClient — Binance contributes only
-// a MessageIdentifier (binance_stream_frame_descriptor), event payload types,
-// the SUBSCRIBE/UNSUBSCRIBE request scaffold, and a factory. Wire shapes are
-// documented in docs/plans/001-appendix-binance-message-formats.md §3/§5.
 //
 // This header does not include ix_ws_connection.hpp; for the real transport
 // use the URL overload of exchange::ws::make_exchange_ws_client there.
@@ -26,7 +23,8 @@
 #include "exchange/binance/types.hpp"
 #include "exchange/common/ws_client.hpp"
 
-#include <cctype>
+#include <cstdint>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <string_view>
@@ -56,40 +54,25 @@ using exchange::ws::BaseWsResponse;
 // {"stream":"<name>","data":{…}}, which is what the frame descriptor routes by.
 inline constexpr std::string_view STREAM_URL = "wss://stream.binance.com/stream";
 
-// ── Payload unwrapping ────────────────────────────────────────────────────────
+// ── Payload unwrapping (defined in src/binance/ws_streams.cpp) ───────────────
 
 namespace detail {
 
-// ExchangeWsClient hands the *whole* parsed frame to push callbacks, so on the
-// combined endpoint every event arrives as {"stream":…,"data":{…}}. Bare
-// payloads (documented fixtures, raw /ws single-stream use) have no wrapper.
-// Every event from_json parses through this so both shapes are accepted.
-//
-// Returns a reference into the argument to avoid copying the payload subtree
-// on every push frame. Lifetime contract: the frame must outlive the returned
-// reference — every caller is an event from_json(const json&) using the result
-// within its own body, where the frame is dispatch's lvalue.
-inline const json& stream_payload(const json& j) {
-    // NOLINTNEXTLINE(bugprone-return-const-ref-from-parameter)
-    return j.contains("data") ? j.at("data") : j;
-}
+// On the combined endpoint every event arrives as {"stream":…,"data":{…}};
+// bare payloads have no wrapper. Returns a reference into the argument (the
+// frame must outlive the returned reference).
+const json& stream_payload(const json& j);
 
 // ASCII lowercase — Binance symbols are [A-Z0-9], so no locale concerns.
-inline std::string lower(std::string s) {
-    for (auto& c : s)
-        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return s;
-}
+std::string lower(std::string s);
 
 } // namespace detail
 
 // ── Push event types ──────────────────────────────────────────────────────────
 //
-// Wire shapes per appendix §3. Terse single-letter keys map to named members;
-// string-encoded numbers parse via std::stod (REST convention); ids/times are
-// int64 ms. Documented "ignore" fields (aggTrade/trade "M") are dropped.
-// Every from_json parses through detail::stream_payload, so both wrapped
-// combined-endpoint frames and bare payloads are accepted.
+// Wire shapes per appendix §3. Every from_json parses through
+// detail::stream_payload, so both wrapped combined-endpoint frames and bare
+// payloads are accepted. All from_json bodies are in src/binance/ws_streams.cpp.
 
 // <symbol>@aggTrade
 struct BinanceAggTradeEvent {
@@ -103,20 +86,7 @@ struct BinanceAggTradeEvent {
     int64_t     trade_time{0};        // T
     bool        is_buyer_maker{false}; // m
 
-    static BinanceAggTradeEvent from_json(const json& frame) {
-        const json& j = detail::stream_payload(frame);
-        BinanceAggTradeEvent e;
-        e.event_time     = j.value("E", int64_t{0});
-        e.symbol         = j.value("s", std::string{});
-        e.agg_trade_id   = j.value("a", int64_t{0});
-        e.price          = std::stod(j.value("p", "0"));
-        e.qty            = std::stod(j.value("q", "0"));
-        e.first_trade_id = j.value("f", int64_t{0});
-        e.last_trade_id  = j.value("l", int64_t{0});
-        e.trade_time     = j.value("T", int64_t{0});
-        e.is_buyer_maker = j.value("m", false);
-        return e;
-    }
+    static BinanceAggTradeEvent from_json(const json& frame);
 };
 
 // <symbol>@trade
@@ -129,18 +99,7 @@ struct BinanceTradeEvent {
     int64_t     trade_time{0};        // T
     bool        is_buyer_maker{false}; // m
 
-    static BinanceTradeEvent from_json(const json& frame) {
-        const json& j = detail::stream_payload(frame);
-        BinanceTradeEvent e;
-        e.event_time     = j.value("E", int64_t{0});
-        e.symbol         = j.value("s", std::string{});
-        e.trade_id       = j.value("t", int64_t{0});
-        e.price          = std::stod(j.value("p", "0"));
-        e.qty            = std::stod(j.value("q", "0"));
-        e.trade_time     = j.value("T", int64_t{0});
-        e.is_buyer_maker = j.value("m", false);
-        return e;
-    }
+    static BinanceTradeEvent from_json(const json& frame);
 };
 
 // <symbol>@ticker — rolling 24 h statistics
@@ -168,33 +127,7 @@ struct BinanceTickerEvent {
     int64_t     last_trade_id{0};         // L
     int64_t     num_trades{0};            // n
 
-    static BinanceTickerEvent from_json(const json& frame) {
-        const json& j = detail::stream_payload(frame);
-        BinanceTickerEvent e;
-        e.event_time         = j.value("E", int64_t{0});
-        e.symbol             = j.value("s", std::string{});
-        e.price_change       = std::stod(j.value("p", "0"));
-        e.price_change_pct   = std::stod(j.value("P", "0"));
-        e.weighted_avg_price = std::stod(j.value("w", "0"));
-        e.prev_close         = std::stod(j.value("x", "0"));
-        e.last_price         = std::stod(j.value("c", "0"));
-        e.last_qty           = std::stod(j.value("Q", "0"));
-        e.bid_price          = std::stod(j.value("b", "0"));
-        e.bid_qty            = std::stod(j.value("B", "0"));
-        e.ask_price          = std::stod(j.value("a", "0"));
-        e.ask_qty            = std::stod(j.value("A", "0"));
-        e.open               = std::stod(j.value("o", "0"));
-        e.high               = std::stod(j.value("h", "0"));
-        e.low                = std::stod(j.value("l", "0"));
-        e.volume             = std::stod(j.value("v", "0"));
-        e.quote_volume       = std::stod(j.value("q", "0"));
-        e.stats_open_time    = j.value("O", int64_t{0});
-        e.stats_close_time   = j.value("C", int64_t{0});
-        e.first_trade_id     = j.value("F", int64_t{0});
-        e.last_trade_id      = j.value("L", int64_t{0});
-        e.num_trades         = j.value("n", int64_t{0});
-        return e;
-    }
+    static BinanceTickerEvent from_json(const json& frame);
 };
 
 // <symbol>@miniTicker
@@ -208,19 +141,7 @@ struct BinanceMiniTickerEvent {
     double      volume{0.0};     // v
     double      quote_volume{0.0}; // q
 
-    static BinanceMiniTickerEvent from_json(const json& frame) {
-        const json& j = detail::stream_payload(frame);
-        BinanceMiniTickerEvent e;
-        e.event_time   = j.value("E", int64_t{0});
-        e.symbol       = j.value("s", std::string{});
-        e.close        = std::stod(j.value("c", "0"));
-        e.open         = std::stod(j.value("o", "0"));
-        e.high         = std::stod(j.value("h", "0"));
-        e.low          = std::stod(j.value("l", "0"));
-        e.volume       = std::stod(j.value("v", "0"));
-        e.quote_volume = std::stod(j.value("q", "0"));
-        return e;
-    }
+    static BinanceMiniTickerEvent from_json(const json& frame);
 };
 
 // <symbol>@bookTicker — best bid/ask. The bare payload has no "e"/"E" event
@@ -234,17 +155,7 @@ struct BinanceBookTickerEvent {
     double      ask_price{0.0}; // a
     double      ask_qty{0.0};   // A
 
-    static BinanceBookTickerEvent from_json(const json& frame) {
-        const json& j = detail::stream_payload(frame);
-        BinanceBookTickerEvent e;
-        e.update_id = j.value("u", int64_t{0});
-        e.symbol    = j.value("s", std::string{});
-        e.bid_price = std::stod(j.value("b", "0"));
-        e.bid_qty   = std::stod(j.value("B", "0"));
-        e.ask_price = std::stod(j.value("a", "0"));
-        e.ask_qty   = std::stod(j.value("A", "0"));
-        return e;
-    }
+    static BinanceBookTickerEvent from_json(const json& frame);
 };
 
 // <symbol>@kline_<interval> — candle payload nested under "k". Keyed
@@ -269,26 +180,7 @@ struct BinanceStreamKline {
     bool        is_closed{false};           // x
 
     // Parses the bare "k" object (BinanceKlineEvent extracts it).
-    static BinanceStreamKline from_json(const json& k) {
-        BinanceStreamKline c;
-        c.start_time             = k.value("t", int64_t{0});
-        c.close_time             = k.value("T", int64_t{0});
-        c.symbol                 = k.value("s", std::string{});
-        c.interval               = k.value("i", std::string{});
-        c.first_trade_id         = k.value("f", int64_t{0});
-        c.last_trade_id          = k.value("L", int64_t{0});
-        c.open                   = std::stod(k.value("o", "0"));
-        c.close                  = std::stod(k.value("c", "0"));
-        c.high                   = std::stod(k.value("h", "0"));
-        c.low                    = std::stod(k.value("l", "0"));
-        c.volume                 = std::stod(k.value("v", "0"));
-        c.quote_volume           = std::stod(k.value("q", "0"));
-        c.taker_buy_base_volume  = std::stod(k.value("V", "0"));
-        c.taker_buy_quote_volume = std::stod(k.value("Q", "0"));
-        c.num_trades             = k.value("n", int64_t{0});
-        c.is_closed              = k.value("x", false);
-        return c;
-    }
+    static BinanceStreamKline from_json(const json& k);
 };
 
 struct BinanceKlineEvent {
@@ -296,15 +188,7 @@ struct BinanceKlineEvent {
     std::string        symbol;        // s
     BinanceStreamKline kline;         // k
 
-    static BinanceKlineEvent from_json(const json& frame) {
-        const json& j = detail::stream_payload(frame);
-        BinanceKlineEvent e;
-        e.event_time = j.value("E", int64_t{0});
-        e.symbol     = j.value("s", std::string{});
-        if (j.contains("k"))
-            e.kline = BinanceStreamKline::from_json(j.at("k"));
-        return e;
-    }
+    static BinanceKlineEvent from_json(const json& frame);
 };
 
 // <symbol>@depth — differential book update.
@@ -316,21 +200,7 @@ struct BinanceDepthUpdateEvent {
     std::vector<BinanceBookLevel> bids; // b
     std::vector<BinanceBookLevel> asks; // a
 
-    static BinanceDepthUpdateEvent from_json(const json& frame) {
-        const json& j = detail::stream_payload(frame);
-        BinanceDepthUpdateEvent e;
-        e.event_time      = j.value("E", int64_t{0});
-        e.symbol          = j.value("s", std::string{});
-        e.first_update_id = j.value("U", int64_t{0});
-        e.final_update_id = j.value("u", int64_t{0});
-        if (j.contains("b"))
-            for (const auto& row : j["b"])
-                e.bids.push_back(BinanceBookLevel::from_json(row));
-        if (j.contains("a"))
-            for (const auto& row : j["a"])
-                e.asks.push_back(BinanceBookLevel::from_json(row));
-        return e;
-    }
+    static BinanceDepthUpdateEvent from_json(const json& frame);
 };
 
 // <symbol>@depth<levels> — top-N snapshot. Same shape as the REST order book
@@ -341,18 +211,7 @@ struct BinancePartialDepth {
     std::vector<BinanceBookLevel> bids;
     std::vector<BinanceBookLevel> asks;
 
-    static BinancePartialDepth from_json(const json& frame) {
-        const json& j = detail::stream_payload(frame);
-        BinancePartialDepth d;
-        d.last_update_id = j.value("lastUpdateId", int64_t{0});
-        if (j.contains("bids"))
-            for (const auto& row : j["bids"])
-                d.bids.push_back(BinanceBookLevel::from_json(row));
-        if (j.contains("asks"))
-            for (const auto& row : j["asks"])
-                d.asks.push_back(BinanceBookLevel::from_json(row));
-        return d;
-    }
+    static BinancePartialDepth from_json(const json& frame);
 };
 
 // ── SUBSCRIBE/UNSUBSCRIBE ack ─────────────────────────────────────────────────
@@ -363,93 +222,37 @@ struct BinancePartialDepth {
 struct BinanceStreamAck : exchange::ws::BaseWsResponse {
     int64_t id{0};
 
-    static BinanceStreamAck from_json(const json& j) {
-        BinanceStreamAck a;
-        if (j.contains("id") && !j.at("id").is_null())
-            a.id = j.at("id").get<int64_t>();
-        if (j.contains("error") && !j.at("error").is_null()) {
-            a.success = false;
-            a.error   = j.at("error").value("msg", "");
-        } else {
-            a.success = true;
-        }
-        return a;
-    }
+    static BinanceStreamAck from_json(const json& j);
 };
 
 // ── Frame descriptor (MessageIdentifier) ──────────────────────────────────────
-
-// Classifies combined-endpoint frames per appendix §5:
-//   {"stream":"X@s","data":{…}}            → PushMessage, route_key = "X@s"
-//   {"result"/"error":…, "id":N (non-null)} → MethodResponse, correlation_id = str(N)
-//   anything else (incl. id:null)           → Unknown
 //
-// ExchangeWsClient keys pending handlers by std::to_string(req_id), so the
-// correlation id here must stringify the integer id the same way.
-inline exchange::ws::FrameDescriptor
-binance_stream_frame_descriptor(const json& j) {
-    exchange::ws::FrameDescriptor d;
+// Classifies combined-endpoint frames per appendix §5. Defined in
+// src/binance/ws_streams.cpp.
+exchange::ws::FrameDescriptor binance_stream_frame_descriptor(const json& j);
 
-    if (j.contains("stream")) {
-        d.kind      = FrameKind::PushMessage;
-        d.route_key = j.at("stream").get<std::string>();
-        return d;
-    }
-
-    if (j.contains("id") && !j.at("id").is_null()
-        && (j.contains("result") || j.contains("error"))) {
-        const auto& id   = j.at("id");
-        d.kind           = FrameKind::MethodResponse;
-        d.correlation_id = id.is_string() ? id.get<std::string>()
-                                          : std::to_string(id.get<int64_t>());
-        return d;
-    }
-
-    return d;  // FrameKind::Unknown
-}
-
-// ── Stream-name helpers ───────────────────────────────────────────────────────
+// ── Stream-name helpers (defined in src/binance/ws_streams.cpp) ──────────────
 //
 // Stream names require lowercase symbols with mixed-case suffixes
-// ("btcusdt@aggTrade") while REST symbols are uppercase — a foot-gun these
-// helpers own. The request structs store the stream string verbatim, so
-// exotic streams ("@depth@100ms", "!ticker@arr") stay reachable by passing a
-// raw string; the helpers cover the documented defaults. interval is a raw
-// string, consistent with REST BinanceKlinesRequest.
+// ("btcusdt@aggTrade") while REST symbols are uppercase. The request structs
+// store the stream string verbatim, so exotic streams stay reachable by
+// passing a raw string; the helpers cover the documented defaults.
 
-inline std::string agg_trade_stream(const std::string& symbol) {
-    return detail::lower(symbol) + "@aggTrade";
-}
-inline std::string trade_stream(const std::string& symbol) {
-    return detail::lower(symbol) + "@trade";
-}
-inline std::string kline_stream(const std::string& symbol, const std::string& interval) {
-    return detail::lower(symbol) + "@kline_" + interval;
-}
-inline std::string ticker_stream(const std::string& symbol) {
-    return detail::lower(symbol) + "@ticker";
-}
-inline std::string mini_ticker_stream(const std::string& symbol) {
-    return detail::lower(symbol) + "@miniTicker";
-}
-inline std::string book_ticker_stream(const std::string& symbol) {
-    return detail::lower(symbol) + "@bookTicker";
-}
-inline std::string depth_stream(const std::string& symbol) {
-    return detail::lower(symbol) + "@depth";
-}
-inline std::string partial_depth_stream(const std::string& symbol, int levels) {
-    return detail::lower(symbol) + "@depth" + std::to_string(levels);
-}
+std::string agg_trade_stream(const std::string& symbol);
+std::string trade_stream(const std::string& symbol);
+std::string kline_stream(const std::string& symbol, const std::string& interval);
+std::string ticker_stream(const std::string& symbol);
+std::string mini_ticker_stream(const std::string& symbol);
+std::string book_ticker_stream(const std::string& symbol);
+std::string depth_stream(const std::string& symbol);
+std::string partial_depth_stream(const std::string& symbol, int levels);
 
 // ── Subscribe request scaffold ────────────────────────────────────────────────
 //
 // Satisfies ExchangeWsClient::subscribe_async's structural contract:
 // WsRequestBase req_id slot, push_type/response_type, route_key(),
-// to_json(), unsubscribe_json(). One stream per request — the params array
-// always has exactly one element, matching the one-callback-per-route_key
-// dispatch model (Binance allows batching, but a batched SUBSCRIBE gets a
-// single ack with no per-stream failure signal — out of scope).
+// to_json(), unsubscribe_json(). One stream per request. Member bodies are
+// defined in binance/ws_streams.inl.
 
 template<typename PushMsg>
 struct TypedStreamSubscribeRequest : WsRequestBase {
@@ -458,20 +261,9 @@ struct TypedStreamSubscribeRequest : WsRequestBase {
 
     std::string stream;  // e.g. "btcusdt@aggTrade" — see helpers above
 
-    std::string route_key() const { return stream; }
-
-    json to_json() const {
-        return {{"method", "SUBSCRIBE"},
-                {"params", json::array({stream})},
-                {"id", req_id}};
-    }
-
-    // Pre-built by subscribe_async after req_id assignment; sent on cancel().
-    json unsubscribe_json() const {
-        return {{"method", "UNSUBSCRIBE"},
-                {"params", json::array({stream})},
-                {"id", req_id}};
-    }
+    std::string route_key() const;
+    json        to_json() const;
+    json        unsubscribe_json() const;
 };
 
 using BinanceAggTradeSubscribe     = TypedStreamSubscribeRequest<BinanceAggTradeEvent>;
@@ -494,13 +286,11 @@ using BinancePartialDepthSubscribe = TypedStreamSubscribeRequest<BinancePartialD
 
 using BinanceStreamClient = exchange::ws::ExchangeWsClient;
 
-inline std::shared_ptr<BinanceStreamClient>
+// Defined in src/binance/ws_streams.cpp.
+std::shared_ptr<BinanceStreamClient>
 make_binance_stream_client(std::shared_ptr<IWsConnection>   conn,
-                           std::shared_ptr<IWsErrorHandler>  error_handler = nullptr) {
-    return exchange::ws::make_exchange_ws_client(
-        std::move(conn),
-        binance_stream_frame_descriptor,
-        std::move(error_handler));
-}
+                           std::shared_ptr<IWsErrorHandler>  error_handler = nullptr);
 
 } // namespace exchange::binance::ws
+
+#include "exchange/binance/ws_streams.inl"
