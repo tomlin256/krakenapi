@@ -116,6 +116,10 @@ if(CRYPTOCOGS_BUILD_COINBASE)
         coinbase/types.cpp
         coinbase/rest_api.cpp
         coinbase/rest_client.cpp
+        # WebSocket feed: bespoke CoinbaseStreamClient (plan 018 §2 Option A) over
+        # the shared IWsConnection. No id-correlated ExchangeWsClient here, and no
+        # ixwebsocket link (the example builds the IxWsConnection and passes it in).
+        coinbase/ws_streams.cpp
     )
     add_library(cryptocogs::coinbase ALIAS coinbase)
     # exchange_http supplies the shared CurlHttpClient (and libcurl, PUBLIC).

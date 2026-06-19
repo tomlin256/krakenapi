@@ -118,4 +118,10 @@ if(CRYPTOCOGS_BUILD_COINBASE)
     add_executable(test_coinbase_client test_coinbase_client.cpp)
     target_link_libraries(test_coinbase_client coinbase GTest::gtest_main)
     gtest_discover_tests(test_coinbase_client)
+
+    # Coinbase WebSocket stream client (MockWsConnection only — no network).
+    # Links only coinbase (reaches the IWsConnection interface via exchange_common).
+    add_executable(test_coinbase_ws_client test_coinbase_ws_client.cpp)
+    target_link_libraries(test_coinbase_ws_client coinbase GTest::gtest_main)
+    gtest_discover_tests(test_coinbase_ws_client)
 endif()
