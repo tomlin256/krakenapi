@@ -99,4 +99,9 @@ if(CRYPTOCOGS_BUILD_COINBASE)
     add_executable(test_coinbase_auth test_coinbase_auth.cpp)
     target_link_libraries(test_coinbase_auth coinbase GTest::gtest_main)
     gtest_discover_tests(test_coinbase_auth)
+
+    # Coinbase enum converters + parse_coinbase_response REST envelope
+    add_executable(test_coinbase_types test_coinbase_types.cpp)
+    target_link_libraries(test_coinbase_types coinbase GTest::gtest_main)
+    gtest_discover_tests(test_coinbase_types)
 endif()

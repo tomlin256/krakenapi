@@ -113,6 +113,7 @@ endif()
 if(CRYPTOCOGS_BUILD_COINBASE)
     add_library(coinbase STATIC
         coinbase/auth.cpp
+        coinbase/types.cpp
     )
     add_library(cryptocogs::coinbase ALIAS coinbase)
     # exchange_http supplies the shared CurlHttpClient (and libcurl, PUBLIC).
