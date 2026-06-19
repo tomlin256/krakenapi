@@ -23,5 +23,5 @@
 | 015 | [Rename the project `krakenapi` → `cryptocogs`](plans/015-rename-to-cryptocogs.md) | Done |
 | 016 | [Make all headers purely declarative (project-wide hpp/inl/cpp split)](plans/016-declarative-headers.md) | Done |
 | 017 | [Fix two CMake install nits (ixwebsocket install + cxx_std_17 export)](plans/017-cmake-install-nits.md) | Done |
-| 018 | [Coinbase Exchange adapter — REST + WebSocket](plans/018-coinbase-exchange-adapter.md) | Proposed |
+| 018 | [Coinbase Exchange adapter — REST + WebSocket](plans/018-coinbase-exchange-adapter.md) | Done |
 | 019 | [Coinbase FIX order entry](plans/019-coinbase-fix-order-entry.md) | Proposed (deferred) |

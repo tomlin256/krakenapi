@@ -1,6 +1,7 @@
 # Plan 018 — Coinbase Exchange adapter (REST + WebSocket)
 
-**Status:** Proposed (awaiting approval)
+**Status:** Done (implemented on `feature/coinbase-adapter`; WS model resolved as
+§2 Option A — bespoke `CoinbaseStreamClient`, `exchange_common` untouched)
 **Depends on:** the multi-exchange scaffold (plan 001, complete) and the
 [add-an-exchange playbook](../agent-add-exchange.md), which this plan follows
 row-for-row using **Binance as the worked reference**.
