@@ -115,6 +115,7 @@ if(CRYPTOCOGS_BUILD_COINBASE)
         coinbase/auth.cpp
         coinbase/types.cpp
         coinbase/rest_api.cpp
+        coinbase/rest_client.cpp
     )
     add_library(cryptocogs::coinbase ALIAS coinbase)
     # exchange_http supplies the shared CurlHttpClient (and libcurl, PUBLIC).
