@@ -168,3 +168,27 @@ TEST(CoinbaseClient, TransportException_FoldsIntoEnvelope) {
     ASSERT_FALSE(resp.errors.empty());
     EXPECT_NE(resp.errors[0].find("connection refused"), std::string::npos);
 }
+
+// ── User-Agent (Coinbase rejects requests without one) ───────────────────────
+
+TEST(CoinbaseClient, PublicRequest_SetsDefaultUserAgent) {
+    HttpRequest captured;
+    auto client = make_coinbase_test_client([&](const HttpRequest& h) {
+        captured = h;
+        return HttpResponse{200, std::string(fx::TIME_JSON)};
+    });
+
+    client.execute(CoinbaseServerTimeRequest{});
+    EXPECT_EQ(captured.headers.at("User-Agent"), "cryptocogs");
+}
+
+TEST(CoinbaseClient, PrivateRequest_SetsDefaultUserAgent) {
+    HttpRequest captured;
+    auto client = make_coinbase_test_client([&](const HttpRequest& h) {
+        captured = h;
+        return HttpResponse{200, std::string(fx::ACCOUNTS_JSON)};
+    });
+
+    client.execute(CoinbaseAccountsRequest{}, test_creds());
+    EXPECT_EQ(captured.headers.at("User-Agent"), "cryptocogs");
+}

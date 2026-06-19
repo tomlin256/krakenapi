@@ -22,6 +22,10 @@ CoinbaseRestClient::execute(const Req& req) {
     using Resp = typename Req::response_type;
     try {
         auto http = req.build();
+        // Coinbase rejects requests with no User-Agent ("User-Agent header is
+        // required"); set a default the caller can override.
+        if (http.headers.find("User-Agent") == http.headers.end())
+            http.headers["User-Agent"] = "cryptocogs";
         const HttpResponse r = perform_(http);
         return parse_coinbase_response<Resp>(r.status, json::parse(r.body));
     } catch (const std::exception& e) {
@@ -40,6 +44,8 @@ CoinbaseRestClient::execute(const Req& req, const CoinbaseCredentials& creds) {
     using Resp = typename Req::response_type;
     try {
         auto http = req.build();
+        if (http.headers.find("User-Agent") == http.headers.end())
+            http.headers["User-Agent"] = "cryptocogs";
         CoinbaseAuth(creds).sign(http);
         const HttpResponse r = perform_(http);
         return parse_coinbase_response<Resp>(r.status, json::parse(r.body));
