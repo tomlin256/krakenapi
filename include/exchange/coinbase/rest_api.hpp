@@ -218,4 +218,165 @@ struct CoinbaseStatsRequest : TypedPublicRequest<CoinbaseStats> {
     HttpRequest build() const override;
 };
 
+// ═════════════════════════════════════════════════════════════════════════════
+// Private (authenticated) endpoints
+//
+// build() sets only method/path/query/body; CoinbaseRestClient::execute(req,
+// creds) applies CoinbaseAuth::sign() (CB-ACCESS-* headers) before dispatch.
+// Order price/size/funds are caller-formatted exact decimal strings — produce
+// them with TickPrice::str() when exactness matters.
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ── GET /accounts and /accounts/{id} ─────────────────────────────────────────
+
+struct CoinbaseAccount {
+    std::string id;
+    std::string currency;
+    double      balance{0.0};
+    double      hold{0.0};
+    double      available{0.0};
+    std::string profile_id;
+    bool        trading_enabled{false};
+    static CoinbaseAccount from_json(const json& j);
+};
+
+struct CoinbaseAccountsResult {
+    std::vector<CoinbaseAccount> accounts;
+    // Top-level array.
+    static CoinbaseAccountsResult from_json(const json& j);
+};
+
+struct CoinbaseAccountsRequest : TypedPrivateRequest<CoinbaseAccountsResult> {
+    HttpRequest build() const override;
+};
+
+struct CoinbaseAccountRequest : TypedPrivateRequest<CoinbaseAccount> {
+    std::string account_id;  // required
+    HttpRequest build() const override;
+};
+
+// ── Order record (shared by place / get / list) ──────────────────────────────
+//
+// side/type/time_in_force are kept as raw wire strings (faithful mapping);
+// status_enum is the convenience mapping of the raw `status` (Unknown
+// fallback). When status == "done", done_reason distinguishes "filled" from
+// "canceled".
+
+struct CoinbaseOrder {
+    std::string id;
+    std::string product_id;
+    std::string side;            // "buy" / "sell"
+    std::string type;            // "limit" / "market"
+    double      price{0.0};      // 0 for market orders
+    double      size{0.0};
+    double      funds{0.0};      // market-buy quote amount (0 otherwise)
+    std::string time_in_force;   // "GTC" / "GTT" / "IOC" / "FOK"
+    bool        post_only{false};
+    std::string created_at;
+    double      fill_fees{0.0};
+    double      filled_size{0.0};
+    double      executed_value{0.0};
+    std::string status;          // raw wire status
+    OrderStatus status_enum{OrderStatus::Unknown};
+    bool        settled{false};
+    std::string done_reason;     // "filled" / "canceled" when status == "done"
+    static CoinbaseOrder from_json(const json& j);
+};
+
+struct CoinbaseOrdersResult {
+    std::vector<CoinbaseOrder> orders;
+    // Top-level array.
+    static CoinbaseOrdersResult from_json(const json& j);
+};
+
+// ── POST /orders ─────────────────────────────────────────────────────────────
+
+struct CoinbasePlaceOrderRequest : TypedPrivateRequest<CoinbaseOrder> {
+    std::string product_id;                 // required
+    Side        side{Side::Buy};            // required
+    OrderType   type{OrderType::Limit};     // limit / market
+    std::optional<std::string> client_oid;
+    // limit:
+    std::optional<std::string> price;          // exact decimal string
+    std::optional<std::string> size;           // base size
+    std::optional<TimeInForce> time_in_force;
+    std::optional<bool>        post_only;
+    std::optional<std::string> cancel_after;   // "min"/"hour"/"day" (GTT)
+    // market:
+    std::optional<std::string> funds;          // quote size (market buy)
+    // stop overlay:
+    std::optional<std::string> stop;           // "loss" / "entry"
+    std::optional<std::string> stop_price;
+
+    // Builds the JSON request body (POST /orders).
+    HttpRequest build() const override;
+};
+
+// ── GET /orders and /orders/{id} ─────────────────────────────────────────────
+
+struct CoinbaseGetOrderRequest : TypedPrivateRequest<CoinbaseOrder> {
+    std::string order_id;  // required
+    HttpRequest build() const override;
+};
+
+struct CoinbaseListOrdersRequest : TypedPrivateRequest<CoinbaseOrdersResult> {
+    std::optional<std::string> status;      // "open"/"pending"/"active"/"done"/"all"
+    std::optional<std::string> product_id;
+    HttpRequest build() const override;
+};
+
+// ── DELETE /orders/{id} and DELETE /orders ───────────────────────────────────
+
+// DELETE /orders/{id} returns the cancelled order id as a bare JSON string.
+struct CoinbaseCancelOrderResult {
+    std::string order_id;
+    static CoinbaseCancelOrderResult from_json(const json& j);
+};
+
+// DELETE /orders returns a JSON array of cancelled order-id strings.
+struct CoinbaseCancelAllResult {
+    std::vector<std::string> order_ids;
+    static CoinbaseCancelAllResult from_json(const json& j);
+};
+
+struct CoinbaseCancelOrderRequest : TypedPrivateRequest<CoinbaseCancelOrderResult> {
+    std::string                order_id;     // required
+    std::optional<std::string> product_id;   // optional filter
+    HttpRequest build() const override;
+};
+
+struct CoinbaseCancelAllOrdersRequest : TypedPrivateRequest<CoinbaseCancelAllResult> {
+    std::optional<std::string> product_id;   // optional filter
+    HttpRequest build() const override;
+};
+
+// ── GET /fills ───────────────────────────────────────────────────────────────
+
+struct CoinbaseFill {
+    int64_t     trade_id{0};
+    std::string product_id;
+    std::string order_id;
+    std::string liquidity;   // "M" (maker) / "T" (taker)
+    double      price{0.0};
+    double      size{0.0};
+    double      fee{0.0};
+    std::string created_at;
+    std::string side;        // "buy" / "sell"
+    bool        settled{false};
+    static CoinbaseFill from_json(const json& j);
+};
+
+struct CoinbaseFillsResult {
+    std::vector<CoinbaseFill> fills;
+    // Top-level array.
+    static CoinbaseFillsResult from_json(const json& j);
+};
+
+// Coinbase requires at least one of order_id / product_id.
+struct CoinbaseFillsRequest : TypedPrivateRequest<CoinbaseFillsResult> {
+    std::optional<std::string> order_id;
+    std::optional<std::string> product_id;
+    HttpRequest build() const override;
+};
+
 } // namespace exchange::coinbase::rest

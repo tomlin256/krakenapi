@@ -211,4 +211,177 @@ HttpRequest CoinbaseStatsRequest::build() const {
     return r;
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// Private endpoints
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ── /accounts ────────────────────────────────────────────────────────────────
+
+CoinbaseAccount CoinbaseAccount::from_json(const json& j) {
+    CoinbaseAccount a;
+    a.id              = j.value("id", "");
+    a.currency        = j.value("currency", "");
+    a.balance         = num(j, "balance");
+    a.hold            = num(j, "hold");
+    a.available       = num(j, "available");
+    a.profile_id      = j.value("profile_id", "");
+    a.trading_enabled = j.value("trading_enabled", false);
+    return a;
+}
+
+CoinbaseAccountsResult CoinbaseAccountsResult::from_json(const json& j) {
+    CoinbaseAccountsResult r;
+    for (const auto& row : j)
+        r.accounts.push_back(CoinbaseAccount::from_json(row));
+    return r;
+}
+
+HttpRequest CoinbaseAccountsRequest::build() const {
+    HttpRequest r;
+    r.method = HttpRequest::Method::GET;
+    r.path   = "/accounts";
+    return r;
+}
+
+HttpRequest CoinbaseAccountRequest::build() const {
+    HttpRequest r;
+    r.method = HttpRequest::Method::GET;
+    r.path   = "/accounts/" + account_id;
+    return r;
+}
+
+// ── Order record ─────────────────────────────────────────────────────────────
+
+CoinbaseOrder CoinbaseOrder::from_json(const json& j) {
+    CoinbaseOrder o;
+    o.id             = j.value("id", "");
+    o.product_id     = j.value("product_id", "");
+    o.side           = j.value("side", "");
+    o.type           = j.value("type", "");
+    o.price          = num(j, "price");
+    o.size           = num(j, "size");
+    o.funds          = num(j, "funds");
+    o.time_in_force  = j.value("time_in_force", "");
+    o.post_only      = j.value("post_only", false);
+    o.created_at     = j.value("created_at", "");
+    o.fill_fees      = num(j, "fill_fees");
+    o.filled_size    = num(j, "filled_size");
+    o.executed_value = num(j, "executed_value");
+    o.status         = j.value("status", "");
+    o.status_enum    = coinbase_order_status_from_string(o.status);
+    o.settled        = j.value("settled", false);
+    o.done_reason    = j.value("done_reason", "");
+    return o;
+}
+
+CoinbaseOrdersResult CoinbaseOrdersResult::from_json(const json& j) {
+    CoinbaseOrdersResult r;
+    for (const auto& row : j)
+        r.orders.push_back(CoinbaseOrder::from_json(row));
+    return r;
+}
+
+HttpRequest CoinbasePlaceOrderRequest::build() const {
+    json body;
+    body["product_id"] = product_id;
+    body["side"]       = coinbase_side_to_string(side);
+    body["type"]       = coinbase_order_type_to_string(type);
+    if (client_oid)    body["client_oid"]    = *client_oid;
+    if (price)         body["price"]         = *price;
+    if (size)          body["size"]          = *size;
+    if (funds)         body["funds"]         = *funds;
+    if (time_in_force) body["time_in_force"] = coinbase_tif_to_string(*time_in_force);
+    if (post_only)     body["post_only"]     = *post_only;
+    if (cancel_after)  body["cancel_after"]  = *cancel_after;
+    if (stop)          body["stop"]          = *stop;
+    if (stop_price)    body["stop_price"]    = *stop_price;
+
+    HttpRequest r;
+    r.method = HttpRequest::Method::POST;
+    r.path   = "/orders";
+    r.body   = body.dump();
+    return r;
+}
+
+HttpRequest CoinbaseGetOrderRequest::build() const {
+    HttpRequest r;
+    r.method = HttpRequest::Method::GET;
+    r.path   = "/orders/" + order_id;
+    return r;
+}
+
+HttpRequest CoinbaseListOrdersRequest::build() const {
+    HttpRequest r;
+    r.method = HttpRequest::Method::GET;
+    r.path   = "/orders";
+    if (status)     add_param(r.query, "status", *status);
+    if (product_id) add_param(r.query, "product_id", *product_id);
+    return r;
+}
+
+// ── Order cancellation ───────────────────────────────────────────────────────
+
+CoinbaseCancelOrderResult CoinbaseCancelOrderResult::from_json(const json& j) {
+    CoinbaseCancelOrderResult r;
+    if (j.is_string())      r.order_id = j.get<std::string>();
+    else if (j.is_object()) r.order_id = j.value("id", "");
+    return r;
+}
+
+CoinbaseCancelAllResult CoinbaseCancelAllResult::from_json(const json& j) {
+    CoinbaseCancelAllResult r;
+    for (const auto& el : j)
+        r.order_ids.push_back(el.get<std::string>());
+    return r;
+}
+
+HttpRequest CoinbaseCancelOrderRequest::build() const {
+    HttpRequest r;
+    r.method = HttpRequest::Method::DELETE;
+    r.path   = "/orders/" + order_id;
+    if (product_id) add_param(r.query, "product_id", *product_id);
+    return r;
+}
+
+HttpRequest CoinbaseCancelAllOrdersRequest::build() const {
+    HttpRequest r;
+    r.method = HttpRequest::Method::DELETE;
+    r.path   = "/orders";
+    if (product_id) add_param(r.query, "product_id", *product_id);
+    return r;
+}
+
+// ── /fills ───────────────────────────────────────────────────────────────────
+
+CoinbaseFill CoinbaseFill::from_json(const json& j) {
+    CoinbaseFill f;
+    f.trade_id   = j.value("trade_id", static_cast<int64_t>(0));
+    f.product_id = j.value("product_id", "");
+    f.order_id   = j.value("order_id", "");
+    f.liquidity  = j.value("liquidity", "");
+    f.price      = num(j, "price");
+    f.size       = num(j, "size");
+    f.fee        = num(j, "fee");
+    f.created_at = j.value("created_at", "");
+    f.side       = j.value("side", "");
+    f.settled    = j.value("settled", false);
+    return f;
+}
+
+CoinbaseFillsResult CoinbaseFillsResult::from_json(const json& j) {
+    CoinbaseFillsResult r;
+    for (const auto& row : j)
+        r.fills.push_back(CoinbaseFill::from_json(row));
+    return r;
+}
+
+HttpRequest CoinbaseFillsRequest::build() const {
+    HttpRequest r;
+    r.method = HttpRequest::Method::GET;
+    r.path   = "/fills";
+    if (order_id)   add_param(r.query, "order_id", *order_id);
+    if (product_id) add_param(r.query, "product_id", *product_id);
+    return r;
+}
+
 } // namespace exchange::coinbase::rest

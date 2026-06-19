@@ -12,12 +12,14 @@
 
 #include "exchange/coinbase/rest_api.hpp"
 #include "coinbase_rest_example_json.hpp"
+#include "coinbase_account_example_json.hpp"
 
 #include <gtest/gtest.h>
 
 #include <nlohmann/json.hpp>
 
-using namespace exchange::coinbase::rest;
+using namespace exchange::coinbase;        // OrderStatus
+using namespace exchange::coinbase::rest;  // response types
 using json = nlohmann::json;
 namespace fx = coinbase_fixtures;
 
@@ -112,4 +114,85 @@ TEST(CoinbaseRestResponses, Stats) {
     EXPECT_DOUBLE_EQ(s.last, 63212.41);
     EXPECT_DOUBLE_EQ(s.volume, 4918.33722403);
     EXPECT_DOUBLE_EQ(s.volume_30day, 269980.64976703);
+}
+
+// ── Private responses (synthetic fixtures) ────────────────────────────────────
+
+TEST(CoinbaseRestResponses, Accounts) {
+    auto r = CoinbaseAccountsResult::from_json(json::parse(fx::ACCOUNTS_JSON));
+    ASSERT_EQ(r.accounts.size(), 2u);
+    EXPECT_EQ(r.accounts[0].currency, "USD");
+    EXPECT_DOUBLE_EQ(r.accounts[0].balance, 1000.0);
+    EXPECT_DOUBLE_EQ(r.accounts[0].hold, 50.0);
+    EXPECT_DOUBLE_EQ(r.accounts[0].available, 950.0);
+    EXPECT_TRUE(r.accounts[0].trading_enabled);
+    EXPECT_EQ(r.accounts[1].currency, "BTC");
+}
+
+TEST(CoinbaseRestResponses, SingleAccount) {
+    auto a = CoinbaseAccount::from_json(json::parse(fx::ACCOUNT_JSON));
+    EXPECT_EQ(a.id, "7fd0abc1-0000-4000-8000-000000000001");
+    EXPECT_EQ(a.currency, "USD");
+    EXPECT_DOUBLE_EQ(a.available, 950.0);
+}
+
+TEST(CoinbaseRestResponses, OrderOpen) {
+    auto o = CoinbaseOrder::from_json(json::parse(fx::ORDER_OPEN_JSON));
+    EXPECT_EQ(o.id, "d0c5a4f3-0000-4000-8000-000000000010");
+    EXPECT_EQ(o.product_id, "BTC-USD");
+    EXPECT_EQ(o.side, "buy");
+    EXPECT_EQ(o.type, "limit");
+    EXPECT_DOUBLE_EQ(o.price, 30000.0);
+    EXPECT_DOUBLE_EQ(o.size, 0.01);
+    EXPECT_EQ(o.time_in_force, "GTC");
+    EXPECT_TRUE(o.post_only);
+    EXPECT_EQ(o.status, "open");
+    EXPECT_EQ(o.status_enum, OrderStatus::New);
+    EXPECT_TRUE(o.done_reason.empty());
+    EXPECT_FALSE(o.settled);
+}
+
+TEST(CoinbaseRestResponses, OrderDone_FilledDistinguishedByDoneReason) {
+    auto o = CoinbaseOrder::from_json(json::parse(fx::ORDER_DONE_JSON));
+    EXPECT_EQ(o.side, "sell");
+    EXPECT_EQ(o.status, "done");
+    EXPECT_EQ(o.status_enum, OrderStatus::Filled);
+    EXPECT_EQ(o.done_reason, "filled");
+    EXPECT_DOUBLE_EQ(o.filled_size, 0.01);
+    EXPECT_DOUBLE_EQ(o.fill_fees, 1.5);
+    EXPECT_DOUBLE_EQ(o.executed_value, 300.0);
+    EXPECT_TRUE(o.settled);
+}
+
+TEST(CoinbaseRestResponses, OrdersArray) {
+    auto r = CoinbaseOrdersResult::from_json(json::parse(fx::ORDERS_JSON));
+    ASSERT_EQ(r.orders.size(), 2u);
+    EXPECT_EQ(r.orders[0].status_enum, OrderStatus::New);       // "open"
+    EXPECT_EQ(r.orders[1].type, "market");
+    EXPECT_DOUBLE_EQ(r.orders[1].funds, 150.0);
+    EXPECT_EQ(r.orders[1].status_enum, OrderStatus::PendingNew); // "pending"
+}
+
+TEST(CoinbaseRestResponses, CancelOne_BareString) {
+    auto r = CoinbaseCancelOrderResult::from_json(json::parse(fx::CANCEL_ONE_JSON));
+    EXPECT_EQ(r.order_id, "d0c5a4f3-0000-4000-8000-000000000010");
+}
+
+TEST(CoinbaseRestResponses, CancelAll_StringArray) {
+    auto r = CoinbaseCancelAllResult::from_json(json::parse(fx::CANCEL_ALL_JSON));
+    ASSERT_EQ(r.order_ids.size(), 2u);
+    EXPECT_EQ(r.order_ids[0], "d0c5a4f3-0000-4000-8000-000000000010");
+    EXPECT_EQ(r.order_ids[1], "e1f2a3b4-0000-4000-8000-000000000012");
+}
+
+TEST(CoinbaseRestResponses, Fills) {
+    auto r = CoinbaseFillsResult::from_json(json::parse(fx::FILLS_JSON));
+    ASSERT_EQ(r.fills.size(), 1u);
+    EXPECT_EQ(r.fills[0].trade_id, 74);
+    EXPECT_EQ(r.fills[0].product_id, "BTC-USD");
+    EXPECT_EQ(r.fills[0].liquidity, "T");
+    EXPECT_DOUBLE_EQ(r.fills[0].price, 30000.0);
+    EXPECT_DOUBLE_EQ(r.fills[0].fee, 1.5);
+    EXPECT_EQ(r.fills[0].side, "sell");
+    EXPECT_TRUE(r.fills[0].settled);
 }
