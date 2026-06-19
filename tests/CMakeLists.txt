@@ -92,6 +92,25 @@ if(CRYPTOCOGS_BUILD_BINANCE)
 endif()
 
 #-------------------------------------------------------------------------------
+# Coinbase example apps
+#-------------------------------------------------------------------------------
+
+if(CRYPTOCOGS_BUILD_COINBASE)
+    add_executable(coinbase_rest_client_example examples/coinbase/coinbase_rest_client_example.cpp)
+    target_link_libraries(coinbase_rest_client_example
+        coinbase spdlog::spdlog CLI11::CLI11 example_backward
+    )
+
+    # The bespoke CoinbaseStreamClient reaches the IWsConnection interface via
+    # coinbase's PUBLIC link to exchange_common; the real transport
+    # (IxWsConnection) needs ixwebsocket linked here.
+    add_executable(coinbase_ws_client_example examples/coinbase/coinbase_ws_client_example.cpp)
+    target_link_libraries(coinbase_ws_client_example
+        coinbase ixwebsocket spdlog::spdlog CLI11::CLI11 example_backward
+    )
+endif()
+
+#-------------------------------------------------------------------------------
 # Unit tests
 #-------------------------------------------------------------------------------
 
