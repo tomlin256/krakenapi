@@ -104,4 +104,13 @@ if(CRYPTOCOGS_BUILD_COINBASE)
     add_executable(test_coinbase_types test_coinbase_types.cpp)
     target_link_libraries(test_coinbase_types coinbase GTest::gtest_main)
     gtest_discover_tests(test_coinbase_types)
+
+    # Coinbase REST request building + response parsing
+    add_executable(test_coinbase_rest_requests test_coinbase_rest_requests.cpp)
+    target_link_libraries(test_coinbase_rest_requests coinbase GTest::gtest_main)
+    gtest_discover_tests(test_coinbase_rest_requests)
+
+    add_executable(test_coinbase_rest_responses test_coinbase_rest_responses.cpp)
+    target_link_libraries(test_coinbase_rest_responses coinbase GTest::gtest_main)
+    gtest_discover_tests(test_coinbase_rest_responses)
 endif()
