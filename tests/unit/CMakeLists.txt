@@ -89,3 +89,14 @@ if(CRYPTOCOGS_BUILD_BINANCE)
     target_link_libraries(test_binance_ws_client binance GTest::gtest_main)
     gtest_discover_tests(test_binance_ws_client)
 endif()
+
+#-------------------------------------------------------------------------------
+# Coinbase unit tests (plan 018)
+#-------------------------------------------------------------------------------
+
+if(CRYPTOCOGS_BUILD_COINBASE)
+    # Coinbase auth — base64/HMAC-SHA256 primitives + CB-ACCESS-* header injection
+    add_executable(test_coinbase_auth test_coinbase_auth.cpp)
+    target_link_libraries(test_coinbase_auth coinbase GTest::gtest_main)
+    gtest_discover_tests(test_coinbase_auth)
+endif()
