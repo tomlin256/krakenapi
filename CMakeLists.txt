@@ -18,16 +18,19 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Library options
 #-------------------------------------------------------------------------------
 
-option(CRYPTOCOGS_BUILD_KRAKEN   "Build the Kraken exchange adapter"   ON)
-option(CRYPTOCOGS_BUILD_BINANCE  "Build the Binance exchange adapter"  ON)
-option(CRYPTOCOGS_BUILD_COINBASE "Build the Coinbase exchange adapter" ON)
+option(CRYPTOCOGS_BUILD_KRAKEN    "Build the Kraken exchange adapter"    ON)
+option(CRYPTOCOGS_BUILD_BINANCE   "Build the Binance exchange adapter"   ON)
+option(CRYPTOCOGS_BUILD_COINBASE  "Build the Coinbase exchange adapter"  ON)
+option(CRYPTOCOGS_BUILD_CRYPTOCOM "Build the Crypto.com exchange adapter" ON)
 option(CRYPTOCOGS_BUILD_TESTS "Build tests" ON)
 
 # Dependency rules between the exchange/feature flags, checked at configure time.
-if(NOT CRYPTOCOGS_BUILD_KRAKEN AND NOT CRYPTOCOGS_BUILD_BINANCE AND NOT CRYPTOCOGS_BUILD_COINBASE)
+if(NOT CRYPTOCOGS_BUILD_KRAKEN AND NOT CRYPTOCOGS_BUILD_BINANCE AND
+   NOT CRYPTOCOGS_BUILD_COINBASE AND NOT CRYPTOCOGS_BUILD_CRYPTOCOM)
     message(WARNING
-        "All of CRYPTOCOGS_BUILD_KRAKEN, CRYPTOCOGS_BUILD_BINANCE and "
-        "CRYPTOCOGS_BUILD_COINBASE are OFF — nothing will be built.")
+        "All of CRYPTOCOGS_BUILD_KRAKEN, CRYPTOCOGS_BUILD_BINANCE, "
+        "CRYPTOCOGS_BUILD_COINBASE and CRYPTOCOGS_BUILD_CRYPTOCOM are OFF — "
+        "nothing will be built.")
 endif()
 
 # Generate install + package-config rules by default for a top-level build;
@@ -138,6 +141,10 @@ if(CRYPTOCOGS_INSTALL)
   endif()
   if(CRYPTOCOGS_BUILD_COINBASE)
     install(DIRECTORY include/exchange/coinbase
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/exchange)
+  endif()
+  if(CRYPTOCOGS_BUILD_CRYPTOCOM)
+    install(DIRECTORY include/exchange/cryptocom
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/exchange)
   endif()
   # Vendor the header-only nlohmann_json into our prefix. It is FetchContent'd

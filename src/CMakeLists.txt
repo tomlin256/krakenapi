@@ -132,6 +132,24 @@ if(CRYPTOCOGS_BUILD_COINBASE)
 endif()
 
 #-------------------------------------------------------------------------------
+# Crypto.com exchange adapter (plan 020)
+#-------------------------------------------------------------------------------
+
+if(CRYPTOCOGS_BUILD_CRYPTOCOM)
+    add_library(cryptocom STATIC
+        cryptocom/auth.cpp
+    )
+    add_library(cryptocogs::cryptocom ALIAS cryptocom)
+    # exchange_http supplies the shared CurlHttpClient (and libcurl, PUBLIC).
+    # OpenSSL stays PUBLIC because auth.hpp's HMAC helpers are declared in a
+    # public header (and reused by the WS user-channel signer).
+    target_link_libraries(cryptocom
+        PUBLIC exchange_common exchange_http OpenSSL::SSL OpenSSL::Crypto
+    )
+    target_compile_features(cryptocom PUBLIC cxx_std_17)
+endif()
+
+#-------------------------------------------------------------------------------
 # Install the library targets into the cryptocogsTargets export set (plan 012).
 # The export itself + headers + package config are installed from the top-level
 # CMakeLists. The two common libs are always present; the adapters only if their
@@ -148,6 +166,9 @@ if(CRYPTOCOGS_INSTALL)
     endif()
     if(TARGET coinbase)
         list(APPEND _cryptocogs_targets coinbase)
+    endif()
+    if(TARGET cryptocom)
+        list(APPEND _cryptocogs_targets cryptocom)
     endif()
     install(TARGETS ${_cryptocogs_targets}
             EXPORT      cryptocogsTargets

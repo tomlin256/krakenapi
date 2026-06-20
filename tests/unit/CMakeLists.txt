@@ -125,3 +125,15 @@ if(CRYPTOCOGS_BUILD_COINBASE)
     target_link_libraries(test_coinbase_ws_client coinbase GTest::gtest_main)
     gtest_discover_tests(test_coinbase_ws_client)
 endif()
+
+#-------------------------------------------------------------------------------
+# Crypto.com unit tests (plan 020)
+#-------------------------------------------------------------------------------
+
+if(CRYPTOCOGS_BUILD_CRYPTOCOM)
+    # Crypto.com auth — HMAC-SHA256/hex primitives, params_to_str serialisation,
+    # and CryptoComCredentials::sign() digest composition.
+    add_executable(test_cryptocom_auth test_cryptocom_auth.cpp)
+    target_link_libraries(test_cryptocom_auth cryptocom GTest::gtest_main)
+    gtest_discover_tests(test_cryptocom_auth)
+endif()
