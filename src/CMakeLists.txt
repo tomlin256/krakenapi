@@ -138,6 +138,7 @@ endif()
 if(CRYPTOCOGS_BUILD_CRYPTOCOM)
     add_library(cryptocom STATIC
         cryptocom/auth.cpp
+        cryptocom/types.cpp
     )
     add_library(cryptocogs::cryptocom ALIAS cryptocom)
     # exchange_http supplies the shared CurlHttpClient (and libcurl, PUBLIC).

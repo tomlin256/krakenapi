@@ -136,4 +136,9 @@ if(CRYPTOCOGS_BUILD_CRYPTOCOM)
     add_executable(test_cryptocom_auth test_cryptocom_auth.cpp)
     target_link_libraries(test_cryptocom_auth cryptocom GTest::gtest_main)
     gtest_discover_tests(test_cryptocom_auth)
+
+    # Crypto.com enum converters + parse_cryptocom_response REST envelope
+    add_executable(test_cryptocom_types test_cryptocom_types.cpp)
+    target_link_libraries(test_cryptocom_types cryptocom GTest::gtest_main)
+    gtest_discover_tests(test_cryptocom_types)
 endif()
