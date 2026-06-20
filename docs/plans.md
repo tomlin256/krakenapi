@@ -25,3 +25,4 @@
 | 017 | [Fix two CMake install nits (ixwebsocket install + cxx_std_17 export)](plans/017-cmake-install-nits.md) | Done |
 | 018 | [Coinbase Exchange adapter — REST + WebSocket](plans/018-coinbase-exchange-adapter.md) | Done |
 | 019 | [Coinbase FIX order entry](plans/019-coinbase-fix-order-entry.md) | Proposed (deferred) |
+| 020 | [Crypto.com Exchange adapter — REST + WebSocket](plans/020-cryptocom-exchange-adapter.md) | Proposed (awaiting approval) |
