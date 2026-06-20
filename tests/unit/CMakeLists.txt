@@ -141,4 +141,13 @@ if(CRYPTOCOGS_BUILD_CRYPTOCOM)
     add_executable(test_cryptocom_types test_cryptocom_types.cpp)
     target_link_libraries(test_cryptocom_types cryptocom GTest::gtest_main)
     gtest_discover_tests(test_cryptocom_types)
+
+    # Crypto.com REST request building + response parsing
+    add_executable(test_cryptocom_rest_requests test_cryptocom_rest_requests.cpp)
+    target_link_libraries(test_cryptocom_rest_requests cryptocom GTest::gtest_main)
+    gtest_discover_tests(test_cryptocom_rest_requests)
+
+    add_executable(test_cryptocom_rest_responses test_cryptocom_rest_responses.cpp)
+    target_link_libraries(test_cryptocom_rest_responses cryptocom GTest::gtest_main)
+    gtest_discover_tests(test_cryptocom_rest_responses)
 endif()
