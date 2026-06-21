@@ -1,6 +1,17 @@
 # Plan 020 — Crypto.com Exchange adapter (REST + WebSocket)
 
-**Status:** Proposed (awaiting approval)
+**Status:** Done (implemented on `feature/cryptocom-adapter`; WS resolved as §2
+Option A — generic `ExchangeWsClient` + a `HeartbeatResponder` decorator).
+
+> **Deviation from the "`exchange_common` untouched" guarantee (Rob-approved during
+> Step 8):** live verification surfaced that ixwebsocket emits `Host: <host>:443`,
+> which Crypto.com's WS gateway rejects with HTTP 400 (Binance/Coinbase tolerate
+> it). ixwebsocket honors a caller-supplied `Host` header, so `IxWsConnection`
+> gained an **additive** optional handshake-header override (default empty — the
+> other adapters are byte-for-byte unaffected; all 472 tests still pass). The
+> adapter sets `{{"Host", WS_HOST}}` when building its `IxWsConnection`. This is
+> the only common-layer change; the WS dispatch engine itself is untouched.
+
 **Depends on:** the multi-exchange scaffold (plan 001, complete) and the
 [add-an-exchange playbook](../agent-add-exchange.md), which this plan follows
 row-for-row using **Binance and Coinbase as the worked references**.

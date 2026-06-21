@@ -9,24 +9,29 @@ each request type to its exact response type — no casts, no stringly-typed key
 > - a generic, exchange-agnostic **scaffold** (`exchange::` / `exchange::rest::` /
 >   `exchange::ws::`), compiled as `libexchange_common.a` and never edited by an
 >   adapter;
-> - three **adapters** built on it — **Kraken** (`exchange::kraken::*`,
->   `libkraken.a`), **Binance** (`exchange::binance::*`, `libbinance.a`), and
->   **Coinbase** (`exchange::coinbase::*`, `libcoinbase.a`) — peers that each
->   link the scaffold but never each other, behind independent
+> - four **adapters** built on it — **Kraken** (`exchange::kraken::*`,
+>   `libkraken.a`), **Binance** (`exchange::binance::*`, `libbinance.a`),
+>   **Coinbase** (`exchange::coinbase::*`, `libcoinbase.a`), and **Crypto.com**
+>   (`exchange::cryptocom::*`, `libcryptocom.a`) — peers that each link the
+>   scaffold but never each other, behind independent
 >   `CRYPTOCOGS_BUILD_KRAKEN` / `CRYPTOCOGS_BUILD_BINANCE` /
->   `CRYPTOCOGS_BUILD_COINBASE` flags.
+>   `CRYPTOCOGS_BUILD_COINBASE` / `CRYPTOCOGS_BUILD_CRYPTOCOM` flags.
 >
 > The pre-refactor `kraken_*.hpp` / `kraken::` compatibility shim was **removed in
 > v0.1.1** ([plan 014](docs/plans/014-remove-compat-shim.md)) — `exchange::kraken::*`
 > is the only Kraken surface. To add a
-> fourth exchange, follow [docs/agent-add-exchange.md](docs/agent-add-exchange.md).
+> fifth exchange, follow [docs/agent-add-exchange.md](docs/agent-add-exchange.md).
 > This file documents Kraken in depth, Binance in the
-> [Binance adapter reference](#binance-adapter-reference), and Coinbase in the
-> [Coinbase adapter reference](#coinbase-adapter-reference); all follow the same
+> [Binance adapter reference](#binance-adapter-reference), Coinbase in the
+> [Coinbase adapter reference](#coinbase-adapter-reference), and Crypto.com in the
+> [Crypto.com adapter reference](#cryptocom-adapter-reference); all follow the same
 > three-tier shape. **Coinbase ([plan 018](docs/plans/018-coinbase-exchange-adapter.md))
 > places orders over REST — it has no WebSocket order entry, and its FIX
 > order-entry path is recorded as deferred
-> ([plan 019](docs/plans/019-coinbase-fix-order-entry.md)).**
+> ([plan 019](docs/plans/019-coinbase-fix-order-entry.md)). Crypto.com
+> ([plan 020](docs/plans/020-cryptocom-exchange-adapter.md)) also places orders
+> over REST; its WebSocket reuses the generic `ExchangeWsClient` behind a
+> `HeartbeatResponder` connection decorator (§2 Option A).**
 
 ---
 
@@ -68,19 +73,27 @@ cryptocogs/
 │   │   │   │                            #     BinanceStreamClient alias, make_binance_stream_client(), STREAM_URL
 │   │   │   └── ws_api.hpp               #   Trading WS API: order.place/cancel/ping, signed params,
 │   │   │                                #     binance_ws_api_frame_descriptor, make_binance_ws_api_client(), WS_API_URL
-│   │   └── coinbase/                    # Coinbase adapter — exchange::coinbase::, ::rest::, ::ws::
-│   │       ├── auth.hpp                 #   CoinbaseCredentials{key,secret,passphrase}, CoinbaseAuth (CB-ACCESS-* signing)
-│   │       ├── types.hpp                #   Coinbase enums + converters; parse_coinbase_response<T>
-│   │       ├── rest_api.hpp             #   All Coinbase REST req/resp types (public + private)
-│   │       ├── rest_client.hpp          #   CoinbaseRestClient — typed libcurl executor (sets User-Agent)
-│   │       └── ws_streams.hpp           #   Bespoke CoinbaseStreamClient (id-less pub/sub) + events + STREAM_URL
+│   │   ├── coinbase/                    # Coinbase adapter — exchange::coinbase::, ::rest::, ::ws::
+│   │   │   ├── auth.hpp                 #   CoinbaseCredentials{key,secret,passphrase}, CoinbaseAuth (CB-ACCESS-* signing)
+│   │   │   ├── types.hpp                #   Coinbase enums + converters; parse_coinbase_response<T>
+│   │   │   ├── rest_api.hpp             #   All Coinbase REST req/resp types (public + private)
+│   │   │   ├── rest_client.hpp          #   CoinbaseRestClient — typed libcurl executor (sets User-Agent)
+│   │   │   └── ws_streams.hpp           #   Bespoke CoinbaseStreamClient (id-less pub/sub) + events + STREAM_URL
+│   │   └── cryptocom/                   # Crypto.com adapter — exchange::cryptocom::, ::rest::, ::ws::
+│   │       ├── auth.hpp                 #   CryptoComCredentials{key,secret}, sign() (in-body sig), params_to_str, make_nonce
+│   │       ├── types.hpp                #   Crypto.com enums (UPPERCASE) + converters; parse_cryptocom_response<T>
+│   │       ├── rest_api.hpp             #   All Crypto.com REST req/resp types (public + private; signed envelope)
+│   │       ├── rest_client.hpp / .inl   #   CryptoComRestClient — typed libcurl executor
+│   │       ├── heartbeat_connection.hpp #   HeartbeatResponder — IWsConnection decorator answering public/heartbeat
+│   │       └── ws.hpp                   #   Market+user events, subscribe scaffold, public/auth, cryptocom_frame_descriptor,
+│   │                                    #     CryptoComMarketClient/UserClient + factories, MARKET/USER_WS_URL
 ├── src/                                 # Headers are purely declarative (plan 016): every
 │   │                                    #   non-template body lives in a .cpp here, every
 │   │                                    #   template body in a sibling .inl under include/.
 │   │                                    #   Sole exception: ix_ws_connection.hpp stays
 │   │                                    #   header-only (D1) so the libs never link ixwebsocket.
 │   ├── CMakeLists.txt                   # Peer libs: exchange_common/_http (always),
-│   │                                    #   kraken, binance, coinbase (per-flag)
+│   │                                    #   kraken, binance, coinbase, cryptocom (per-flag)
 │   ├── exchange/common/
 │   │   ├── ws_client.cpp                # ExchangeWsClient non-template impl → libexchange_common.a
 │   │   ├── ws.cpp                       # SubscriptionHandle + RateLimitedWsErrorHandler → libexchange_common.a
@@ -95,10 +108,14 @@ cryptocogs/
 │   │   ├── types.cpp  auth.cpp          #   enum converters, HMAC-SHA256 helpers
 │   │   ├── rest_api.cpp  rest_client.cpp #   request build() + response from_json; client ctors + factory
 │   │   └── ws_streams.cpp  ws_api.cpp   #   stream events + descriptor + factory; trading API + signing
-│   └── coinbase/                        # → libcoinbase.a
-│       ├── types.cpp  auth.cpp          #   enum converters, base64/HMAC-SHA256 + CB-ACCESS-* signing
-│       ├── rest_api.cpp  rest_client.cpp #   request build() + response from_json; client ctor + factory
-│       └── ws_streams.cpp               #   feed events + bespoke CoinbaseStreamClient (plan 018 §2)
+│   ├── coinbase/                        # → libcoinbase.a
+│   │   ├── types.cpp  auth.cpp          #   enum converters, base64/HMAC-SHA256 + CB-ACCESS-* signing
+│   │   ├── rest_api.cpp  rest_client.cpp #   request build() + response from_json; client ctor + factory
+│   │   └── ws_streams.cpp               #   feed events + bespoke CoinbaseStreamClient (plan 018 §2)
+│   └── cryptocom/                       # → libcryptocom.a
+│       ├── types.cpp  auth.cpp          #   UPPERCASE enum converters; HMAC-SHA256/hex + params_to_str signing
+│       ├── rest_api.cpp  rest_client.cpp #   request build()+sign envelope + response from_json; client ctor + factory
+│       └── heartbeat_connection.cpp  ws.cpp #   heartbeat decorator; feed events + descriptor + factories (plan 020 §2)
 └── tests/
     ├── CMakeLists.txt                   # Fetches spdlog/CLI11/backward-cpp; wires examples + unit tests
     ├── examples/
@@ -116,6 +133,9 @@ cryptocogs/
     │   ├── coinbase/                    # Coinbase demos (each behind CRYPTOCOGS_BUILD_COINBASE)
     │   │   ├── coinbase_rest_client_example.cpp  # CLI11 demo of every public Coinbase REST endpoint
     │   │   └── coinbase_ws_client_example.cpp    # ticker/level2/matches/heartbeat + connection-reuse demo
+    │   ├── cryptocom/                   # Crypto.com demos (each behind CRYPTOCOGS_BUILD_CRYPTOCOM)
+    │   │   ├── cryptocom_rest_client_example.cpp # CLI11 demo of every public Crypto.com REST endpoint
+    │   │   └── cryptocom_ws_client_example.cpp   # ticker/trade/book/candlestick + connection-reuse demo
     │   ├── backward_init.cpp            # Shared crash-backtrace init, linked into examples via `example_backward`
     │   └── kapi.hpp / kapi.cpp          # Legacy KAPI reference wrapper (not installed)
     └── unit/
@@ -130,7 +150,7 @@ cryptocogs/
         ├── test_tick_price.cpp          # TickPrice exact-decimal serialisation (FP-noise-free)
         ├── test_ws_reconnect_session.cpp # WsReconnectSession lifecycle — deterministic, no sleeps
         ├── ws_client_example_json.hpp
-        ├── mock_ws_connection.hpp        # Shared MockWsConnection (Kraken + Binance + Coinbase WS tests)
+        ├── mock_ws_connection.hpp        # Shared MockWsConnection (Kraken + Binance + Coinbase + Crypto.com WS tests)
         ├── test_binance_auth.cpp         # BinanceAuth HMAC-SHA256 signing
         ├── test_binance_types.cpp        # Binance enum converters
         ├── test_binance_rest_requests.cpp / test_binance_rest_responses.cpp
@@ -142,7 +162,13 @@ cryptocogs/
         ├── test_coinbase_rest_requests.cpp / test_coinbase_rest_responses.cpp
         ├── test_coinbase_client.cpp      # Signed REST round-trip + User-Agent via mock performer
         ├── test_coinbase_ws_client.cpp   # CoinbaseStreamClient pub/sub lifecycle with MockWsConnection
-        └── coinbase_{rest,account,ws}_example_json.hpp  # Coinbase fixtures (public live, private synthetic)
+        ├── coinbase_{rest,account,ws}_example_json.hpp  # Coinbase fixtures (public live, private synthetic)
+        ├── test_cryptocom_auth.cpp       # params_to_str + HMAC-SHA256/hex + sign() digest composition
+        ├── test_cryptocom_types.cpp      # Crypto.com enum converters + parse_cryptocom_response
+        ├── test_cryptocom_rest_requests.cpp / test_cryptocom_rest_responses.cpp
+        ├── test_cryptocom_client.cpp     # Signed-envelope REST round-trip via mock performer
+        ├── test_cryptocom_ws_client.cpp  # HeartbeatResponder + subscribe/ack/push lifecycle with MockWsConnection
+        └── cryptocom_{rest,account,ws}_example_json.hpp  # Crypto.com fixtures (market live, private/user synthetic)
 ```
 
 ---
@@ -168,16 +194,17 @@ cryptocogs/
 | `CRYPTOCOGS_BUILD_KRAKEN` | `ON` | Build the Kraken adapter (`libkraken.a`) and its tests/examples |
 | `CRYPTOCOGS_BUILD_BINANCE` | `ON` | Build the Binance adapter (`libbinance.a`) and its tests/examples |
 | `CRYPTOCOGS_BUILD_COINBASE` | `ON` | Build the Coinbase adapter (`libcoinbase.a`) and its tests/examples |
+| `CRYPTOCOGS_BUILD_CRYPTOCOM` | `ON` | Build the Crypto.com adapter (`libcryptocom.a`) and its tests/examples |
 | `CRYPTOCOGS_BUILD_TESTS` | `ON` | Build unit tests and example programs |
 | `CRYPTOCOGS_INSTALL` | top-level: `ON` | Generate `install()` rules + the `cryptocogs` CMake package config ([plan 012](docs/plans/012-install-and-package-config.md)). Defaults off when cryptocogs is a `FetchContent` subproject |
 
-The three exchange flags are independent: e.g. `-DCRYPTOCOGS_BUILD_KRAKEN=OFF
--DCRYPTOCOGS_BUILD_BINANCE=OFF` builds a Coinbase-only tree. All default `ON`.
-`exchange_common` (the generic `ExchangeWsClient` implementation) is always built
-— every adapter links it. Turning all three exchanges off emits a "nothing will
-be built" warning.
+The four exchange flags are independent: e.g. `-DCRYPTOCOGS_BUILD_KRAKEN=OFF
+-DCRYPTOCOGS_BUILD_BINANCE=OFF -DCRYPTOCOGS_BUILD_COINBASE=OFF` builds a
+Crypto.com-only tree. All default `ON`. `exchange_common` (the generic
+`ExchangeWsClient` implementation) is always built — every adapter links it.
+Turning all four exchanges off emits a "nothing will be built" warning.
 
-**Installing**: `cmake --install build --prefix <p>` lays down the five static
+**Installing**: `cmake --install build --prefix <p>` lays down the six static
 libs, the public headers (component-gated by the build flags), and a package
 config so a downstream project can `find_package(cryptocogs)` +
 `target_link_libraries(app cryptocogs::kraken)` — and inherit the C++17
@@ -214,11 +241,12 @@ cmake --build build
 
 | Path | Description |
 |---|---|
-| `build/src/libexchange_common.a` | Generic `ExchangeWsClient` impl — always built; both adapters link it (`PUBLIC`) |
-| `build/src/libexchange_http.a` | Shared `CurlHttpClient` libcurl transport — always built; both REST adapters link it (`PUBLIC`) |
+| `build/src/libexchange_common.a` | Generic `ExchangeWsClient` impl — always built; every adapter links it (`PUBLIC`) |
+| `build/src/libexchange_http.a` | Shared `CurlHttpClient` libcurl transport — always built; every REST adapter links it (`PUBLIC`) |
 | `build/src/libkraken.a` | Kraken adapter static library — link this for Kraken (transitively pulls `exchange_common`) |
 | `build/src/libbinance.a` | Binance adapter static library — link this for Binance (transitively pulls `exchange_common`) |
 | `build/src/libcoinbase.a` | Coinbase adapter static library — link this for Coinbase (transitively pulls `exchange_common`) |
+| `build/src/libcryptocom.a` | Crypto.com adapter static library — link this for Crypto.com (transitively pulls `exchange_common`) |
 | `build/bin/public_rest` | Public REST demo |
 | `build/bin/private_rest` | Private REST demo |
 | `build/bin/public_ws` | Public WebSocket demo (low-level) |
@@ -231,6 +259,8 @@ cmake --build build
 | `build/bin/binance_ws_api_example` | `BinanceWsApiClient` — trading WS API `ping` (live-verified) |
 | `build/bin/coinbase_rest_client_example` | CLI11 demo of every public Coinbase REST endpoint via `CoinbaseRestClient` |
 | `build/bin/coinbase_ws_client_example` | `CoinbaseStreamClient` — ticker/level2/matches/heartbeat + connection-reuse demo |
+| `build/bin/cryptocom_rest_client_example` | CLI11 demo of every public Crypto.com REST endpoint via `CryptoComRestClient` |
+| `build/bin/cryptocom_ws_client_example` | `CryptoComMarketClient` — ticker/trade/book/candlestick + connection-reuse demo (heartbeat answered automatically) |
 
 ---
 
@@ -240,7 +270,7 @@ cmake --build build
 cd build && ctest --output-on-failure
 ```
 
-There are eighteen test executables (389 tests total) — six Kraken/common, six Binance, six Coinbase:
+There are twenty-four test executables (472 tests total) — six Kraken/common, six Binance, six Coinbase, six Crypto.com:
 
 | Binary | Source | What it tests |
 |---|---|---|
@@ -262,12 +292,18 @@ There are eighteen test executables (389 tests total) — six Kraken/common, six
 | `build/bin/test_coinbase_rest_responses` | `test_coinbase_rest_responses.cpp` | `from_json` field assertions (public live + private synthetic fixtures) |
 | `build/bin/test_coinbase_client` | `test_coinbase_client.cpp` | `CoinbaseRestClient::execute()` signed round-trip + User-Agent via mock performer |
 | `build/bin/test_coinbase_ws_client` | `test_coinbase_ws_client.cpp` | `CoinbaseStreamClient` optimistic subscribe / type-keyed dispatch with `MockWsConnection` |
+| `build/bin/test_cryptocom_auth` | `test_cryptocom_auth.cpp` | `params_to_str` matrix + HMAC-SHA256/hex + `CryptoComCredentials::sign()` digest |
+| `build/bin/test_cryptocom_types` | `test_cryptocom_types.cpp` | Crypto.com UPPERCASE enum converters + `parse_cryptocom_response` `code` mapping |
+| `build/bin/test_cryptocom_rest_requests` | `test_cryptocom_rest_requests.cpp` | Each Crypto.com REST request builds the right path/query (public) or signed envelope (private) |
+| `build/bin/test_cryptocom_rest_responses` | `test_cryptocom_rest_responses.cpp` | `from_json` field assertions (market live + private synthetic fixtures) |
+| `build/bin/test_cryptocom_client` | `test_cryptocom_client.cpp` | `CryptoComRestClient::execute()` signed-envelope round-trip via mock performer |
+| `build/bin/test_cryptocom_ws_client` | `test_cryptocom_ws_client.cpp` | `HeartbeatResponder` auto-reply + id-correlated subscribe/ack/push lifecycle with `MockWsConnection` |
 
 Tests do **not** require network access or credentials — all I/O is mocked.
-The flag matrix splits cleanly: each exchange flag drops its own suite.
-`-DCRYPTOCOGS_BUILD_COINBASE=OFF` runs 312 (the Kraken + Binance suites);
-turning **both** Kraken and Binance off runs 86 — the Coinbase suite plus the
-exchange-agnostic `TickPrice` tests, which build in any tree.
+The flag matrix splits cleanly: each exchange flag drops its own suite. A
+Crypto.com-only tree (`-DCRYPTOCOGS_BUILD_KRAKEN=OFF -DCRYPTOCOGS_BUILD_BINANCE=OFF
+-DCRYPTOCOGS_BUILD_COINBASE=OFF`) runs 94 — the 83-test Crypto.com suite plus the
+11 exchange-agnostic `TickPrice` tests, which build in any tree.
 
 ### Test suite breakdown
 
@@ -301,8 +337,11 @@ exchange-agnostic `TickPrice` tests, which build in any tree.
 | `exchange::coinbase::` | `exchange/coinbase/types.hpp` | Coinbase enums + lowercase-wire converters (`coinbase_order_type_to_string`, …); `parse_coinbase_response<T>`; re-exports the canonical four |
 | `exchange::coinbase::rest::` | `exchange/coinbase/{auth,rest_api,rest_client}.hpp` | `CoinbaseCredentials` (key + secret + **passphrase**), `CoinbaseAuth` (`IRestAuth`; CB-ACCESS-* signing), all REST req/resp types, `CoinbaseRestClient` |
 | `exchange::coinbase::ws::` | `exchange/coinbase/ws_streams.hpp` | Feed events + the **bespoke** `CoinbaseStreamClient` / `make_coinbase_stream_client()` (`STREAM_URL`) — id-less type-keyed pub/sub over `IWsConnection`, **not** an `ExchangeWsClient` alias (plan 018 §2) |
+| `exchange::cryptocom::` | `exchange/cryptocom/types.hpp` | Crypto.com enums + UPPERCASE-wire converters (`cryptocom_order_type_to_string`, …); `parse_cryptocom_response<T>` (the `{code,result}` envelope, `code == 0` = success); re-exports the canonical four |
+| `exchange::cryptocom::rest::` | `exchange/cryptocom/{auth,rest_api,rest_client}.hpp` | `CryptoComCredentials` (key + secret; **plaintext** HMAC key) + in-body `sign()` / `params_to_str` / `make_nonce`, all REST req/resp types (signed envelope built in `build(creds)`), `CryptoComRestClient` |
+| `exchange::cryptocom::ws::` | `exchange/cryptocom/{ws,heartbeat_connection}.hpp` | Market + user feed: events, `CryptoComSubscribeRequest<PushMsg>`, `CryptoComAuthRequest` (`public/auth`), `cryptocom_frame_descriptor`, `CryptoComMarketClient`/`CryptoComUserClient` (`ExchangeWsClient` aliases) + factories (`MARKET_WS_URL`/`USER_WS_URL`), and the `HeartbeatResponder` `IWsConnection` decorator (plan 020 §2) |
 
-**Why the split**: `exchange::common::*` holds the scaffold that is genuinely exchange-agnostic — request/response binding templates, the WS dispatch loop, the connection interface, reconnect machinery. Each adapter supplies only what's exchange-specific: wire formats, auth, endpoint URLs, and its `*_frame_descriptor`. `exchange::binance::*` reuses the entire common layer and follows the same three-tier shape as `exchange::kraken::*` — it is the worked reference for [adding a new exchange](#adding-a-whole-new-exchange).
+**Why the split**: `exchange::common::*` holds the scaffold that is genuinely exchange-agnostic — request/response binding templates, the WS dispatch loop, the connection interface, reconnect machinery. Each adapter supplies only what's exchange-specific: wire formats, auth, endpoint URLs, and its `*_frame_descriptor`. `exchange::binance::*` reuses the entire common layer and follows the same three-tier shape as `exchange::kraken::*` — it is the worked reference for [adding a new exchange](#adding-a-whole-new-exchange). `exchange::cryptocom::*` likewise reuses the generic `ExchangeWsClient` (its WS is id-correlated like Binance/Kraken), adding only a `HeartbeatResponder` connection decorator for Crypto.com's mandatory keepalive — the common layer stays untouched except for an additive `IxWsConnection` handshake-header override (plan 020 §2).
 
 ---
 
@@ -751,6 +790,92 @@ frames route to optional callbacks (and the `IWsErrorHandler`);
 
 ---
 
+## Crypto.com adapter reference
+
+The Crypto.com adapter (`include/exchange/cryptocom/`, `src/cryptocom/`) targets
+the **Crypto.com Exchange v1** API (`api.crypto.com/exchange/v1`,
+`stream.crypto.com`) and mirrors the three-tier shape on the same
+`exchange_common` scaffold ([plan 020](docs/plans/020-cryptocom-exchange-adapter.md)).
+**Orders are placed over REST** (`private/create-order` / `private/cancel-order`);
+advanced orders, bots, staking, fiat, and margin are out of scope.
+
+Crypto.com's defining trait is a **single method-based envelope shared by REST and
+WebSocket**: requests are `{id, method, api_key, params, nonce, sig}` and replies
+`{id, method, code, result}` with **`code == 0` = success**.
+
+**How Crypto.com differs** from the other adapters:
+
+| Aspect | Crypto.com |
+|---|---|
+| REST auth | HMAC-**SHA256** → lowercase **hex**; secret is the HMAC key **verbatim** (not base64-decoded, unlike Kraken/Coinbase); **two** creds (key + secret, no passphrase) |
+| Signed string | `sig = hex(HMAC-SHA256(secret, method + id + api_key + params_string + nonce))`; the `sig` lives **inside the JSON body**, so private requests sign themselves in `build(creds)` (Kraken-style), not via `IRestAuth` |
+| `params_string` | recursive, **keys sorted ascending**, concatenated `key+value`; arrays iterate + recurse; `null`→`"null"`; `MAX_LEVEL = 3` (`detail::params_to_str`). Every param value is serialised as a **string** so the cross-language `str()` is deterministic (the API also requires numbers-as-strings) |
+| REST verbs | public = GET (query params); private = POST (the signed envelope as the JSON body), all under `/exchange/v1/<method>` |
+| REST envelope | HTTP status + body → `exchange::rest::RestResponse<T>` via `parse_cryptocom_response<T>(status, j)` (`ok = status < 400 && code == 0`; the inner `result` is `T::from_json`'d) |
+| Numbers / keys | monetary/size fields are JSON **strings** (`std::stod`); ms timestamps are **numbers**; ticker/trade rows use **terse single-letter keys** (`i/h/l/a/b/k/v/…`) |
+| WS model | **id-correlated** like Binance/Kraken → reuses the generic `ExchangeWsClient`. The misfit — a **mandatory heartbeat** — is handled by a `HeartbeatResponder` `IWsConnection` decorator (plan 020 §2 Option A); `exchange_common` is reused, with one additive `IxWsConnection` header override (see WS note) |
+
+### Authentication (`exchange/cryptocom/auth.hpp`, `exchange::cryptocom::rest`)
+
+`CryptoComCredentials{api_key, api_secret}` — a plain struct (no file loader).
+`creds.sign(method, id, params, nonce)` returns the hex `sig`; `make_nonce()` is a
+millisecond epoch. The base64-free primitives (`detail::hmac_sha256`,
+`detail::to_hex`, `detail::params_to_str`) are reused by the WS user-channel
+`public/auth` signer. There is no `IRestAuth` implementor — signing is part of
+envelope construction.
+
+### REST (`exchange/cryptocom/{rest_api,rest_client}.hpp`, `exchange::cryptocom::rest`)
+
+`CryptoComRestClient` (default base `https://api.crypto.com`): `execute(req)` for
+public, `execute(req, const CryptoComCredentials&)` for private (assigns a unique
+correlation `id`, then `req.build(creds)` signs the envelope); both return
+`exchange::rest::RestResponse<Req::response_type>`. `make_cryptocom_test_client(fn)`
+injects a mock performer. Order `price`/`quantity`/`notional` are caller-formatted
+exact decimal strings — produce them with `TickPrice::str()`.
+
+| Public request | Path | Private request | Path |
+|---|---|---|---|
+| `CryptoComInstrumentsRequest` | `public/get-instruments` | `CryptoComUserBalanceRequest` | `private/user-balance` |
+| `CryptoComTickersRequest` | `public/get-tickers` | `CryptoComCreateOrderRequest` | `private/create-order` |
+| `CryptoComOrderBookRequest` | `public/get-book` | `CryptoComCancelOrderRequest` | `private/cancel-order` |
+| `CryptoComCandlesRequest` | `public/get-candlestick` | `CryptoComCancelAllOrdersRequest` | `private/cancel-all-orders` |
+| `CryptoComTradesRequest` | `public/get-trades` | `CryptoComGetOrderDetailRequest` | `private/get-order-detail` |
+| | | `CryptoComGetOpenOrdersRequest` | `private/get-open-orders` |
+| | | `CryptoComGetOrderHistoryRequest` | `private/get-order-history` |
+| | | `CryptoComGetTradesRequest` | `private/get-trades` |
+
+### WebSocket (`exchange/cryptocom/{ws,heartbeat_connection}.hpp`, `exchange::cryptocom::ws`)
+
+`CryptoComMarketClient` / `CryptoComUserClient` are `ExchangeWsClient` aliases,
+built via `make_cryptocom_market_client(conn, eh)` / `make_cryptocom_user_client(...)`
+over `MARKET_WS_URL` / `USER_WS_URL`. Crypto.com's subscribe carries a per-request
+`id` the ack echoes, so it fits the generic id-correlated client; the factories
+wrap `conn` in a **`HeartbeatResponder`** that answers `public/heartbeat` with
+`public/respond-heartbeat` and swallows it. `cryptocom_frame_descriptor` routes a
+frame with `id == -1` as a **push** by `result.subscription`, and any other
+id-bearing frame (subscribe ack / `public/auth`) as a **method response** by id.
+
+Subscribe one channel per request (`CryptoComTickerSubscribe` / `CryptoComTradeSubscribe` /
+`CryptoComBookSubscribe` / `CryptoComCandlestickSubscribe`, plus `CryptoComUserOrderSubscribe` /
+`CryptoComUserBalanceSubscribe`); the channel string must be the **exact form the
+server echoes** (e.g. candlestick period `1m`, not `M1`). The initial frame is the
+ack (it may carry a snapshot); ongoing updates arrive via the callback. The user
+feed calls `execute(CryptoComAuthRequest{creds})` (`public/auth`) before any
+`user.*` subscribe.
+
+> **Transport note:** ixwebsocket emits `Host: stream.crypto.com:443`, which
+> Crypto.com's gateway rejects (HTTP 400). Construct the `IxWsConnection` with
+> `{{"Host", std::string(WS_HOST)}}` to drop the port — `IxWsConnection` gained an
+> optional handshake-header override for this (additive; other adapters
+> unaffected).
+
+> **Verification:** the market channels (ticker/trade/book/candlestick) are
+> live-verified against prod; private REST and the user feed are tested against
+> **synthetic** fixtures (no live credentials), and signing pins the *construction*
+> rather than an official vector.
+
+---
+
 ## Architecture and key patterns
 
 ### REST layer
@@ -1118,7 +1243,7 @@ Place the banner before `#pragma once` (for headers) or before the first `#inclu
 - JSON serialisation uses `to_json()` / `from_json()` static methods on each struct. Prefer `j.value("key", default)` over `j.at("key")` for fields that may be absent in responses.
 - Enum conversions are done by free functions `to_string(Enum)` and `foo_from_string(const std::string&)`. The canonical four (`Side`, `OrderType`, `TimeInForce`, `OrderStatus`) live in `exchange/common/types.hpp`; Kraken-only enums (`PriceType`, `TriggerReference`, `StpType`, `FeePreference`) and Kraken's hyphenated `OrderType` overrides (`kraken_order_type_to_string`/`from_string`) live in `exchange/kraken/types.hpp`. All throw `std::invalid_argument` on unknown values.
 - Monetary / volume fields returned by the REST API arrive as JSON **strings** (e.g., `"1.5"`) — deserialise with `std::stod(j.value("field", "0"))` rather than `.get<double>()`. For prices that must round-trip to an *exact* decimal string (e.g. for order placement), use `TickPrice` instead of raw `double` formatting — see [Shared types reference](#tickprice--exact-decimal-price-representation).
-- The build produces **five** static libraries — two always-built common libs plus the three adapters. `exchange_common` compiles the exchange-agnostic non-template code — `src/exchange/common/{ws_client,ws,types,tick_price}.cpp` (generic WS dispatch, `SubscriptionHandle`/`RateLimitedWsErrorHandler`, canonical enum converters, `TickPrice`) — and links only `nlohmann_json` (`PUBLIC`), **not** OpenSSL/libcurl (the WS engine needs no HTTP/crypto). `exchange_http` compiles `src/exchange/common/http_client.cpp` (the shared `CurlHttpClient` REST transport) and links `CURL::libcurl` + `nlohmann_json` (`PUBLIC`) — kept separate so `exchange_common` stays curl-free (plan 010). `kraken` (six `.cpp` under `src/kraken/`: types, auth, rest_api, rest_client, ws_api, ws_client), `binance` (six under `src/binance/`: types, auth, rest_api, rest_client, ws_streams, ws_api), and `coinbase` (five under `src/coinbase/`: types, auth, rest_api, rest_client, ws_streams) are **peers**: each links `exchange_common`, `exchange_http`, and OpenSSL (`PUBLIC`), and **none links another**. OpenSSL is `PUBLIC` because `auth.hpp` declares HMAC/SHA helpers in a public header (defined in `auth.cpp`); libcurl reaches consumers transitively through `exchange_http`. After plan 010 the curl handling lives once in `CurlHttpClient`; after plan 016 every adapter header is purely declarative — request/response bodies live in these `.cpp` files and template bodies in sibling `.inl` files. None of the libraries link ixwebsocket; callers that use `IxWsConnection` must link `ixwebsocket` separately.
+- The build produces **six** static libraries — two always-built common libs plus the four adapters. `exchange_common` compiles the exchange-agnostic non-template code — `src/exchange/common/{ws_client,ws,types,tick_price}.cpp` (generic WS dispatch, `SubscriptionHandle`/`RateLimitedWsErrorHandler`, canonical enum converters, `TickPrice`) — and links only `nlohmann_json` (`PUBLIC`), **not** OpenSSL/libcurl (the WS engine needs no HTTP/crypto). `exchange_http` compiles `src/exchange/common/http_client.cpp` (the shared `CurlHttpClient` REST transport) and links `CURL::libcurl` + `nlohmann_json` (`PUBLIC`) — kept separate so `exchange_common` stays curl-free (plan 010). `kraken` (six `.cpp` under `src/kraken/`: types, auth, rest_api, rest_client, ws_api, ws_client), `binance` (six under `src/binance/`: types, auth, rest_api, rest_client, ws_streams, ws_api), `coinbase` (five under `src/coinbase/`: types, auth, rest_api, rest_client, ws_streams), and `cryptocom` (six under `src/cryptocom/`: types, auth, rest_api, rest_client, heartbeat_connection, ws) are **peers**: each links `exchange_common`, `exchange_http`, and OpenSSL (`PUBLIC`), and **none links another**. OpenSSL is `PUBLIC` because `auth.hpp` declares HMAC/SHA helpers in a public header (defined in `auth.cpp`); libcurl reaches consumers transitively through `exchange_http`. After plan 010 the curl handling lives once in `CurlHttpClient`; after plan 016 every adapter header is purely declarative — request/response bodies live in these `.cpp` files and template bodies in sibling `.inl` files. None of the libraries link ixwebsocket; callers that use `IxWsConnection` must link `ixwebsocket` separately.
 - IXWebSocket and spdlog are **not** linked into any of the three libraries; they are used only by examples and tests.
 - Template methods for `ExchangeWsClient` live in `exchange/common/ws_client.inl` (included at the bottom of the `.hpp`). Non-template methods live in `src/exchange/common/ws_client.cpp`. The generic client itself is exchange-agnostic; each adapter supplies its `*_frame_descriptor()` plus its WS request/response types — whose bodies, post-plan-016, live in the adapter's `ws_api.cpp` (Kraken also has `ws_client.cpp` for `make_kraken_ws_client`; its `TypedSubscribeRequest` template bodies are in `ws_api.inl`). Keep the hpp/inl/cpp split consistent when adding new methods.
 - Push callbacks stored in `subscriptions_` are type-erased to `std::function<void(const json&)>` internally; the typed lambda wrapper is created once in the template method and stored at subscription time.
@@ -1150,6 +1275,10 @@ Place the banner before `#pragma once` (for headers) or before the first `#inclu
 # Coinbase (all public — no credentials)
 ./build/bin/coinbase_rest_client_example ticker BTC-USD          # --help lists every endpoint
 ./build/bin/coinbase_ws_client_example ticker BTC-USD            # one of 5 channel subcommands
+
+# Crypto.com (all public — no credentials)
+./build/bin/cryptocom_rest_client_example tickers BTC_USD        # --help lists every endpoint
+./build/bin/cryptocom_ws_client_example ticker BTC_USD --seconds 35   # one of 5 channel subcommands
 ```
 
-Callers that embed a REST client must call `curl_global_init(CURL_GLOBAL_ALL)` before constructing `KrakenRestClient` / `BinanceRestClient` and `curl_global_cleanup()` on teardown.
+Callers that embed a REST client must call `curl_global_init(CURL_GLOBAL_ALL)` before constructing `KrakenRestClient` / `BinanceRestClient` / `CryptoComRestClient` and `curl_global_cleanup()` on teardown.
