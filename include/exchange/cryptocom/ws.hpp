@@ -76,6 +76,11 @@ using exchange::cryptocom::rest::CryptoComCredentials;
 inline constexpr std::string_view MARKET_WS_URL = "wss://stream.crypto.com/exchange/v1/market";
 inline constexpr std::string_view USER_WS_URL   = "wss://stream.crypto.com/exchange/v1/user";
 
+// Crypto.com's WS gateway rejects (HTTP 400) the default "Host: <host>:443"
+// header ixwebsocket emits for wss. Construct the IxWsConnection with
+// {{"Host", std::string(WS_HOST)}} so the port is omitted.
+inline constexpr std::string_view WS_HOST = "stream.crypto.com";
+
 // ── Channel-name helpers ──────────────────────────────────────────────────────
 //
 // Build the canonical channel string the server echoes in result.subscription

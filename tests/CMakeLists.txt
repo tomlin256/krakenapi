@@ -111,6 +111,24 @@ if(CRYPTOCOGS_BUILD_COINBASE)
 endif()
 
 #-------------------------------------------------------------------------------
+# Crypto.com example apps
+#-------------------------------------------------------------------------------
+
+if(CRYPTOCOGS_BUILD_CRYPTOCOM)
+    add_executable(cryptocom_rest_client_example examples/cryptocom/cryptocom_rest_client_example.cpp)
+    target_link_libraries(cryptocom_rest_client_example
+        cryptocom spdlog::spdlog CLI11::CLI11 example_backward
+    )
+
+    # Reuses the generic ExchangeWsClient (via cryptocom's PUBLIC link to
+    # exchange_common); the real transport (IxWsConnection) needs ixwebsocket here.
+    add_executable(cryptocom_ws_client_example examples/cryptocom/cryptocom_ws_client_example.cpp)
+    target_link_libraries(cryptocom_ws_client_example
+        cryptocom ixwebsocket spdlog::spdlog CLI11::CLI11 example_backward
+    )
+endif()
+
+#-------------------------------------------------------------------------------
 # Unit tests
 #-------------------------------------------------------------------------------
 
