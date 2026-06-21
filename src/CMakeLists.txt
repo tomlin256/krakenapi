@@ -141,6 +141,12 @@ if(CRYPTOCOGS_BUILD_CRYPTOCOM)
         cryptocom/types.cpp
         cryptocom/rest_api.cpp
         cryptocom/rest_client.cpp
+        # WebSocket: heartbeat-responder decorator + market/user feed (plan 020
+        # §2 Option A). Reuses the generic ExchangeWsClient from exchange_common;
+        # no ixwebsocket link (the example builds the IxWsConnection and passes
+        # it in).
+        cryptocom/heartbeat_connection.cpp
+        cryptocom/ws.cpp
     )
     add_library(cryptocogs::cryptocom ALIAS cryptocom)
     # exchange_http supplies the shared CurlHttpClient (and libcurl, PUBLIC).

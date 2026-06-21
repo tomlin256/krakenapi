@@ -155,4 +155,11 @@ if(CRYPTOCOGS_BUILD_CRYPTOCOM)
     add_executable(test_cryptocom_client test_cryptocom_client.cpp)
     target_link_libraries(test_cryptocom_client cryptocom GTest::gtest_main)
     gtest_discover_tests(test_cryptocom_client)
+
+    # Crypto.com WebSocket: heartbeat decorator + subscribe/ack/push lifecycle
+    # (MockWsConnection only — no network). Links only cryptocom (reaches the
+    # IWsConnection interface via exchange_common).
+    add_executable(test_cryptocom_ws_client test_cryptocom_ws_client.cpp)
+    target_link_libraries(test_cryptocom_ws_client cryptocom GTest::gtest_main)
+    gtest_discover_tests(test_cryptocom_ws_client)
 endif()
