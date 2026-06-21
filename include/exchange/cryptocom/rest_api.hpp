@@ -27,7 +27,15 @@
 //   - Tickers use terse single-letter keys (i/h/l/a/v/vv/c/b/k/oi/t).
 //
 // Public GET requests need no signing (build() sets only method/path/query).
+// Private requests build the signed JSON envelope in
+// build(const CryptoComCredentials&) — Kraken-style, since the `sig` lives in
+// the body and depends on the params. Every signed param value is a JSON
+// *string* (the API requires it; see auth.hpp), so the params stay flat scalars
+// — exec_inst (an array) is deliberately omitted from v1 to avoid the
+// list-serialisation ambiguity in params_to_str.
 
+#include "exchange/cryptocom/auth.hpp"
+#include "exchange/cryptocom/types.hpp"
 #include "exchange/common/rest.hpp"
 
 #include <cstdint>
@@ -186,6 +194,185 @@ struct CryptoComTradesRequest : TypedPublicRequest<CryptoComTradesResult> {
     std::string        instrument_name;  // required
     std::optional<int> count;
     HttpRequest build() const override;
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Private (authenticated) endpoints
+//
+// build(creds) constructs the full signed envelope {id, method, api_key, params,
+// nonce, sig} as the POST body (path /exchange/v1/private/...). `id` comes from
+// the request's id member (CryptoComRestClient assigns a unique value); `nonce`
+// is fresh per build. Monetary params are caller-formatted exact decimal strings
+// — produce them with TickPrice::str() when exactness matters.
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Marker base for Crypto.com private requests. build() signs the envelope itself.
+struct PrivateRequest {
+    int64_t id{1};  // correlation id; CryptoComRestClient assigns a unique value
+    virtual ~PrivateRequest() = default;
+    virtual HttpRequest build(const CryptoComCredentials& creds) const = 0;
+};
+
+template<typename R>
+struct TypedPrivateRequest : PrivateRequest {
+    using response_type = R;
+};
+
+// ── Shared order record (get-order-detail / get-open-orders / get-order-history)
+
+struct CryptoComOrder {
+    std::string account_id;
+    std::string order_id;
+    std::string client_oid;
+    std::string order_type;            // "LIMIT" / "MARKET" (raw)
+    std::string time_in_force;         // raw
+    std::string side;                  // "BUY" / "SELL" (raw)
+    double      quantity{0.0};
+    double      limit_price{0.0};
+    double      order_value{0.0};
+    double      avg_price{0.0};
+    double      cumulative_quantity{0.0};
+    double      cumulative_value{0.0};
+    double      cumulative_fee{0.0};
+    std::string status;                // raw wire status
+    OrderStatus status_enum{OrderStatus::Unknown};  // cryptocom_order_status_from_string(status)
+    int64_t     create_time{0};        // ms
+    int64_t     update_time{0};        // ms
+    std::string instrument_name;
+    std::string fee_instrument_name;
+    static CryptoComOrder from_json(const json& j);
+};
+
+struct CryptoComOrdersResult {
+    std::vector<CryptoComOrder> orders;  // result.data[]
+    static CryptoComOrdersResult from_json(const json& j);
+};
+
+// ── private/user-balance ──────────────────────────────────────────────────────
+
+struct CryptoComPositionBalance {
+    std::string instrument_name;
+    double      quantity{0.0};
+    double      market_value{0.0};
+    double      collateral_amount{0.0};
+    double      max_withdrawal_balance{0.0};
+    double      reserved_qty{0.0};
+    static CryptoComPositionBalance from_json(const json& j);
+};
+
+struct CryptoComUserBalance {
+    double      total_available_balance{0.0};
+    double      total_margin_balance{0.0};
+    double      total_initial_margin{0.0};
+    double      total_cash_balance{0.0};
+    double      total_collateral_value{0.0};
+    double      total_session_unrealized_pnl{0.0};
+    double      total_session_realized_pnl{0.0};
+    std::string instrument_name;  // settlement ccy, e.g. "USD"
+    std::vector<CryptoComPositionBalance> position_balances;
+    static CryptoComUserBalance from_json(const json& j);
+};
+
+struct CryptoComUserBalanceResult {
+    std::vector<CryptoComUserBalance> data;  // result.data[]
+    static CryptoComUserBalanceResult from_json(const json& j);
+};
+
+struct CryptoComUserBalanceRequest : TypedPrivateRequest<CryptoComUserBalanceResult> {
+    HttpRequest build(const CryptoComCredentials& creds) const override;
+};
+
+// ── private/create-order ──────────────────────────────────────────────────────
+
+struct CryptoComCreateOrderResult {
+    std::string order_id;
+    std::string client_oid;
+    static CryptoComCreateOrderResult from_json(const json& j);
+};
+
+struct CryptoComCreateOrderRequest : TypedPrivateRequest<CryptoComCreateOrderResult> {
+    std::string instrument_name;             // required
+    Side        side{Side::Buy};             // required
+    OrderType   type{OrderType::Limit};      // LIMIT / MARKET
+    std::optional<std::string> price;        // required for LIMIT (exact decimal string)
+    std::optional<std::string> quantity;     // base quantity (LIMIT, MARKET SELL)
+    std::optional<std::string> notional;     // quote amount (MARKET BUY)
+    std::optional<std::string> client_oid;   // max 36 chars
+    std::optional<TimeInForce> time_in_force;
+    HttpRequest build(const CryptoComCredentials& creds) const override;
+};
+
+// ── private/cancel-order and private/cancel-all-orders ────────────────────────
+//
+// Both return code 0 with no meaningful result body on success.
+
+struct CryptoComCancelResult {
+    static CryptoComCancelResult from_json(const json& j);
+};
+
+struct CryptoComCancelOrderRequest : TypedPrivateRequest<CryptoComCancelResult> {
+    std::string order_id;  // required
+    HttpRequest build(const CryptoComCredentials& creds) const override;
+};
+
+struct CryptoComCancelAllOrdersRequest : TypedPrivateRequest<CryptoComCancelResult> {
+    std::optional<std::string> instrument_name;  // optional filter
+    HttpRequest build(const CryptoComCredentials& creds) const override;
+};
+
+// ── private/get-order-detail ──────────────────────────────────────────────────
+
+struct CryptoComGetOrderDetailRequest : TypedPrivateRequest<CryptoComOrder> {
+    std::string order_id;  // required
+    HttpRequest build(const CryptoComCredentials& creds) const override;
+};
+
+// ── private/get-open-orders ───────────────────────────────────────────────────
+
+struct CryptoComGetOpenOrdersRequest : TypedPrivateRequest<CryptoComOrdersResult> {
+    std::optional<std::string> instrument_name;  // optional filter
+    HttpRequest build(const CryptoComCredentials& creds) const override;
+};
+
+// ── private/get-order-history ─────────────────────────────────────────────────
+
+struct CryptoComGetOrderHistoryRequest : TypedPrivateRequest<CryptoComOrdersResult> {
+    std::optional<std::string> instrument_name;  // optional filter
+    std::optional<int>         limit;
+    HttpRequest build(const CryptoComCredentials& creds) const override;
+};
+
+// ── private/get-trades ────────────────────────────────────────────────────────
+
+struct CryptoComUserTrade {
+    std::string account_id;
+    std::string event_date;
+    double      traded_quantity{0.0};
+    double      traded_price{0.0};
+    double      fees{0.0};
+    std::string order_id;
+    std::string trade_id;
+    std::string trade_match_id;
+    int64_t     create_time{0};       // ms
+    std::string create_time_ns;       // nanosecond string
+    std::string side;                 // "BUY" / "SELL"
+    std::string instrument_name;
+    std::string fee_instrument_name;
+    std::string client_oid;
+    std::string taker_side;
+    std::string liquidity_indicator;  // "MAKER" / "TAKER"
+    static CryptoComUserTrade from_json(const json& j);
+};
+
+struct CryptoComUserTradesResult {
+    std::vector<CryptoComUserTrade> trades;  // result.data[]
+    static CryptoComUserTradesResult from_json(const json& j);
+};
+
+struct CryptoComGetTradesRequest : TypedPrivateRequest<CryptoComUserTradesResult> {
+    std::optional<std::string> instrument_name;  // optional filter
+    std::optional<int>         limit;
+    HttpRequest build(const CryptoComCredentials& creds) const override;
 };
 
 } // namespace exchange::cryptocom::rest

@@ -14,6 +14,7 @@
 #include "exchange/cryptocom/rest_api.hpp"
 #include "exchange/cryptocom/types.hpp"
 
+#include "cryptocom_account_example_json.hpp"
 #include "cryptocom_rest_example_json.hpp"
 
 #include <gtest/gtest.h>
@@ -114,4 +115,69 @@ TEST(CryptoComRestResponses, Trades) {
     EXPECT_DOUBLE_EQ(t.price, 63778.90);            // p
     EXPECT_EQ(t.side, "buy");                        // s (lowercase wire)
     EXPECT_EQ(t.instrument_name, "BTC_USD");         // i
+}
+
+// ── Private endpoints (synthetic fixtures) ────────────────────────────────────
+
+TEST(CryptoComRestResponses, UserBalance) {
+    auto r = parse<CryptoComUserBalanceResult>(cryptocom_fixtures::USER_BALANCE);
+    ASSERT_EQ(r.data.size(), 1u);
+    const auto& b = r.data[0];
+    EXPECT_DOUBLE_EQ(b.total_available_balance, 1000.00);
+    EXPECT_DOUBLE_EQ(b.total_cash_balance, 1000.00);
+    EXPECT_EQ(b.instrument_name, "USD");
+    ASSERT_EQ(b.position_balances.size(), 1u);
+    EXPECT_EQ(b.position_balances[0].instrument_name, "BTC");
+    EXPECT_DOUBLE_EQ(b.position_balances[0].quantity, 0.5);
+    EXPECT_DOUBLE_EQ(b.position_balances[0].market_value, 31889.34);
+}
+
+TEST(CryptoComRestResponses, CreateOrder) {
+    auto r = parse<CryptoComCreateOrderResult>(cryptocom_fixtures::CREATE_ORDER);
+    EXPECT_EQ(r.order_id, "18342311");
+    EXPECT_EQ(r.client_oid, "c5f682ed-7108-4f1c-b755-972fcdca0f02");
+}
+
+TEST(CryptoComRestResponses, CancelOrder_NoResultBody) {
+    // Success with no `result` key still parses as ok (parse passes the whole
+    // envelope to from_json, which a CancelResult ignores).
+    auto resp = parse_cryptocom_response<CryptoComCancelResult>(
+        200, json::parse(cryptocom_fixtures::CANCEL_ORDER));
+    EXPECT_TRUE(resp.ok);
+    EXPECT_TRUE(resp.result.has_value());
+}
+
+TEST(CryptoComRestResponses, OrderDetail_FieldsAndStatusEnum) {
+    auto o = parse<CryptoComOrder>(cryptocom_fixtures::ORDER_DETAIL);
+    EXPECT_EQ(o.order_id, "18342311");
+    EXPECT_EQ(o.order_type, "LIMIT");
+    EXPECT_EQ(o.time_in_force, "GOOD_TILL_CANCEL");
+    EXPECT_EQ(o.side, "BUY");
+    EXPECT_DOUBLE_EQ(o.quantity, 0.001);
+    EXPECT_DOUBLE_EQ(o.limit_price, 63000.00);
+    EXPECT_EQ(o.status, "ACTIVE");
+    EXPECT_EQ(o.status_enum, OrderStatus::New);  // ACTIVE → New
+    EXPECT_EQ(o.create_time, 1781980000000);
+    EXPECT_EQ(o.instrument_name, "BTC_USD");
+}
+
+TEST(CryptoComRestResponses, OpenOrders) {
+    auto r = parse<CryptoComOrdersResult>(cryptocom_fixtures::OPEN_ORDERS);
+    ASSERT_EQ(r.orders.size(), 1u);
+    EXPECT_EQ(r.orders[0].order_id, "18342311");
+    EXPECT_EQ(r.orders[0].status_enum, OrderStatus::New);
+}
+
+TEST(CryptoComRestResponses, UserTrades) {
+    auto r = parse<CryptoComUserTradesResult>(cryptocom_fixtures::USER_TRADES);
+    ASSERT_EQ(r.trades.size(), 1u);
+    const auto& t = r.trades[0];
+    EXPECT_EQ(t.order_id, "18342311");
+    EXPECT_EQ(t.trade_id, "99999");
+    EXPECT_DOUBLE_EQ(t.traded_quantity, 0.001);
+    EXPECT_DOUBLE_EQ(t.traded_price, 63000.00);
+    EXPECT_DOUBLE_EQ(t.fees, 0.0315);
+    EXPECT_EQ(t.side, "BUY");
+    EXPECT_EQ(t.liquidity_indicator, "TAKER");
+    EXPECT_EQ(t.create_time_ns, "1781980050000000000");
 }

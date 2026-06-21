@@ -14,9 +14,16 @@
 #include "exchange/cryptocom/rest_api.hpp"
 
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
 
+using namespace exchange::cryptocom;
 using namespace exchange::cryptocom::rest;
+using json = nlohmann::json;
 using M = HttpRequest::Method;
+
+namespace {
+const CryptoComCredentials CREDS{"test-api-key", "test-secret"};
+}  // namespace
 
 // ── Public endpoints ──────────────────────────────────────────────────────────
 
@@ -91,4 +98,110 @@ TEST(CryptoComRestRequests, Trades_InstrumentOnly) {
     req.instrument_name = "BTC_USD";
     auto r = req.build();
     EXPECT_EQ(r.query, "instrument_name=BTC_USD");
+}
+
+// ── Private endpoints (signed envelope) ───────────────────────────────────────
+
+namespace {
+// Assert the common signed-envelope shape and that `sig` matches an independent
+// recomputation from the body's own id/params/nonce (pins signing end-to-end).
+void expect_signed_envelope(const HttpRequest& r, const std::string& method) {
+    EXPECT_EQ(r.method, M::POST);
+    EXPECT_EQ(r.path, "/exchange/v1/" + method);
+    EXPECT_EQ(r.headers.at("Content-Type"), "application/json");
+    auto body = json::parse(r.body);
+    EXPECT_EQ(body.at("method"), method);
+    EXPECT_EQ(body.at("api_key"), CREDS.api_key);
+    ASSERT_TRUE(body.contains("id"));
+    ASSERT_TRUE(body.contains("nonce"));
+    ASSERT_TRUE(body.contains("params"));
+    ASSERT_TRUE(body.contains("sig"));
+    const std::string sig = CREDS.sign(method, body.at("id").get<int64_t>(),
+                                       body.at("params"), body.at("nonce").get<int64_t>());
+    EXPECT_EQ(body.at("sig"), sig);
+}
+} // namespace
+
+TEST(CryptoComRestRequests, UserBalance_EmptyParams) {
+    auto r = CryptoComUserBalanceRequest{}.build(CREDS);
+    expect_signed_envelope(r, "private/user-balance");
+    auto body = json::parse(r.body);
+    EXPECT_TRUE(body.at("params").is_object());
+    EXPECT_TRUE(body.at("params").empty());
+}
+
+TEST(CryptoComRestRequests, CreateLimitOrder_ParamsAndSig) {
+    CryptoComCreateOrderRequest req;
+    req.id              = 42;
+    req.instrument_name = "BTC_USD";
+    req.side            = Side::Buy;
+    req.type            = OrderType::Limit;
+    req.price           = "63000.00";
+    req.quantity        = "0.001";
+    req.time_in_force   = TimeInForce::GTC;
+    req.client_oid      = "abc-123";
+
+    auto r = req.build(CREDS);
+    expect_signed_envelope(r, "private/create-order");
+    auto body = json::parse(r.body);
+    EXPECT_EQ(body.at("id").get<int64_t>(), 42);
+    const auto& p = body.at("params");
+    EXPECT_EQ(p.at("instrument_name"), "BTC_USD");
+    EXPECT_EQ(p.at("side"),            "BUY");
+    EXPECT_EQ(p.at("type"),            "LIMIT");
+    EXPECT_EQ(p.at("price"),           "63000.00");
+    EXPECT_EQ(p.at("quantity"),        "0.001");
+    EXPECT_EQ(p.at("time_in_force"),   "GOOD_TILL_CANCEL");
+    EXPECT_EQ(p.at("client_oid"),      "abc-123");
+    EXPECT_FALSE(p.contains("notional"));
+}
+
+TEST(CryptoComRestRequests, CreateMarketBuy_NotionalNoPrice) {
+    CryptoComCreateOrderRequest req;
+    req.instrument_name = "BTC_USD";
+    req.side            = Side::Buy;
+    req.type            = OrderType::Market;
+    req.notional        = "150.00";
+
+    auto body = json::parse(req.build(CREDS).body);
+    const auto& p = body.at("params");
+    EXPECT_EQ(p.at("type"),     "MARKET");
+    EXPECT_EQ(p.at("notional"), "150.00");
+    EXPECT_FALSE(p.contains("price"));
+    EXPECT_FALSE(p.contains("quantity"));
+}
+
+TEST(CryptoComRestRequests, CancelOrder) {
+    CryptoComCancelOrderRequest req;
+    req.order_id = "18342311";
+    auto r = req.build(CREDS);
+    expect_signed_envelope(r, "private/cancel-order");
+    EXPECT_EQ(json::parse(r.body).at("params").at("order_id"), "18342311");
+}
+
+TEST(CryptoComRestRequests, GetOrderDetail) {
+    CryptoComGetOrderDetailRequest req;
+    req.order_id = "18342311";
+    auto body = json::parse(req.build(CREDS).body);
+    EXPECT_EQ(body.at("method"), "private/get-order-detail");
+    EXPECT_EQ(body.at("params").at("order_id"), "18342311");
+}
+
+TEST(CryptoComRestRequests, GetOpenOrders_WithInstrument) {
+    CryptoComGetOpenOrdersRequest req;
+    req.instrument_name = "BTC_USD";
+    auto body = json::parse(req.build(CREDS).body);
+    EXPECT_EQ(body.at("method"), "private/get-open-orders");
+    EXPECT_EQ(body.at("params").at("instrument_name"), "BTC_USD");
+}
+
+TEST(CryptoComRestRequests, GetTrades_LimitSerialisedAsString) {
+    CryptoComGetTradesRequest req;
+    req.instrument_name = "BTC_USD";
+    req.limit           = 20;
+    auto body = json::parse(req.build(CREDS).body);
+    const auto& p = body.at("params");
+    EXPECT_EQ(p.at("instrument_name"), "BTC_USD");
+    EXPECT_TRUE(p.at("limit").is_string());  // numbers serialised as strings
+    EXPECT_EQ(p.at("limit"), "20");
 }

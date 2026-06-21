@@ -219,4 +219,214 @@ HttpRequest CryptoComTradesRequest::build() const {
     return r;
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// Private endpoints
+// ═════════════════════════════════════════════════════════════════════════════
+
+namespace {
+
+// Assemble + sign the {id, method, api_key, params, nonce, sig} envelope and wrap
+// it as a POST to /exchange/v1/<method>. params must already hold string values.
+HttpRequest build_private(const CryptoComCredentials& creds, int64_t id,
+                          const std::string& method, const json& params) {
+    const int64_t nonce = make_nonce();
+
+    json body;
+    body["id"]      = id;
+    body["method"]  = method;
+    body["api_key"] = creds.api_key;
+    body["params"]  = params;
+    body["nonce"]   = nonce;
+    body["sig"]     = creds.sign(method, id, params, nonce);
+
+    HttpRequest r;
+    r.method = HttpRequest::Method::POST;
+    r.path   = std::string(API_PREFIX) + method;
+    r.body   = body.dump();
+    r.headers["Content-Type"] = "application/json";
+    return r;
+}
+
+} // namespace
+
+// ── Shared order record ───────────────────────────────────────────────────────
+
+CryptoComOrder CryptoComOrder::from_json(const json& j) {
+    CryptoComOrder o;
+    o.account_id          = str_field(j, "account_id");
+    o.order_id            = str_field(j, "order_id");
+    o.client_oid          = str_field(j, "client_oid");
+    o.order_type          = str_field(j, "order_type");
+    o.time_in_force       = str_field(j, "time_in_force");
+    o.side                = str_field(j, "side");
+    o.quantity            = sd(j, "quantity");
+    o.limit_price         = sd(j, "limit_price");
+    o.order_value         = sd(j, "order_value");
+    o.avg_price           = sd(j, "avg_price");
+    o.cumulative_quantity = sd(j, "cumulative_quantity");
+    o.cumulative_value    = sd(j, "cumulative_value");
+    o.cumulative_fee      = sd(j, "cumulative_fee");
+    o.status              = str_field(j, "status");
+    o.status_enum         = cryptocom_order_status_from_string(o.status);
+    o.create_time         = num_i64(j, "create_time");
+    o.update_time         = num_i64(j, "update_time");
+    o.instrument_name     = str_field(j, "instrument_name");
+    o.fee_instrument_name = str_field(j, "fee_instrument_name");
+    return o;
+}
+
+CryptoComOrdersResult CryptoComOrdersResult::from_json(const json& j) {
+    CryptoComOrdersResult r;
+    if (j.contains("data") && j.at("data").is_array())
+        for (const auto& e : j.at("data"))
+            r.orders.push_back(CryptoComOrder::from_json(e));
+    return r;
+}
+
+// ── private/user-balance ──────────────────────────────────────────────────────
+
+CryptoComPositionBalance CryptoComPositionBalance::from_json(const json& j) {
+    CryptoComPositionBalance p;
+    p.instrument_name        = str_field(j, "instrument_name");
+    p.quantity               = sd(j, "quantity");
+    p.market_value           = sd(j, "market_value");
+    p.collateral_amount      = sd(j, "collateral_amount");
+    p.max_withdrawal_balance = sd(j, "max_withdrawal_balance");
+    p.reserved_qty           = sd(j, "reserved_qty");
+    return p;
+}
+
+CryptoComUserBalance CryptoComUserBalance::from_json(const json& j) {
+    CryptoComUserBalance b;
+    b.total_available_balance     = sd(j, "total_available_balance");
+    b.total_margin_balance        = sd(j, "total_margin_balance");
+    b.total_initial_margin        = sd(j, "total_initial_margin");
+    b.total_cash_balance          = sd(j, "total_cash_balance");
+    b.total_collateral_value      = sd(j, "total_collateral_value");
+    b.total_session_unrealized_pnl = sd(j, "total_session_unrealized_pnl");
+    b.total_session_realized_pnl  = sd(j, "total_session_realized_pnl");
+    b.instrument_name             = str_field(j, "instrument_name");
+    if (j.contains("position_balances") && j.at("position_balances").is_array())
+        for (const auto& e : j.at("position_balances"))
+            b.position_balances.push_back(CryptoComPositionBalance::from_json(e));
+    return b;
+}
+
+CryptoComUserBalanceResult CryptoComUserBalanceResult::from_json(const json& j) {
+    CryptoComUserBalanceResult r;
+    if (j.contains("data") && j.at("data").is_array())
+        for (const auto& e : j.at("data"))
+            r.data.push_back(CryptoComUserBalance::from_json(e));
+    return r;
+}
+
+HttpRequest CryptoComUserBalanceRequest::build(const CryptoComCredentials& creds) const {
+    return build_private(creds, id, "private/user-balance", json::object());
+}
+
+// ── private/create-order ──────────────────────────────────────────────────────
+
+CryptoComCreateOrderResult CryptoComCreateOrderResult::from_json(const json& j) {
+    CryptoComCreateOrderResult r;
+    r.order_id   = str_field(j, "order_id");
+    r.client_oid = str_field(j, "client_oid");
+    return r;
+}
+
+HttpRequest CryptoComCreateOrderRequest::build(const CryptoComCredentials& creds) const {
+    json params;
+    params["instrument_name"] = instrument_name;
+    params["side"]            = cryptocom_side_to_string(side);
+    params["type"]            = cryptocom_order_type_to_string(type);
+    if (price)         params["price"]         = *price;
+    if (quantity)      params["quantity"]      = *quantity;
+    if (notional)      params["notional"]      = *notional;
+    if (client_oid)    params["client_oid"]    = *client_oid;
+    if (time_in_force) params["time_in_force"] = cryptocom_tif_to_string(*time_in_force);
+    return build_private(creds, id, "private/create-order", params);
+}
+
+// ── private/cancel-order and private/cancel-all-orders ────────────────────────
+
+CryptoComCancelResult CryptoComCancelResult::from_json(const json&) {
+    return CryptoComCancelResult{};
+}
+
+HttpRequest CryptoComCancelOrderRequest::build(const CryptoComCredentials& creds) const {
+    json params;
+    params["order_id"] = order_id;
+    return build_private(creds, id, "private/cancel-order", params);
+}
+
+HttpRequest CryptoComCancelAllOrdersRequest::build(const CryptoComCredentials& creds) const {
+    json params = json::object();
+    if (instrument_name)
+        params["instrument_name"] = *instrument_name;
+    return build_private(creds, id, "private/cancel-all-orders", params);
+}
+
+// ── private/get-order-detail ──────────────────────────────────────────────────
+
+HttpRequest CryptoComGetOrderDetailRequest::build(const CryptoComCredentials& creds) const {
+    json params;
+    params["order_id"] = order_id;
+    return build_private(creds, id, "private/get-order-detail", params);
+}
+
+// ── private/get-open-orders ───────────────────────────────────────────────────
+
+HttpRequest CryptoComGetOpenOrdersRequest::build(const CryptoComCredentials& creds) const {
+    json params = json::object();
+    if (instrument_name)
+        params["instrument_name"] = *instrument_name;
+    return build_private(creds, id, "private/get-open-orders", params);
+}
+
+// ── private/get-order-history ─────────────────────────────────────────────────
+
+HttpRequest CryptoComGetOrderHistoryRequest::build(const CryptoComCredentials& creds) const {
+    json params = json::object();
+    if (instrument_name) params["instrument_name"] = *instrument_name;
+    if (limit)           params["limit"]           = std::to_string(*limit);
+    return build_private(creds, id, "private/get-order-history", params);
+}
+
+// ── private/get-trades ────────────────────────────────────────────────────────
+
+CryptoComUserTrade CryptoComUserTrade::from_json(const json& j) {
+    CryptoComUserTrade t;
+    t.account_id          = str_field(j, "account_id");
+    t.event_date          = str_field(j, "event_date");
+    t.traded_quantity     = sd(j, "traded_quantity");
+    t.traded_price        = sd(j, "traded_price");
+    t.fees                = sd(j, "fees");
+    t.order_id            = str_field(j, "order_id");
+    t.trade_id            = str_field(j, "trade_id");
+    t.trade_match_id      = str_field(j, "trade_match_id");
+    t.create_time         = num_i64(j, "create_time");
+    t.create_time_ns      = str_field(j, "create_time_ns");
+    t.side                = str_field(j, "side");
+    t.instrument_name     = str_field(j, "instrument_name");
+    t.fee_instrument_name = str_field(j, "fee_instrument_name");
+    t.client_oid          = str_field(j, "client_oid");
+    t.taker_side          = str_field(j, "taker_side");
+    t.liquidity_indicator = str_field(j, "liquidity_indicator");
+    return t;
+}
+
+CryptoComUserTradesResult CryptoComUserTradesResult::from_json(const json& j) {
+    CryptoComUserTradesResult r;
+    if (j.contains("data") && j.at("data").is_array())
+        for (const auto& e : j.at("data"))
+            r.trades.push_back(CryptoComUserTrade::from_json(e));
+    return r;
+}
+
+HttpRequest CryptoComGetTradesRequest::build(const CryptoComCredentials& creds) const {
+    json params = json::object();
+    if (instrument_name) params["instrument_name"] = *instrument_name;
+    if (limit)           params["limit"]           = std::to_string(*limit);
+    return build_private(creds, id, "private/get-trades", params);
+}
+
 } // namespace exchange::cryptocom::rest
