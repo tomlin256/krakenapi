@@ -29,6 +29,10 @@
 #include "exchange/common/ws_client.hpp"
 
 #include <ixwebsocket/IXWebSocket.h>
+#include <ixwebsocket/IXWebSocketHttpHeaders.h>
+
+#include <map>
+#include <string>
 
 namespace exchange::ws {
 
@@ -38,10 +42,19 @@ namespace exchange::ws {
 
 class IxWsConnection : public IWsConnection {
 public:
-    explicit IxWsConnection(std::string url) : url_(std::move(url)) {}
+    // extra_headers lets a caller add or override handshake headers. The only
+    // override that currently matters is "Host": ixwebsocket otherwise emits
+    // "Host: <host>:443" for wss, which some gateways (Crypto.com) reject with
+    // HTTP 400 — supplying "Host" suppresses ixwebsocket's auto value.
+    explicit IxWsConnection(std::string url,
+                            std::map<std::string, std::string> extra_headers = {})
+        : url_(std::move(url)), extra_headers_(std::move(extra_headers)) {}
 
     void connect() override {
         ws_.setUrl(url_);
+        if (!extra_headers_.empty())
+            ws_.setExtraHeaders(
+                ix::WebSocketHttpHeaders(extra_headers_.begin(), extra_headers_.end()));
         ws_.setOnMessageCallback([this](const ix::WebSocketMessagePtr& msg) {
             switch (msg->type) {
                 case ix::WebSocketMessageType::Open:
@@ -84,8 +97,9 @@ public:
     void set_on_error(ErrorCb cb)     override { error_cb_ = std::move(cb); }
 
 private:
-    std::string   url_;
-    ix::WebSocket ws_;
+    std::string                        url_;
+    std::map<std::string, std::string> extra_headers_;
+    ix::WebSocket                      ws_;
     MessageCb     msg_cb_;
     OpenCb        open_cb_;
     CloseCb       close_cb_;
