@@ -67,7 +67,7 @@ struct BaseResponse : exchange::ws::BaseWsResponse {
 
 // ── Authentication credentials ────────────────────────────────────────────────
 
-struct WsCredentials {
+struct KrakenWsCredentials {
     std::string token;
 
     json to_json() const;

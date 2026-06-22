@@ -36,7 +36,7 @@ KrakenRestClient::execute(const Req& req) {
 // Execute a private request (credentials required).
 template<typename Req, typename Enable>
 exchange::kraken::RestResponse<typename Req::response_type>
-KrakenRestClient::execute(const Req& req, const Credentials& creds) {
+KrakenRestClient::execute(const Req& req, const KrakenCredentials& creds) {
     using Resp = typename Req::response_type;
     try {
         auto http = req.build(creds);

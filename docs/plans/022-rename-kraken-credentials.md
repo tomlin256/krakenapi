@@ -16,10 +16,12 @@ This is a **breaking change** (accepted — consistent with the project's no-com
 
 - New name: **`KrakenCredentials`** (in the same `exchange::kraken::rest`
   namespace, mirroring `exchange::binance::rest::BinanceCredentials`).
-- **Out of scope:** `exchange::kraken::ws::WsCredentials` (the WS session-token
-  wrapper) — its `Ws` prefix + `ws` namespace already disambiguate it; it is not
-  the ambiguous "bare Credentials". Note it here so leaving it is a deliberate
-  choice, not an oversight.
+- **Also in scope (per approval):** rename `exchange::kraken::ws::WsCredentials`
+  → **`KrakenWsCredentials`** for full symmetry with `BinanceWsCredentials` /
+  `CoinbaseWsCredentials`. Kraken's bare `WsCredentials` lives only in
+  `kraken/ws_api.hpp` (def), `src/kraken/ws_api.cpp` (`to_json`), and
+  `kraken_example.cpp` (3×); `\bWsCredentials\b` does not match the
+  already-prefixed `BinanceWsCredentials`/`CoinbaseWsCredentials`.
 
 ## Scope (sized by grep — ~109 bare `Credentials` references)
 

@@ -118,17 +118,17 @@ uint64_t make_nonce() {
         duration_cast<microseconds>(system_clock::now().time_since_epoch()).count());
 }
 
-// ── Credentials ──────────────────────────────────────────────────────────────
+// ── KrakenCredentials ──────────────────────────────────────────────────────────────
 
-Credentials Credentials::from_file(const std::string& name,
+KrakenCredentials KrakenCredentials::from_file(const std::string& name,
                                    const std::string& location) {
     // TOML file with top-level string keys api_key / api_secret (plan 021).
     const auto v = exchange::rest::read_toml_credentials(
         name, ".kraken", location, {"api_key", "api_secret"});
-    return Credentials{v[0], v[1]};
+    return KrakenCredentials{v[0], v[1]};
 }
 
-std::string Credentials::sign(const std::string& uri_path,
+std::string KrakenCredentials::sign(const std::string& uri_path,
                               const std::string& nonce,
                               const std::string& post_body) const {
     using namespace detail;
@@ -142,7 +142,7 @@ std::string Credentials::sign(const std::string& uri_path,
 
 // ── KrakenAuth ───────────────────────────────────────────────────────────────
 
-KrakenAuth::KrakenAuth(Credentials creds) : creds_(std::move(creds)) {}
+KrakenAuth::KrakenAuth(KrakenCredentials creds) : creds_(std::move(creds)) {}
 
 void KrakenAuth::sign(exchange::rest::HttpRequest& req) const {
     std::string nonce_str;

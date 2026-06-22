@@ -101,9 +101,9 @@ TEST(PublicRequests, GetAssetPairs_Path) {
 // ---------------------------------------------------------------------------
 
 // Minimal test credentials (signing will produce valid-format headers even with dummy keys).
-static Credentials make_dummy_creds() {
+static KrakenCredentials make_dummy_creds() {
     // The secret must be valid base64; "dGVzdA==" decodes to "test".
-    return Credentials{"test-api-key", "dGVzdA=="};
+    return KrakenCredentials{"test-api-key", "dGVzdA=="};
 }
 
 TEST(PrivateRequests, GetAccountBalance_Path) {

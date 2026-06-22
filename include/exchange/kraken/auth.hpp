@@ -10,7 +10,7 @@
 #pragma once
 
 // exchange/kraken/auth.hpp
-// Kraken REST authentication: Credentials, KrakenAuth (IRestAuth implementor),
+// Kraken REST authentication: KrakenCredentials, KrakenAuth (IRestAuth implementor),
 // nonce generator, and supporting crypto utilities. All bodies are defined in
 // src/kraken/auth.cpp.
 //
@@ -46,7 +46,7 @@ uint64_t make_nonce();
 
 // ── Auth credential bundle ───────────────────────────────────────────────────
 
-struct Credentials {
+struct KrakenCredentials {
     std::string api_key;     // public key  → API-Key header
     std::string api_secret;  // base64-encoded private key → used for signing
 
@@ -56,7 +56,7 @@ struct Credentials {
     // Path: location.empty() ? $HOME/.kraken/<name> : <location>/<name>.
     // Throws std::runtime_error if the file is missing/malformed or a key is
     // absent, non-string, or empty.
-    static Credentials from_file(const std::string& name,
+    static KrakenCredentials from_file(const std::string& name,
                                  const std::string& location = "");
 
     // Compute the API-Sign header value.
@@ -70,7 +70,7 @@ struct Credentials {
 
 // ── IRestAuth implementor ─────────────────────────────────────────────────────
 //
-// KrakenAuth wraps Credentials and implements IRestAuth::sign().
+// KrakenAuth wraps KrakenCredentials and implements IRestAuth::sign().
 //
 // Design note (Option 2, Step 3): PrivateRequest::build() constructs the
 // complete request body — including the nonce field — before calling sign().
@@ -82,12 +82,12 @@ struct Credentials {
 //   application/x-www-form-urlencoded — nonce= appears as the first key-value pair
 //   application/json                  — nonce is a top-level string field
 struct KrakenAuth : exchange::rest::IRestAuth {
-    explicit KrakenAuth(Credentials creds);
+    explicit KrakenAuth(KrakenCredentials creds);
 
     void sign(exchange::rest::HttpRequest& req) const override;
 
 private:
-    Credentials creds_;
+    KrakenCredentials creds_;
 };
 
 } // namespace exchange::kraken::rest

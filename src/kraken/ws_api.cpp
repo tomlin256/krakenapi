@@ -28,7 +28,7 @@ void BaseResponse::parse_base(const json& j, BaseResponse& r) {
 
 // ── Authentication credentials ────────────────────────────────────────────────
 
-json WsCredentials::to_json() const {
+json KrakenWsCredentials::to_json() const {
     json j;
     j["token"] = token;
     return j;

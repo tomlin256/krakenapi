@@ -11,7 +11,7 @@
 
 // exchange/common/credentials_file.hpp
 // Shared TOML credentials-file loader used by every adapter's
-// Credentials::from_file. Resolves a per-exchange key file, parses it as TOML,
+// <Exchange>Credentials::from_file. Resolves a per-exchange key file, parses it as TOML,
 // and returns the requested string fields. The TOML dependency (toml++) is an
 // implementation detail of src/exchange/common/credentials_file.cpp — this
 // header exposes only standard-library types, so consumers need no TOML library.

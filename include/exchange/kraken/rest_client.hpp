@@ -47,7 +47,7 @@ public:
     template<typename Req,
              typename = std::enable_if_t<std::is_base_of_v<PrivateRequest, Req>>>
     exchange::kraken::RestResponse<typename Req::response_type>
-    execute(const Req& req, const Credentials& creds);
+    execute(const Req& req, const KrakenCredentials& creds);
 
 private:
     // Test constructor — injects a body-only performer (Kraken keys errors off

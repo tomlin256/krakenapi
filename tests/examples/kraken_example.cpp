@@ -33,7 +33,7 @@ std::string http_send(const exchange::kraken::rest::HttpRequest& req) {
 // ============================================================
 // Hypothetical WebSocket send helper
 // ============================================================
-void ws_send(const json& msg, exchange::kraken::ws::WsCredentials& creds) {
+void ws_send(const json& msg, exchange::kraken::ws::KrakenWsCredentials& creds) {
     std::cout << "[WS SEND] " << msg << "\n";
 }
 
@@ -44,9 +44,9 @@ int main(int argc, char* argv[]) {
     using namespace exchange::kraken;
 
     // --------------------------------------------------------
-    // Credentials
+    // KrakenCredentials
     // --------------------------------------------------------
-    rest::Credentials creds{
+    rest::KrakenCredentials creds{
         .api_key    = "YOUR_API_KEY",
         .api_secret = "YOUR_BASE64_SECRET"
     };
@@ -56,10 +56,10 @@ int main(int argc, char* argv[]) {
     auto tok_http = tok_req.build(creds);
     // std::string tok_body = http_send(tok_http);
     // auto tok_result = parse_rest_response<rest::WebSocketsTokenResult>(json::parse(tok_body));
-    // ws::WsCredentials ws_creds{ tok_result.result->token };
+    // ws::KrakenWsCredentials ws_creds{ tok_result.result->token };
 
     // For this demo, use a placeholder:
-    ws::WsCredentials ws_creds{ "my_ws_token" };
+    ws::KrakenWsCredentials ws_creds{ "my_ws_token" };
 
     // ============================================================
     // REST: Public endpoints

@@ -24,8 +24,8 @@ using namespace exchange::kraken::rest;
 // Helpers
 // ---------------------------------------------------------------------------
 
-static Credentials dummy_creds() {
-    return Credentials{"test-api-key", "dGVzdA=="};
+static KrakenCredentials dummy_creds() {
+    return KrakenCredentials{"test-api-key", "dGVzdA=="};
 }
 
 // ---------------------------------------------------------------------------
@@ -154,7 +154,7 @@ TEST(KrakenRestClient, PrivateExecute_PropagatesErrors) {
 }
 
 // ---------------------------------------------------------------------------
-// Credentials::from_file — TOML format (plan 021)
+// KrakenCredentials::from_file — TOML format (plan 021)
 // ---------------------------------------------------------------------------
 
 TEST(CredentialsFromFile, LoadsTomlFile) {
@@ -168,7 +168,7 @@ TEST(CredentialsFromFile, LoadsTomlFile) {
              "api_secret = \"YmFzZTY0c2VjcmV0\"\n";
     }
 
-    const auto creds = Credentials::from_file("default", dir.string());
+    const auto creds = KrakenCredentials::from_file("default", dir.string());
     EXPECT_EQ(creds.api_key, "PUBLICKEY");
     EXPECT_EQ(creds.api_secret, "YmFzZTY0c2VjcmV0");
 
@@ -177,12 +177,12 @@ TEST(CredentialsFromFile, LoadsTomlFile) {
 }
 
 // ---------------------------------------------------------------------------
-// Credentials::from_file error paths
+// KrakenCredentials::from_file error paths
 // ---------------------------------------------------------------------------
 
 TEST(CredentialsFromFile, ThrowsWhenFileNotFound) {
     EXPECT_THROW(
-        Credentials::from_file("nonexistent", "/tmp/no_such_dir"),
+        KrakenCredentials::from_file("nonexistent", "/tmp/no_such_dir"),
         std::runtime_error
     );
 }
@@ -190,7 +190,7 @@ TEST(CredentialsFromFile, ThrowsWhenFileNotFound) {
 TEST(CredentialsFromFile, ThrowsWhenHomeUnset) {
     const char* saved = getenv("HOME");
     unsetenv("HOME");
-    EXPECT_THROW(Credentials::from_file("default"), std::runtime_error);
+    EXPECT_THROW(KrakenCredentials::from_file("default"), std::runtime_error);
     if (saved) setenv("HOME", saved, 1);
 }
 

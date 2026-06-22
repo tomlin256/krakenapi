@@ -44,13 +44,13 @@ struct PublicRequest {
 // A Kraken private request (signing required).
 struct PrivateRequest {
     virtual ~PrivateRequest() = default;
-    virtual HttpRequest build(const Credentials& creds) const = 0;
+    virtual HttpRequest build(const KrakenCredentials& creds) const = 0;
 
 protected:
     // Defined in src/kraken/rest_api.cpp.
     HttpRequest make_private_request(const std::string& uri_path,
                                      std::map<std::string, std::string> params,
-                                     const Credentials& creds) const;
+                                     const KrakenCredentials& creds) const;
 };
 
 // Typed bases — link each request type to its response type at compile time.
@@ -272,7 +272,7 @@ struct RecentTradesResult {
 // ── ACCOUNT DATA (private) ────────────────────────────────────────────────────
 
 struct GetAccountBalanceRequest : TypedPrivateRequest<AccountBalanceResult> {
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct AccountBalanceResult {
@@ -281,7 +281,7 @@ struct AccountBalanceResult {
 };
 
 struct GetExtendedBalanceRequest : TypedPrivateRequest<ExtendedBalanceResult> {
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct ExtendedBalance {
@@ -299,7 +299,7 @@ struct ExtendedBalanceResult {
 struct GetTradeBalanceRequest : TypedPrivateRequest<TradeBalance> {
     std::optional<std::string> asset;
 
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct TradeBalance {
@@ -320,7 +320,7 @@ struct GetOpenOrdersRequest : TypedPrivateRequest<OpenOrdersResult> {
     std::optional<bool>    trades;
     std::optional<int64_t> userref;
 
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct OpenOrdersResult {
@@ -336,7 +336,7 @@ struct GetClosedOrdersRequest : TypedPrivateRequest<ClosedOrdersResult> {
     std::optional<int32_t> ofs;
     std::optional<std::string> closetime;
 
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct ClosedOrdersResult {
@@ -349,7 +349,7 @@ struct QueryOrdersRequest : TypedPrivateRequest<QueryOrdersResultWrapper> {
     std::vector<std::string> txids;
     std::optional<bool>      trades;
 
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct QueryOrdersResultWrapper {
@@ -364,7 +364,7 @@ struct GetTradesHistoryRequest : TypedPrivateRequest<TradesHistoryResult> {
     std::optional<double>      end;
     std::optional<int32_t>     ofs;
 
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct TradesHistoryResult {
@@ -377,7 +377,7 @@ struct QueryTradesRequest : TypedPrivateRequest<QueryTradesResultWrapper> {
     std::vector<std::string> txids;
     std::optional<bool>      trades;
 
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct QueryTradesResultWrapper {
@@ -390,7 +390,7 @@ struct GetOpenPositionsRequest : TypedPrivateRequest<OpenPositionsResult> {
     std::optional<bool> docalcs;
     std::optional<bool> consolidation;
 
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct PositionInfo {
@@ -427,7 +427,7 @@ struct GetLedgersRequest : TypedPrivateRequest<LedgersResult> {
     std::optional<double>  end;
     std::optional<int32_t> ofs;
 
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct LedgersResult {
@@ -440,7 +440,7 @@ struct QueryLedgersRequest : TypedPrivateRequest<QueryLedgersResultWrapper> {
     std::vector<std::string> ids;
     std::optional<bool>      trades;
 
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct QueryLedgersResultWrapper {
@@ -458,7 +458,7 @@ void apply_order_params_to_rest(std::map<std::string, std::string>& p,
 struct AddOrderRequest : TypedPrivateRequest<AddOrderResult> {
     exchange::kraken::OrderParams params;
 
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct AddOrderResult {
@@ -475,7 +475,7 @@ struct AddOrderBatchRequest : TypedPrivateRequest<AddOrderBatchResult> {
     std::optional<bool>   validate;
     std::optional<std::string> deadline;
 
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct BatchOrderResult {
@@ -502,7 +502,7 @@ struct EditOrderRequest : TypedPrivateRequest<EditOrderResult> {
     std::optional<std::string> cl_ord_id;
     std::optional<bool>        validate;
 
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct EditOrderResult {
@@ -522,7 +522,7 @@ struct AmendOrderRequest : TypedPrivateRequest<AmendOrderResult> {
     std::optional<double>      trigger_price;
     std::optional<std::string> deadline;
 
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct AmendOrderResult {
@@ -533,7 +533,7 @@ struct AmendOrderResult {
 struct CancelOrderRequest : TypedPrivateRequest<CancelOrderResult> {
     std::string txid;
 
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct CancelOrderResult {
@@ -543,7 +543,7 @@ struct CancelOrderResult {
 };
 
 struct CancelAllOrdersRequest : TypedPrivateRequest<CancelAllResult> {
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct CancelAllResult {
@@ -554,7 +554,7 @@ struct CancelAllResult {
 struct CancelAllOrdersAfterRequest : TypedPrivateRequest<CancelAllAfterResult> {
     int32_t timeout{0};
 
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct CancelAllAfterResult {
@@ -566,7 +566,7 @@ struct CancelAllAfterResult {
 struct CancelOrderBatchRequest : TypedPrivateRequest<CancelOrderBatchResult> {
     std::vector<std::string> orders;
 
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct CancelOrderBatchResult {
@@ -575,7 +575,7 @@ struct CancelOrderBatchResult {
 };
 
 struct GetWebSocketsTokenRequest : TypedPrivateRequest<WebSocketsTokenResult> {
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct WebSocketsTokenResult {
@@ -588,7 +588,7 @@ struct WebSocketsTokenResult {
 
 struct GetDepositMethodsRequest : TypedPrivateRequest<DepositMethodsResult> {
     std::string asset;
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct DepositMethod {
@@ -608,7 +608,7 @@ struct GetDepositAddressesRequest : TypedPrivateRequest<DepositAddressesResult> 
     std::string asset;
     std::string method;
     std::optional<bool> new_address;
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct DepositAddress {
@@ -630,7 +630,7 @@ struct WithdrawRequest : TypedPrivateRequest<WithdrawResult> {
     std::optional<std::string> address;
     std::optional<std::string> max_fee;
 
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct WithdrawResult {
@@ -641,7 +641,7 @@ struct WithdrawResult {
 struct CancelWithdrawalRequest : TypedPrivateRequest<CancelWithdrawalResult> {
     std::string asset;
     std::string refid;
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct CancelWithdrawalResult {
@@ -654,7 +654,7 @@ struct CancelWithdrawalResult {
 struct CreateSubaccountRequest : TypedPrivateRequest<CreateSubaccountResult> {
     std::string username;
     std::string email;
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct CreateSubaccountResult {
@@ -667,13 +667,13 @@ struct CreateSubaccountResult {
 struct AllocateEarnRequest : TypedPrivateRequest<EarnBoolResult> {
     std::string strategy_id;
     std::string amount;
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct DeallocateEarnRequest : TypedPrivateRequest<EarnBoolResult> {
     std::string strategy_id;
     std::string amount;
-    HttpRequest build(const Credentials& creds) const override;
+    HttpRequest build(const KrakenCredentials& creds) const override;
 };
 
 struct EarnBoolResult {

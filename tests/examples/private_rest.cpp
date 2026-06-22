@@ -22,7 +22,7 @@ int main(int argc, char* argv[])
 
     std::string creds_name = "default";
     app.add_option("-c,--credentials", creds_name,
-                   "Credentials profile name (file at ~/.kraken/<name>)")
+                   "KrakenCredentials profile name (file at ~/.kraken/<name>)")
         ->capture_default_str();
 
     CLI11_PARSE(app, argc, argv);
@@ -31,7 +31,7 @@ int main(int argc, char* argv[])
 
     try {
         KrakenRestClient client;
-        auto creds = Credentials::from_file(creds_name);
+        auto creds = KrakenCredentials::from_file(creds_name);
 
         auto resp = client.execute(GetWebSocketsTokenRequest{}, creds);
         if (resp.ok && resp.result) {

@@ -20,7 +20,7 @@ namespace exchange::kraken::rest {
 
 HttpRequest PrivateRequest::make_private_request(const std::string& uri_path,
                                                  std::map<std::string, std::string> params,
-                                                 const Credentials& creds) const {
+                                                 const KrakenCredentials& creds) const {
     std::string nonce_str = std::to_string(make_nonce());
     params["nonce"] = nonce_str;
     std::string body = detail::build_form_body(params);
@@ -252,7 +252,7 @@ RecentTradesResult RecentTradesResult::from_json(const json& j) {
 
 // ── ACCOUNT DATA (private) ────────────────────────────────────────────────────
 
-HttpRequest GetAccountBalanceRequest::build(const Credentials& creds) const {
+HttpRequest GetAccountBalanceRequest::build(const KrakenCredentials& creds) const {
     return make_private_request("/0/private/Balance", {}, creds);
 }
 
@@ -263,7 +263,7 @@ AccountBalanceResult AccountBalanceResult::from_json(const json& j) {
     return r;
 }
 
-HttpRequest GetExtendedBalanceRequest::build(const Credentials& creds) const {
+HttpRequest GetExtendedBalanceRequest::build(const KrakenCredentials& creds) const {
     return make_private_request("/0/private/BalanceEx", {}, creds);
 }
 
@@ -280,7 +280,7 @@ ExtendedBalanceResult ExtendedBalanceResult::from_json(const json& j) {
     return r;
 }
 
-HttpRequest GetTradeBalanceRequest::build(const Credentials& creds) const {
+HttpRequest GetTradeBalanceRequest::build(const KrakenCredentials& creds) const {
     std::map<std::string, std::string> p;
     if (asset) p["asset"] = *asset;
     return make_private_request("/0/private/TradeBalance", p, creds);
@@ -295,7 +295,7 @@ TradeBalance TradeBalance::from_json(const json& j) {
     return t;
 }
 
-HttpRequest GetOpenOrdersRequest::build(const Credentials& creds) const {
+HttpRequest GetOpenOrdersRequest::build(const KrakenCredentials& creds) const {
     std::map<std::string, std::string> p;
     if (trades && *trades)  p["trades"]  = "true";
     if (userref)            p["userref"] = std::to_string(*userref);
@@ -310,7 +310,7 @@ OpenOrdersResult OpenOrdersResult::from_json(const json& j) {
     return r;
 }
 
-HttpRequest GetClosedOrdersRequest::build(const Credentials& creds) const {
+HttpRequest GetClosedOrdersRequest::build(const KrakenCredentials& creds) const {
     std::map<std::string, std::string> p;
     if (trades && *trades) p["trades"]    = "true";
     if (userref)           p["userref"]   = std::to_string(*userref);
@@ -330,7 +330,7 @@ ClosedOrdersResult ClosedOrdersResult::from_json(const json& j) {
     return r;
 }
 
-HttpRequest QueryOrdersRequest::build(const Credentials& creds) const {
+HttpRequest QueryOrdersRequest::build(const KrakenCredentials& creds) const {
     std::map<std::string, std::string> p;
     std::string ids;
     for (size_t i = 0; i < txids.size(); ++i) { if (i) ids += ','; ids += txids[i]; }
@@ -346,7 +346,7 @@ QueryOrdersResultWrapper QueryOrdersResultWrapper::from_json(const json& j) {
     return r;
 }
 
-HttpRequest GetTradesHistoryRequest::build(const Credentials& creds) const {
+HttpRequest GetTradesHistoryRequest::build(const KrakenCredentials& creds) const {
     std::map<std::string, std::string> p;
     if (type)              p["type"]   = *type;
     if (trades && *trades) p["trades"] = "true";
@@ -365,7 +365,7 @@ TradesHistoryResult TradesHistoryResult::from_json(const json& j) {
     return r;
 }
 
-HttpRequest QueryTradesRequest::build(const Credentials& creds) const {
+HttpRequest QueryTradesRequest::build(const KrakenCredentials& creds) const {
     std::map<std::string, std::string> p;
     std::string ids;
     for (size_t i = 0; i < txids.size(); ++i) { if (i) ids += ','; ids += txids[i]; }
@@ -381,7 +381,7 @@ QueryTradesResultWrapper QueryTradesResultWrapper::from_json(const json& j) {
     return r;
 }
 
-HttpRequest GetOpenPositionsRequest::build(const Credentials& creds) const {
+HttpRequest GetOpenPositionsRequest::build(const KrakenCredentials& creds) const {
     std::map<std::string, std::string> p;
     if (txids && !txids->empty()) {
         std::string ids;
@@ -421,7 +421,7 @@ OpenPositionsResult OpenPositionsResult::from_json(const json& j) {
     return r;
 }
 
-HttpRequest GetLedgersRequest::build(const Credentials& creds) const {
+HttpRequest GetLedgersRequest::build(const KrakenCredentials& creds) const {
     std::map<std::string, std::string> p;
     if (assets && !assets->empty()) {
         std::string a;
@@ -445,7 +445,7 @@ LedgersResult LedgersResult::from_json(const json& j) {
     return r;
 }
 
-HttpRequest QueryLedgersRequest::build(const Credentials& creds) const {
+HttpRequest QueryLedgersRequest::build(const KrakenCredentials& creds) const {
     std::map<std::string, std::string> p;
     std::string id_str;
     for (size_t i = 0; i < ids.size(); ++i) { if (i) id_str += ','; id_str += ids[i]; }
@@ -490,7 +490,7 @@ void apply_order_params_to_rest(std::map<std::string, std::string>& p,
     }
 }
 
-HttpRequest AddOrderRequest::build(const Credentials& creds) const {
+HttpRequest AddOrderRequest::build(const KrakenCredentials& creds) const {
     std::map<std::string, std::string> p;
     apply_order_params_to_rest(p, params);
     return make_private_request("/0/private/AddOrder", p, creds);
@@ -507,7 +507,7 @@ AddOrderResult AddOrderResult::from_json(const json& j) {
     return r;
 }
 
-HttpRequest AddOrderBatchRequest::build(const Credentials& creds) const {
+HttpRequest AddOrderBatchRequest::build(const KrakenCredentials& creds) const {
     json body = json::array();
     for (const auto& op : orders) {
         json o;
@@ -554,7 +554,7 @@ AddOrderBatchResult AddOrderBatchResult::from_json(const json& j) {
     return r;
 }
 
-HttpRequest EditOrderRequest::build(const Credentials& creds) const {
+HttpRequest EditOrderRequest::build(const KrakenCredentials& creds) const {
     std::map<std::string, std::string> p;
     p["txid"] = txid;
     p["pair"] = pair;
@@ -578,7 +578,7 @@ EditOrderResult EditOrderResult::from_json(const json& j) {
     return r;
 }
 
-HttpRequest AmendOrderRequest::build(const Credentials& creds) const {
+HttpRequest AmendOrderRequest::build(const KrakenCredentials& creds) const {
     std::map<std::string, std::string> p;
     if (txid)          p["txid"]          = *txid;
     if (cl_ord_id)     p["cl_ord_id"]     = *cl_ord_id;
@@ -594,7 +594,7 @@ AmendOrderResult AmendOrderResult::from_json(const json& j) {
     return { j.value("amend_id", "") };
 }
 
-HttpRequest CancelOrderRequest::build(const Credentials& creds) const {
+HttpRequest CancelOrderRequest::build(const KrakenCredentials& creds) const {
     return make_private_request("/0/private/CancelOrder", {{"txid", txid}}, creds);
 }
 
@@ -602,7 +602,7 @@ CancelOrderResult CancelOrderResult::from_json(const json& j) {
     return { j.value("count", 0), j.value("pending", false) };
 }
 
-HttpRequest CancelAllOrdersRequest::build(const Credentials& creds) const {
+HttpRequest CancelAllOrdersRequest::build(const KrakenCredentials& creds) const {
     return make_private_request("/0/private/CancelAll", {}, creds);
 }
 
@@ -610,7 +610,7 @@ CancelAllResult CancelAllResult::from_json(const json& j) {
     return { j.value("count", 0) };
 }
 
-HttpRequest CancelAllOrdersAfterRequest::build(const Credentials& creds) const {
+HttpRequest CancelAllOrdersAfterRequest::build(const KrakenCredentials& creds) const {
     return make_private_request("/0/private/CancelAllOrdersAfter",
                                 {{"timeout", std::to_string(timeout)}}, creds);
 }
@@ -619,7 +619,7 @@ CancelAllAfterResult CancelAllAfterResult::from_json(const json& j) {
     return { j.value("currentTime", ""), j.value("triggerTime", "") };
 }
 
-HttpRequest CancelOrderBatchRequest::build(const Credentials& creds) const {
+HttpRequest CancelOrderBatchRequest::build(const KrakenCredentials& creds) const {
     uint64_t n = make_nonce();
     std::string nonce_str = std::to_string(n);
     json req;
@@ -640,7 +640,7 @@ CancelOrderBatchResult CancelOrderBatchResult::from_json(const json& j) {
     return { j.value("count", 0) };
 }
 
-HttpRequest GetWebSocketsTokenRequest::build(const Credentials& creds) const {
+HttpRequest GetWebSocketsTokenRequest::build(const KrakenCredentials& creds) const {
     return make_private_request("/0/private/GetWebSocketsToken", {}, creds);
 }
 
@@ -650,7 +650,7 @@ WebSocketsTokenResult WebSocketsTokenResult::from_json(const json& j) {
 
 // ── FUNDING (private) ─────────────────────────────────────────────────────────
 
-HttpRequest GetDepositMethodsRequest::build(const Credentials& creds) const {
+HttpRequest GetDepositMethodsRequest::build(const KrakenCredentials& creds) const {
     return make_private_request("/0/private/DepositMethods", {{"asset", asset}}, creds);
 }
 
@@ -664,7 +664,7 @@ DepositMethodsResult DepositMethodsResult::from_json(const json& j) {
     return r;
 }
 
-HttpRequest GetDepositAddressesRequest::build(const Credentials& creds) const {
+HttpRequest GetDepositAddressesRequest::build(const KrakenCredentials& creds) const {
     std::map<std::string, std::string> p = {{"asset", asset}, {"method", method}};
     if (new_address && *new_address) p["new"] = "true";
     return make_private_request("/0/private/DepositAddresses", p, creds);
@@ -680,7 +680,7 @@ DepositAddressesResult DepositAddressesResult::from_json(const json& j) {
     return r;
 }
 
-HttpRequest WithdrawRequest::build(const Credentials& creds) const {
+HttpRequest WithdrawRequest::build(const KrakenCredentials& creds) const {
     std::map<std::string, std::string> p = {{"asset", asset}, {"key", key}, {"amount", amount}};
     if (address) p["address"] = *address;
     if (max_fee) p["max_fee"] = *max_fee;
@@ -689,7 +689,7 @@ HttpRequest WithdrawRequest::build(const Credentials& creds) const {
 
 WithdrawResult WithdrawResult::from_json(const json& j) { return { j.value("refid", "") }; }
 
-HttpRequest CancelWithdrawalRequest::build(const Credentials& creds) const {
+HttpRequest CancelWithdrawalRequest::build(const KrakenCredentials& creds) const {
     return make_private_request("/0/private/WithdrawCancel",
                                 {{"asset", asset}, {"refid", refid}}, creds);
 }
@@ -698,7 +698,7 @@ CancelWithdrawalResult CancelWithdrawalResult::from_json(const json& j) { return
 
 // ── SUBACCOUNTS (private) ─────────────────────────────────────────────────────
 
-HttpRequest CreateSubaccountRequest::build(const Credentials& creds) const {
+HttpRequest CreateSubaccountRequest::build(const KrakenCredentials& creds) const {
     return make_private_request("/0/private/CreateSubaccount",
                                 {{"username", username}, {"email", email}}, creds);
 }
@@ -707,12 +707,12 @@ CreateSubaccountResult CreateSubaccountResult::from_json(const json& j) { return
 
 // ── EARN (private) ────────────────────────────────────────────────────────────
 
-HttpRequest AllocateEarnRequest::build(const Credentials& creds) const {
+HttpRequest AllocateEarnRequest::build(const KrakenCredentials& creds) const {
     return make_private_request("/0/private/Earn/Allocate",
                                 {{"strategy_id", strategy_id}, {"amount", amount}}, creds);
 }
 
-HttpRequest DeallocateEarnRequest::build(const Credentials& creds) const {
+HttpRequest DeallocateEarnRequest::build(const KrakenCredentials& creds) const {
     return make_private_request("/0/private/Earn/Deallocate",
                                 {{"strategy_id", strategy_id}, {"amount", amount}}, creds);
 }

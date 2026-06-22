@@ -8,7 +8,7 @@
 // =============================================================================
 //
 // Proves that KrakenAuth::sign() (exchange/kraken/auth.hpp) produces byte-identical
-// API-Sign and API-Key headers to the pre-refactor direct Credentials::sign() path
+// API-Sign and API-Key headers to the pre-refactor direct KrakenCredentials::sign() path
 // for the same path/body inputs — both form-encoded and JSON bodies.
 //
 // This is the "new path matches the trusted reference" regression net described
@@ -28,15 +28,15 @@ static const char* TEST_SECRET =
     "kQH5HW/8p1uGOVjbgWA7FunAmGO8lsSUXNsu3eow76sz84Q18fWxnyRzBHCd3pd5"
     "nE9qa99HAZtuZuj6F1huXg==";
 
-static Credentials make_creds() {
-    return Credentials{TEST_KEY, TEST_SECRET};
+static KrakenCredentials make_creds() {
+    return KrakenCredentials{TEST_KEY, TEST_SECRET};
 }
 
 // Build a form-encoded HttpRequest with the given path/body, call KrakenAuth::sign,
 // and return the injected API-Sign value so tests can compare it to the direct path.
 static std::string kraken_auth_sign_form(const std::string& path,
                                           const std::string& body) {
-    Credentials creds = make_creds();
+    KrakenCredentials creds = make_creds();
     HttpRequest req;
     req.method = HttpRequest::Method::POST;
     req.path   = path;
@@ -48,7 +48,7 @@ static std::string kraken_auth_sign_form(const std::string& path,
 
 static std::string kraken_auth_sign_json(const std::string& path,
                                           const std::string& body) {
-    Credentials creds = make_creds();
+    KrakenCredentials creds = make_creds();
     HttpRequest req;
     req.method = HttpRequest::Method::POST;
     req.path   = path;
@@ -61,7 +61,7 @@ static std::string kraken_auth_sign_json(const std::string& path,
 // ── Form-encoded body tests ───────────────────────────────────────────────────
 
 TEST(KrakenAuth, FormEncoded_Balance_MatchesDirectSign) {
-    Credentials creds = make_creds();
+    KrakenCredentials creds = make_creds();
     const std::string path  = "/0/private/Balance";
     const std::string nonce = "1616492376594";
     const std::string body  = "nonce=" + nonce;
@@ -71,7 +71,7 @@ TEST(KrakenAuth, FormEncoded_Balance_MatchesDirectSign) {
 }
 
 TEST(KrakenAuth, FormEncoded_WithExtraParams_MatchesDirectSign) {
-    Credentials creds = make_creds();
+    KrakenCredentials creds = make_creds();
     const std::string path  = "/0/private/AddOrder";
     const std::string nonce = "1616492376594";
     const std::string body  = "nonce=" + nonce
@@ -82,7 +82,7 @@ TEST(KrakenAuth, FormEncoded_WithExtraParams_MatchesDirectSign) {
 }
 
 TEST(KrakenAuth, FormEncoded_GetWebSocketsToken_MatchesDirectSign) {
-    Credentials creds = make_creds();
+    KrakenCredentials creds = make_creds();
     const std::string path  = "/0/private/GetWebSocketsToken";
     const std::string nonce = "9999999999999";
     const std::string body  = "nonce=" + nonce;
@@ -94,7 +94,7 @@ TEST(KrakenAuth, FormEncoded_GetWebSocketsToken_MatchesDirectSign) {
 // ── JSON body tests ───────────────────────────────────────────────────────────
 
 TEST(KrakenAuth, JsonBody_MatchesDirectSign) {
-    Credentials creds = make_creds();
+    KrakenCredentials creds = make_creds();
     const std::string path  = "/0/private/AddOrderBatch";
     const std::string nonce = "1616492376594";
     // Body as produced by nlohmann/json with std::map (keys sorted alphabetically).
@@ -105,7 +105,7 @@ TEST(KrakenAuth, JsonBody_MatchesDirectSign) {
 }
 
 TEST(KrakenAuth, JsonBody_CancelBatch_MatchesDirectSign) {
-    Credentials creds = make_creds();
+    KrakenCredentials creds = make_creds();
     const std::string path  = "/0/private/CancelOrderBatch";
     const std::string nonce = "9876543210000";
     const std::string body  = R"({"nonce":"9876543210000","orders":["TXN1","TXN2"]})";
