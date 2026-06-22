@@ -26,3 +26,4 @@
 | 018 | [Coinbase Exchange adapter — REST + WebSocket](plans/018-coinbase-exchange-adapter.md) | Done |
 | 019 | [Coinbase FIX order entry](plans/019-coinbase-fix-order-entry.md) | Proposed (deferred) |
 | 020 | [Crypto.com Exchange adapter — REST + WebSocket](plans/020-cryptocom-exchange-adapter.md) | Done |
+| 021 | [`from_file` credential loaders for Binance, Coinbase, Crypto.com](plans/021-credentials-from-file.md) | Proposed |
