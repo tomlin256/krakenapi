@@ -48,6 +48,17 @@ struct BinanceCredentials {
     BinanceSignAlgorithm algorithm{BinanceSignAlgorithm::HmacSha256};
     // Included in every signed request.  Binance default is 5000 ms; max 60000.
     int                  recv_window_ms{5000};
+
+    // Load api_key + secret_key from a TOML file (plan 021) with top-level
+    // string keys (api_secret maps to secret_key):
+    //   api_key    = "..."
+    //   api_secret = "..."
+    // algorithm and recv_window_ms keep their defaults — override after load.
+    // Path: location.empty() ? $HOME/.binance/<name> : <location>/<name>.
+    // Throws std::runtime_error if the file is missing/malformed or a key is
+    // absent, non-string, or empty.
+    static BinanceCredentials from_file(const std::string& name,
+                                        const std::string& location = "");
 };
 
 // ── IRestAuth implementor ─────────────────────────────────────────────────────

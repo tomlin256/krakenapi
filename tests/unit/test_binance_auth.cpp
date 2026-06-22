@@ -21,8 +21,13 @@
 #include "exchange/common/rest.hpp"
 
 #include <gtest/gtest.h>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <stdexcept>
 #include <string>
+
+#include <unistd.h>  // getpid
 
 using namespace exchange::binance::rest;
 using exchange::rest::HttpRequest;
@@ -229,4 +234,45 @@ TEST(BinanceAuth, RejectsNonHmacAlgorithm) {
     // The default (HMAC-SHA256) still signs without throwing.
     creds.algorithm = BinanceSignAlgorithm::HmacSha256;
     EXPECT_NO_THROW(BinanceAuth(creds).sign(req));
+}
+
+// ── BinanceCredentials::from_file — TOML loader (plan 021) ───────────────────
+
+TEST(BinanceCredentialsFromFile, LoadsTomlAndPreservesDefaults) {
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() /
+                         ("cryptocogs_binance_creds_" + std::to_string(::getpid()));
+    fs::create_directories(dir);
+    {
+        std::ofstream f(dir / "default");
+        f << "api_key    = \"BNB_KEY\"\n"
+             "api_secret = \"BNB_SECRET\"\n";
+    }
+
+    const auto creds = BinanceCredentials::from_file("default", dir.string());
+    EXPECT_EQ(creds.api_key, "BNB_KEY");
+    EXPECT_EQ(creds.secret_key, "BNB_SECRET");  // api_secret -> secret_key
+    // Non-secret config keeps struct defaults — from_file loads keys only.
+    EXPECT_EQ(creds.algorithm, BinanceSignAlgorithm::HmacSha256);
+    EXPECT_EQ(creds.recv_window_ms, 5000);
+
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+}
+
+TEST(BinanceCredentialsFromFile, ThrowsWhenSecretMissing) {
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() /
+                         ("cryptocogs_binance_creds_missing_" + std::to_string(::getpid()));
+    fs::create_directories(dir);
+    {
+        std::ofstream f(dir / "default");
+        f << "api_key = \"BNB_KEY\"\n";  // no api_secret
+    }
+
+    EXPECT_THROW(BinanceCredentials::from_file("default", dir.string()),
+                 std::runtime_error);
+
+    std::error_code ec;
+    fs::remove_all(dir, ec);
 }

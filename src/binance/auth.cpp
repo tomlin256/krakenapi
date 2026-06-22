@@ -9,6 +9,8 @@
 
 #include "exchange/binance/auth.hpp"
 
+#include "exchange/common/credentials_file.hpp"
+
 #include <chrono>
 #include <iomanip>
 #include <sstream>
@@ -48,6 +50,17 @@ std::string to_hex(const std::string& bytes) {
 }
 
 } // namespace detail
+
+// ── BinanceCredentials ──────────────────────────────────────────────────────
+
+BinanceCredentials BinanceCredentials::from_file(const std::string& name,
+                                                 const std::string& location) {
+    // TOML file with top-level string keys api_key / api_secret (plan 021);
+    // api_secret maps to secret_key. algorithm / recv_window_ms keep defaults.
+    const auto v = exchange::rest::read_toml_credentials(
+        name, ".binance", location, {"api_key", "api_secret"});
+    return BinanceCredentials{v[0], v[1]};
+}
 
 // ── BinanceAuth ───────────────────────────────────────────────────────────────
 
