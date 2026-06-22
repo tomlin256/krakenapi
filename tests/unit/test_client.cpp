@@ -10,8 +10,13 @@
 #include "exchange/kraken/rest_client.hpp"
 
 #include <gtest/gtest.h>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <stdexcept>
 #include <string>
+
+#include <unistd.h>  // getpid
 
 using namespace exchange::kraken::rest;
 
@@ -146,6 +151,29 @@ TEST(KrakenRestClient, PrivateExecute_PropagatesErrors) {
     EXPECT_FALSE(resp.ok);
     ASSERT_EQ(resp.errors.size(), 1u);
     EXPECT_EQ(resp.errors[0], "EOrder:Insufficient funds");
+}
+
+// ---------------------------------------------------------------------------
+// Credentials::from_file — TOML format (plan 021)
+// ---------------------------------------------------------------------------
+
+TEST(CredentialsFromFile, LoadsTomlFile) {
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() /
+                         ("cryptocogs_kraken_creds_" + std::to_string(::getpid()));
+    fs::create_directories(dir);
+    {
+        std::ofstream f(dir / "default");
+        f << "api_key    = \"PUBLICKEY\"\n"
+             "api_secret = \"YmFzZTY0c2VjcmV0\"\n";
+    }
+
+    const auto creds = Credentials::from_file("default", dir.string());
+    EXPECT_EQ(creds.api_key, "PUBLICKEY");
+    EXPECT_EQ(creds.api_secret, "YmFzZTY0c2VjcmV0");
+
+    std::error_code ec;
+    fs::remove_all(dir, ec);
 }
 
 // ---------------------------------------------------------------------------

@@ -50,6 +50,12 @@ struct Credentials {
     std::string api_key;     // public key  → API-Key header
     std::string api_secret;  // base64-encoded private key → used for signing
 
+    // Load from a TOML file (plan 021) with top-level string keys:
+    //   api_key    = "..."
+    //   api_secret = "..."
+    // Path: location.empty() ? $HOME/.kraken/<name> : <location>/<name>.
+    // Throws std::runtime_error if the file is missing/malformed or a key is
+    // absent, non-string, or empty.
     static Credentials from_file(const std::string& name,
                                  const std::string& location = "");
 

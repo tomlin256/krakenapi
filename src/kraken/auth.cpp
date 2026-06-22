@@ -9,11 +9,12 @@
 
 #include "exchange/kraken/auth.hpp"
 
+#include "exchange/common/credentials_file.hpp"
+
 #include <nlohmann/json.hpp>
 
 #include <cctype>
 #include <chrono>
-#include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
@@ -121,31 +122,10 @@ uint64_t make_nonce() {
 
 Credentials Credentials::from_file(const std::string& name,
                                    const std::string& location) {
-    std::string dir;
-    if (location.empty()) {
-        const char* home = getenv("HOME");
-        if (!home) throw std::runtime_error("HOME environment variable not set");
-        dir = std::string(home) + "/.kraken";
-    } else {
-        dir = location;
-    }
-
-    std::string filepath = dir + "/" + name;
-
-    std::ifstream file(filepath);
-    if (!file.is_open()) {
-        throw std::runtime_error("Failed to open key file: " + filepath);
-    }
-
-    Credentials cred;
-    if (!std::getline(file, cred.api_key) || cred.api_key.empty()) {
-        throw std::runtime_error("Missing or empty API key in: " + filepath);
-    }
-    if (!std::getline(file, cred.api_secret) || cred.api_secret.empty()) {
-        throw std::runtime_error("Missing or empty private key in: " + filepath);
-    }
-
-    return cred;
+    // TOML file with top-level string keys api_key / api_secret (plan 021).
+    const auto v = exchange::rest::read_toml_credentials(
+        name, ".kraken", location, {"api_key", "api_secret"});
+    return Credentials{v[0], v[1]};
 }
 
 std::string Credentials::sign(const std::string& uri_path,
