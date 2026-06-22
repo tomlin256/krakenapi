@@ -9,6 +9,8 @@
 
 #include "exchange/cryptocom/auth.hpp"
 
+#include "exchange/common/credentials_file.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <sstream>
@@ -103,6 +105,14 @@ std::string params_to_str(const json& params, int level) {
 int64_t make_nonce() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+CryptoComCredentials CryptoComCredentials::from_file(const std::string& name,
+                                                     const std::string& location) {
+    // TOML file with top-level string keys api_key / api_secret (plan 021).
+    const auto v = exchange::rest::read_toml_credentials(
+        name, ".cryptocom", location, {"api_key", "api_secret"});
+    return CryptoComCredentials{v[0], v[1]};
 }
 
 std::string CryptoComCredentials::sign(const std::string& method,

@@ -27,7 +27,13 @@
 #include <nlohmann/json.hpp>
 
 #include <cstdint>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <stdexcept>
 #include <string>
+
+#include <unistd.h>  // getpid
 
 using namespace exchange::cryptocom::rest;
 using json = nlohmann::json;
@@ -160,4 +166,42 @@ TEST(CryptoComNonce, IsMillisecondScaleAndNonDecreasing) {
     const int64_t b = make_nonce();
     EXPECT_GT(a, 1600000000000LL);  // after 2020-09 in ms — confirms ms, not s
     EXPECT_GE(b, a);
+}
+
+// ── CryptoComCredentials::from_file — TOML loader (plan 021) ─────────────────
+
+TEST(CryptoComCredentialsFromFile, LoadsBothFields) {
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() /
+                         ("cryptocogs_cryptocom_creds_" + std::to_string(::getpid()));
+    fs::create_directories(dir);
+    {
+        std::ofstream f(dir / "default");
+        f << "api_key    = \"CC_KEY\"\n"
+             "api_secret = \"CC_SECRET\"\n";
+    }
+
+    const auto creds = CryptoComCredentials::from_file("default", dir.string());
+    EXPECT_EQ(creds.api_key, "CC_KEY");
+    EXPECT_EQ(creds.api_secret, "CC_SECRET");
+
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+}
+
+TEST(CryptoComCredentialsFromFile, ThrowsWhenSecretMissing) {
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() /
+                         ("cryptocogs_cryptocom_creds_missing_" + std::to_string(::getpid()));
+    fs::create_directories(dir);
+    {
+        std::ofstream f(dir / "default");
+        f << "api_key = \"CC_KEY\"\n";  // no api_secret
+    }
+
+    EXPECT_THROW(CryptoComCredentials::from_file("default", dir.string()),
+                 std::runtime_error);
+
+    std::error_code ec;
+    fs::remove_all(dir, ec);
 }

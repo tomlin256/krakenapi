@@ -78,12 +78,21 @@ int64_t make_nonce();
 
 // ── Credential bundle ────────────────────────────────────────────────────────
 //
-// A plain struct (set both fields directly — Crypto.com has no standard on-disk
-// key file format, so there is no from_file loader, mirroring BinanceCredentials
-// and CoinbaseCredentials). Note there is NO passphrase (unlike Coinbase).
+// A plain struct — set both fields directly, or load them from a TOML file with
+// from_file (plan 021). Note there is NO passphrase (unlike Coinbase).
 struct CryptoComCredentials {
     std::string api_key;
     std::string api_secret;  // used as the HMAC key verbatim (not base64-decoded)
+
+    // Load api_key + api_secret from a TOML file (plan 021) with top-level
+    // string keys:
+    //   api_key    = "..."
+    //   api_secret = "..."
+    // Path: location.empty() ? $HOME/.cryptocom/<name> : <location>/<name>.
+    // Throws std::runtime_error if the file is missing/malformed or a key is
+    // absent, non-string, or empty.
+    static CryptoComCredentials from_file(const std::string& name,
+                                          const std::string& location = "");
 
     // Sign a request/auth frame and return the lowercase-hex `sig` value.
     // `params` may be an empty object — the WS public/auth frame signs only
