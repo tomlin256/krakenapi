@@ -35,10 +35,12 @@ and `read_toml_credentials`, so the rename is a safe whole-word replace.
 - **Tests:** `test_client.cpp`, `test_kraken_auth.cpp`, `test_signature.cpp`,
   `test_rest_requests.cpp`.
 - **Examples:** `private_rest.cpp`, `private_ws.cpp`, `kraken_example.cpp`.
-- **Living docs:** `CLAUDE.md`, `docs/agent-add-exchange.md`, and the
-  `001-appendix-migration-guide.md` (add the `Credentials → KrakenCredentials`
-  row). **Historical plan docs (001/004/006/011/016/018/020…) are left as-is** —
-  they record past state and should not be retro-edited.
+- **Living docs:** `CLAUDE.md` (authoritative reference — fully updated).
+  On inspection, `docs/agent-add-exchange.md`'s `Credentials` mentions are
+  **generic/conceptual** (the pattern for any new exchange, e.g.
+  `build(const <Exchange>Credentials&)`), not the Kraken type — left as-is.
+  `001-appendix-migration-guide.md` and the other **historical plan docs**
+  (001/004/006/011/016/018/020…) record past state and are **not** retro-edited.
 - One **comment** mention in `include/exchange/common/credentials_file.hpp`
   ("every adapter's Credentials::from_file") — genericise the wording.
 

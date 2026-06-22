@@ -48,6 +48,7 @@ cryptocogs/
 │   │   │   ├── rest.hpp                 #   TypedPublicRequest<R>, TypedPrivateRequest<R>, RestResponse<T>,
 │   │   │   │                            #     HttpRequest, IRestAuth
 │   │   │   ├── http_client.hpp          #   CurlHttpClient + HttpResponse — shared libcurl transport (→ libexchange_http.a)
+│   │   │   ├── credentials_file.hpp     #   read_toml_credentials — shared TOML from_file loader (→ libexchange_common.a)
 │   │   │   ├── ws.hpp                   #   IWsConnection, IWsErrorHandler, RateLimitedWsErrorHandler,
 │   │   │   │                            #     WsResponse<T>, SubscriptionHandle, WsRequestBase,
 │   │   │   │                            #     TypedWsRequest<R>, FrameDescriptor, MessageIdentifier
@@ -55,7 +56,7 @@ cryptocogs/
 │   │   │   ├── ix_ws_connection.hpp     #   IxWsConnection + make_exchange_ws_client(url, identifier)
 │   │   │   └── reconnect_session.hpp/.inl # WsReconnectSession — generic reconnect/backoff machinery
 │   │   ├── kraken/                      # Kraken adapter — exchange::kraken::, ::rest::, ::ws::
-│   │   │   ├── auth.hpp                 #   Credentials, sign(), make_nonce() (+ private crypto helpers)
+│   │   │   ├── auth.hpp                 #   KrakenCredentials, sign(), make_nonce() (+ private crypto helpers)
 │   │   │   ├── types.hpp                #   PriceType, TriggerReference, StpType, FeePreference,
 │   │   │   │                            #     OrderParams, OrderInfo, TradeInfo, LedgerEntry,
 │   │   │   │                            #     RestResponse<T> / parse_rest_response<T>
@@ -99,6 +100,7 @@ cryptocogs/
 │   │   ├── ws.cpp                       # SubscriptionHandle + RateLimitedWsErrorHandler → libexchange_common.a
 │   │   ├── types.cpp                    # Canonical enum converters → libexchange_common.a
 │   │   ├── tick_price.cpp               # TickPrice from()/str()/to_json()/from_json → libexchange_common.a
+│   │   ├── credentials_file.cpp        # read_toml_credentials — shared TOML from_file loader → libexchange_common.a
 │   │   └── http_client.cpp             # CurlHttpClient — shared libcurl transport → libexchange_http.a
 │   ├── kraken/                          # → libkraken.a
 │   │   ├── types.cpp  auth.cpp          #   enum converters, crypto/sign/nonce
@@ -148,6 +150,7 @@ cryptocogs/
         ├── test_ws_responses.cpp        # from_json field assertions against captured fixtures
         ├── test_order_type.cpp          # Generic vs. Kraken OrderType wire format (underscore vs. hyphen)
         ├── test_tick_price.cpp          # TickPrice exact-decimal serialisation (FP-noise-free)
+        ├── test_credentials_file.cpp    # read_toml_credentials — TOML from_file loader (exchange-agnostic)
         ├── test_ws_reconnect_session.cpp # WsReconnectSession lifecycle — deterministic, no sleeps
         ├── ws_client_example_json.hpp
         ├── mock_ws_connection.hpp        # Shared MockWsConnection (Kraken + Binance + Coinbase + Crypto.com WS tests)
@@ -184,6 +187,7 @@ cryptocogs/
   |---|---|---|
   | IXWebSocket | v12.0.0 | WebSocket examples + `IxWsConnection` |
   | nlohmann/json | v3.12.0 | All JSON parsing |
+  | toml++ | v3.4.0 | `read_toml_credentials` (`from_file` loaders) — build-only, in `exchange_common` |
   | spdlog | v1.17.0 | Examples and tests |
   | Google Test | v1.16.0 | Unit tests |
 
@@ -270,7 +274,7 @@ cmake --build build
 cd build && ctest --output-on-failure
 ```
 
-There are twenty-four test executables (472 tests total) — six Kraken/common, six Binance, six Coinbase, six Crypto.com:
+There are twenty-five test executables (487 tests total) — seven Kraken/common, six Binance, six Coinbase, six Crypto.com:
 
 | Binary | Source | What it tests |
 |---|---|---|
@@ -278,6 +282,7 @@ There are twenty-four test executables (472 tests total) — six Kraken/common, 
 | `build/bin/test_ws_client` | `test_ws_client.cpp` | `ExchangeWsClient` (as `KrakenWsClient`) lifecycle with `MockWsConnection` |
 | `build/bin/test_ws_responses` | `test_ws_responses.cpp` | `identify_message` + `from_json` against captured WS fixtures |
 | `build/bin/test_tick_price` | `test_tick_price.cpp` | `TickPrice::from`/`str` exact-decimal round-tripping |
+| `build/bin/test_credentials_file` | `test_credentials_file.cpp` | `read_toml_credentials` — TOML parse, `$HOME`/explicit path resolution, and every error branch |
 | `build/bin/test_order_type` | `test_order_type.cpp` | Generic (`exchange::to_string`) vs. Kraken (`kraken_order_type_to_string`) wire formats |
 | `build/bin/test_ws_reconnect_session` | `test_ws_reconnect_session.cpp` | `WsReconnectSession` start/stop/backoff/reconnect — deterministic, no real sleeps |
 | `build/bin/test_binance_auth` | `test_binance_auth.cpp` | `BinanceAuth` HMAC-SHA256 signing + header injection |
@@ -302,14 +307,15 @@ There are twenty-four test executables (472 tests total) — six Kraken/common, 
 Tests do **not** require network access or credentials — all I/O is mocked.
 The flag matrix splits cleanly: each exchange flag drops its own suite. A
 Crypto.com-only tree (`-DCRYPTOCOGS_BUILD_KRAKEN=OFF -DCRYPTOCOGS_BUILD_BINANCE=OFF
--DCRYPTOCOGS_BUILD_COINBASE=OFF`) runs 94 — the 83-test Crypto.com suite plus the
-11 exchange-agnostic `TickPrice` tests, which build in any tree.
+-DCRYPTOCOGS_BUILD_COINBASE=OFF`) runs 104 — the 85-test Crypto.com suite plus the
+exchange-agnostic 11 `TickPrice` and 8 `read_toml_credentials` tests, which build
+in any tree.
 
 ### Test suite breakdown
 
 | File | What it verifies |
 |---|---|
-| `test_signature.cpp` | `Credentials::sign()` produces byte-identical output to the legacy `KAPI::signature()` for the same inputs |
+| `test_signature.cpp` | `KrakenCredentials::sign()` produces byte-identical output to the legacy `KAPI::signature()` for the same inputs |
 | `test_rest_requests.cpp` | Each request type builds the correct HTTP path, method, query string, and body |
 | `test_rest_responses.cpp` | JSON deserialization is correct for every response type |
 | `test_client.cpp` | `KrakenRestClient::execute()` round-trips public and private requests end-to-end using an injected mock performer |
@@ -326,11 +332,11 @@ Crypto.com-only tree (`-DCRYPTOCOGS_BUILD_KRAKEN=OFF -DCRYPTOCOGS_BUILD_BINANCE=
 | Namespace | Location | Contains |
 |---|---|---|
 | `exchange::` | `exchange/common/{types,tick_price}.hpp` | Canonical enums shared by every adapter: `Side`, `OrderType`, `TimeInForce`, `OrderStatus` (+ `to_string`/`from_string`); and `TickPrice` (exact-decimal price representation) |
-| `exchange::rest::` | `exchange/common/{rest,http_client}.hpp` | `TypedPublicRequest<R>`, `TypedPrivateRequest<R>`, `RestResponse<T>`, `HttpRequest`, `IRestAuth`; and `CurlHttpClient` + `HttpResponse` (shared libcurl transport, `libexchange_http.a`) |
+| `exchange::rest::` | `exchange/common/{rest,http_client,credentials_file}.hpp` | `TypedPublicRequest<R>`, `TypedPrivateRequest<R>`, `RestResponse<T>`, `HttpRequest`, `IRestAuth`; `CurlHttpClient` + `HttpResponse` (shared libcurl transport, `libexchange_http.a`); and `read_toml_credentials` (shared TOML `from_file` loader, `libexchange_common.a`) |
 | `exchange::ws::` | `exchange/common/{ws,ws_client,ix_ws_connection,reconnect_session}.hpp` | `IWsConnection`, `IWsErrorHandler`, `RateLimitedWsErrorHandler`, `IxWsConnection`, `WsReconnectSession`, `ExchangeWsClient`, `SubscriptionHandle`, `WsResponse<T>`, `WsRequestBase`, `TypedWsRequest<R>`, `FrameDescriptor`, `FrameKind`, `MessageIdentifier`, `make_exchange_ws_client()` |
 | `exchange::kraken::` | `exchange/kraken/types.hpp` | Kraken-only types — `PriceType`, `TriggerReference`, `StpType`, `FeePreference`, `OrderParams`, `OrderInfo`, `TradeInfo`, `LedgerEntry` — plus `RestResponse<T>` / `parse_rest_response<T>()` (Kraken's REST envelope; re-exports the canonical enums **and** `exchange::TickPrice`) |
-| `exchange::kraken::rest::` | `exchange/kraken/{auth,rest_api,rest_client}.hpp` | `Credentials`, all REST request/response types, `KrakenRestClient` |
-| `exchange::kraken::ws::` | `exchange/kraken/{ws_api,ws_client}.hpp` | All WS request/response types, `SubscribeChannel`, `WsCredentials`, `identify_message`/`kraken_frame_descriptor`, `KrakenWsClient` (alias for `ExchangeWsClient`), `make_kraken_ws_client()`, URL constants |
+| `exchange::kraken::rest::` | `exchange/kraken/{auth,rest_api,rest_client}.hpp` | `KrakenCredentials`, all REST request/response types, `KrakenRestClient` |
+| `exchange::kraken::ws::` | `exchange/kraken/{ws_api,ws_client}.hpp` | All WS request/response types, `SubscribeChannel`, `KrakenWsCredentials`, `identify_message`/`kraken_frame_descriptor`, `KrakenWsClient` (alias for `ExchangeWsClient`), `make_kraken_ws_client()`, URL constants |
 | `exchange::binance::` | `exchange/binance/types.hpp` | Binance enums + per-exchange string converters (`binance_order_type_to_string`, …); re-exports the canonical four |
 | `exchange::binance::rest::` | `exchange/binance/{auth,rest_api,rest_client}.hpp` | `BinanceCredentials`, `BinanceAuth` (`IRestAuth`), all REST request/response types, `parse_binance_response<T>`, `BinanceRestClient` |
 | `exchange::binance::ws::` | `exchange/binance/{ws_streams,ws_api}.hpp` | Stream events + `binance_stream_frame_descriptor` + `BinanceStreamClient`/`make_binance_stream_client()` (`STREAM_URL`); trading API req/resp + `binance_ws_api_frame_descriptor` + `BinanceWsApiClient`/`make_binance_ws_api_client()` (`WS_API_URL`). Both clients are `ExchangeWsClient` aliases |
@@ -421,7 +427,7 @@ Always check `resp.ok` before accessing `resp.result`.
 ### Authentication (`exchange/kraken/auth.hpp`)
 
 ```cpp
-struct Credentials {
+struct KrakenCredentials {
     std::string api_key;
     std::string api_secret;  // base64-encoded
 
@@ -432,15 +438,16 @@ struct Credentials {
                      const std::string& nonce_str,
                      const std::string& postdata) const;
 
-    static Credentials from_file(const std::string& name,
-                                 const std::string& location = "~/.kraken");
+    // Load from a TOML file (location empty ⇒ $HOME/.kraken/<name>).
+    static KrakenCredentials from_file(const std::string& name,
+                                 const std::string& location = "");
 };
 
 // Monotonic µs-based nonce generator — the only other public symbol in auth.hpp.
 uint64_t make_nonce();
 ```
 
-The base64/SHA-256/HMAC-SHA-512/URL-encoding helpers that back `sign()` are private implementation details in `exchange::kraken::rest::detail::` — they are not part of the public surface (encapsulated per the project's interface-design convention; only `Credentials` and `make_nonce()` are exposed). `test_signature.cpp` exercises `sign()` end-to-end against the legacy reference implementation rather than testing the helpers individually.
+The base64/SHA-256/HMAC-SHA-512/URL-encoding helpers that back `sign()` are private implementation details in `exchange::kraken::rest::detail::` — they are not part of the public surface (encapsulated per the project's interface-design convention; only `KrakenCredentials` and `make_nonce()` are exposed). `test_signature.cpp` exercises `sign()` end-to-end against the legacy reference implementation rather than testing the helpers individually.
 
 ### Public REST endpoints
 
@@ -501,7 +508,7 @@ public:
     // Private endpoint — credentials required
     template<typename Req>
     RestResponse<typename Req::response_type> execute(const Req& req,
-                                                       const Credentials& creds);
+                                                       const KrakenCredentials& creds);
 };
 
 // Test factory — injects a custom HTTP performer (no libcurl)
@@ -525,7 +532,7 @@ inline KrakenRestClient make_test_client(
 ### Authentication
 
 ```cpp
-struct WsCredentials {
+struct KrakenWsCredentials {
     std::string token;  // obtained via GetWebSocketsTokenRequest over REST
 };
 ```
@@ -548,7 +555,7 @@ These use `execute()` / `execute_async()` (single request → single response):
 | `BatchAddRequest` | `BatchAddResponse` | Place multiple orders atomically |
 | `BatchCancelRequest` | `BatchCancelResponse` | Cancel multiple orders atomically |
 
-`AddOrderRequest`, `BatchAddRequest`, `EditOrderRequest`, and `AmendOrderRequest` accept a `WsCredentials` token for private channels. Every method-call request derives `exchange::ws::TypedWsRequest<R>` (re-exported in this namespace), which in turn derives `WsRequestBase` — the common scaffold's `int64_t req_id{0}` slot that `ExchangeWsClient` assigns automatically.
+`AddOrderRequest`, `BatchAddRequest`, `EditOrderRequest`, and `AmendOrderRequest` accept a `KrakenWsCredentials` token for private channels. Every method-call request derives `exchange::ws::TypedWsRequest<R>` (re-exported in this namespace), which in turn derives `WsRequestBase` — the common scaffold's `int64_t req_id{0}` slot that `ExchangeWsClient` assigns automatically.
 
 **`PingRequest`** structure — note that `req_id` is optional (unlike other requests where it is auto-assigned):
 
@@ -649,8 +656,8 @@ Captured wire formats live in
 |---|---|---|
 | REST signing | HMAC-**SHA512**, base64, nonce | HMAC-**SHA256**, lowercase hex, `timestamp`(+`recvWindow`) |
 | REST envelope | `{error[], result}` → `kraken::RestResponse<T>` | HTTP status + body → `exchange::rest::RestResponse<T>` via `parse_binance_response<T>(status, j)` |
-| Credentials | `Credentials::from_file()` | `BinanceCredentials{api_key, secret_key, recv_window_ms=5000}` — a plain struct (set directly; no file loader) |
-| WS auth | session token (`WsCredentials`) | per-request HMAC over sorted `params` (`BinanceWsCredentials` = alias for `BinanceCredentials`) |
+| Credentials | `KrakenCredentials{api_key, api_secret}` or `::from_file()` | `BinanceCredentials{api_key, secret_key, recv_window_ms=5000}` — a plain struct; `from_file()` loads `api_key`/`api_secret` and keeps `recv_window_ms` default |
+| WS auth | session token (`KrakenWsCredentials`) | per-request HMAC over sorted `params` (`BinanceWsCredentials` = alias for `BinanceCredentials`) |
 | WS protocols | one endpoint (`ws_api.hpp`) | **two** — market streams (`ws_streams.hpp`) and a trading API (`ws_api.hpp`) |
 | WS frame classifier | `identify_message` + `kraken_frame_descriptor` | `binance_{stream,ws_api}_frame_descriptor` only (no `identify_message` — not required) |
 
@@ -742,8 +749,10 @@ the FIX order-entry path is recorded as deferred
 
 ### Authentication (`exchange/coinbase/auth.hpp`, `exchange::coinbase::rest`)
 
-`CoinbaseCredentials{api_key, api_secret, passphrase}` — a plain struct (no file
-loader). `CoinbaseAuth : exchange::rest::IRestAuth` signs every request as
+`CoinbaseCredentials{api_key, api_secret, passphrase}` — a plain struct (or
+`CoinbaseCredentials::from_file(name, location)`, which reads all three keys from
+a TOML file; see [Credentials file format](#credentials-file-format)).
+`CoinbaseAuth : exchange::rest::IRestAuth` signs every request as
 `base64(HMAC-SHA256(base64_decode(secret), timestamp + method + requestPath +
 body))` and injects the four `CB-ACCESS-*` headers; the base64/HMAC-SHA256
 primitives in `detail::` are reused by the WS user-channel signer. An injectable
@@ -817,7 +826,9 @@ WebSocket**: requests are `{id, method, api_key, params, nonce, sig}` and replie
 
 ### Authentication (`exchange/cryptocom/auth.hpp`, `exchange::cryptocom::rest`)
 
-`CryptoComCredentials{api_key, api_secret}` — a plain struct (no file loader).
+`CryptoComCredentials{api_key, api_secret}` — a plain struct (or
+`CryptoComCredentials::from_file(name, location)`, which reads both keys from a
+TOML file; see [Credentials file format](#credentials-file-format)).
 `creds.sign(method, id, params, nonce)` returns the hex `sig`; `make_nonce()` is a
 millisecond epoch. The base64-free primitives (`detail::hmac_sha256`,
 `detail::to_hex`, `detail::params_to_str`) are reused by the WS user-channel
@@ -894,7 +905,7 @@ Every private REST endpoint follows **`TypedPrivateRequest<R>`**:
 ```cpp
 struct GetAccountBalanceRequest : PrivateRequest {
     using response_type = AccountBalanceResult;
-    HttpRequest build(const Credentials&) const; // adds nonce + HMAC signature
+    HttpRequest build(const KrakenCredentials&) const; // adds nonce + HMAC signature
 };
 ```
 
@@ -917,7 +928,7 @@ auto resp = client.execute(GetServerTimeRequest{});
    ```
 4. Send headers `API-Key` and `API-Sign` with the POST request.
 
-`Credentials::sign(path, nonce_str, postdata)` in `exchange/kraken/auth.hpp` implements this (the supporting crypto primitives are private `detail::` helpers — see the [REST API reference](#rest-api-reference-exchangekrakenrest_apihpp-namespace-exchangekrakenrest)). Unit tests in `test_signature.cpp` verify it matches the legacy reference implementation byte-for-byte.
+`KrakenCredentials::sign(path, nonce_str, postdata)` in `exchange/kraken/auth.hpp` implements this (the supporting crypto primitives are private `detail::` helpers — see the [REST API reference](#rest-api-reference-exchangekrakenrest_apihpp-namespace-exchangekrakenrest)). Unit tests in `test_signature.cpp` verify it matches the legacy reference implementation byte-for-byte.
 
 ### WebSocket layer — `ExchangeWsClient` (generic) and `KrakenWsClient` (Kraken alias)
 
@@ -1073,7 +1084,7 @@ Private WebSocket channels use a **session token** (not the API key/secret direc
 1. Call `GetWebSocketsTokenRequest` via the REST client to obtain a token.
 2. Pass the token as the `"token"` field inside each WebSocket request's `params`.
 
-`WsCredentials` wraps the token; `AddOrderRequest`, `SubscribeRequest`, etc. accept it directly.
+`KrakenWsCredentials` wraps the token; `AddOrderRequest`, `SubscribeRequest`, etc. accept it directly.
 
 ### WebSocket message dispatch (low-level)
 
@@ -1104,7 +1115,7 @@ below cover adding endpoints/channels to an *existing* adapter.
 
 1. **Declare request and response types** in `exchange/kraken/rest_api.hpp`:
    - Public: inherit `PublicRequest`, define `using response_type = YourResult`, implement `build()`.
-   - Private: inherit `PrivateRequest`, define `using response_type = YourResult`, implement `build(const Credentials&)`.
+   - Private: inherit `PrivateRequest`, define `using response_type = YourResult`, implement `build(const KrakenCredentials&)`.
    - Add `YourResult::from_json(const json&)` as a static method.
 
 2. **Add a unit test** in `tests/unit/test_rest_requests.cpp` verifying the path, method, and body fields, and in `test_rest_responses.cpp` verifying JSON deserialization.
@@ -1200,20 +1211,38 @@ conn->fire_close();           // simulate disconnect
 
 ## Credentials file format
 
-Private example programs load credentials from `~/.kraken/<name>` (default: `~/.kraken/default`):
+Every adapter's credential struct has a `from_file(name, location = "")` loader
+([plan 021](docs/plans/021-credentials-from-file.md)). All four parse the **same
+TOML format** — top-level string keys — via the shared
+`exchange::rest::read_toml_credentials` helper (in `exchange_common`, backed by
+toml++):
 
+```toml
+api_key    = "PUBLICKEY..."
+api_secret = "secret..."
+# passphrase = "..."   # Coinbase only
 ```
-<api_key>
-<base64_encoded_private_key>
-```
 
-Line 1: API public key string.
-Line 2: Base64-encoded private key (as provided by Kraken).
+| Adapter | Default dir | Required keys |
+|---|---|---|
+| Kraken | `~/.kraken` | `api_key`, `api_secret` |
+| Binance | `~/.binance` | `api_key`, `api_secret` (→ `secret_key`; `algorithm`/`recv_window_ms` keep defaults) |
+| Coinbase | `~/.coinbase` | `api_key`, `api_secret`, `passphrase` |
+| Crypto.com | `~/.cryptocom` | `api_key`, `api_secret` |
 
-Load in code:
+`location` empty ⇒ `$HOME/<dir>/<name>`; otherwise `<location>/<name>` (no `~`
+expansion, no forced `.toml` extension). Throws `std::runtime_error` if the file
+is missing/malformed or a key is absent, non-string, or empty. Load in code:
+
 ```cpp
-auto creds = exchange::kraken::rest::Credentials::from_file("default");
+auto creds = exchange::kraken::rest::KrakenCredentials::from_file("default");
+// exchange::binance::rest::BinanceCredentials::from_file(...)  — ~/.binance/<name>
+// exchange::coinbase::rest::CoinbaseCredentials::from_file(...) — ~/.coinbase/<name>
+// exchange::cryptocom::rest::CryptoComCredentials::from_file(...) — ~/.cryptocom/<name>
 ```
+
+> **Breaking change (v0.5.0):** Kraken's loader previously parsed a bespoke
+> two-line text file. Existing `~/.kraken/<name>` files must be rewritten as TOML.
 
 ---
 
@@ -1243,7 +1272,7 @@ Place the banner before `#pragma once` (for headers) or before the first `#inclu
 - JSON serialisation uses `to_json()` / `from_json()` static methods on each struct. Prefer `j.value("key", default)` over `j.at("key")` for fields that may be absent in responses.
 - Enum conversions are done by free functions `to_string(Enum)` and `foo_from_string(const std::string&)`. The canonical four (`Side`, `OrderType`, `TimeInForce`, `OrderStatus`) live in `exchange/common/types.hpp`; Kraken-only enums (`PriceType`, `TriggerReference`, `StpType`, `FeePreference`) and Kraken's hyphenated `OrderType` overrides (`kraken_order_type_to_string`/`from_string`) live in `exchange/kraken/types.hpp`. All throw `std::invalid_argument` on unknown values.
 - Monetary / volume fields returned by the REST API arrive as JSON **strings** (e.g., `"1.5"`) — deserialise with `std::stod(j.value("field", "0"))` rather than `.get<double>()`. For prices that must round-trip to an *exact* decimal string (e.g. for order placement), use `TickPrice` instead of raw `double` formatting — see [Shared types reference](#tickprice--exact-decimal-price-representation).
-- The build produces **six** static libraries — two always-built common libs plus the four adapters. `exchange_common` compiles the exchange-agnostic non-template code — `src/exchange/common/{ws_client,ws,types,tick_price}.cpp` (generic WS dispatch, `SubscriptionHandle`/`RateLimitedWsErrorHandler`, canonical enum converters, `TickPrice`) — and links only `nlohmann_json` (`PUBLIC`), **not** OpenSSL/libcurl (the WS engine needs no HTTP/crypto). `exchange_http` compiles `src/exchange/common/http_client.cpp` (the shared `CurlHttpClient` REST transport) and links `CURL::libcurl` + `nlohmann_json` (`PUBLIC`) — kept separate so `exchange_common` stays curl-free (plan 010). `kraken` (six `.cpp` under `src/kraken/`: types, auth, rest_api, rest_client, ws_api, ws_client), `binance` (six under `src/binance/`: types, auth, rest_api, rest_client, ws_streams, ws_api), `coinbase` (five under `src/coinbase/`: types, auth, rest_api, rest_client, ws_streams), and `cryptocom` (six under `src/cryptocom/`: types, auth, rest_api, rest_client, heartbeat_connection, ws) are **peers**: each links `exchange_common`, `exchange_http`, and OpenSSL (`PUBLIC`), and **none links another**. OpenSSL is `PUBLIC` because `auth.hpp` declares HMAC/SHA helpers in a public header (defined in `auth.cpp`); libcurl reaches consumers transitively through `exchange_http`. After plan 010 the curl handling lives once in `CurlHttpClient`; after plan 016 every adapter header is purely declarative — request/response bodies live in these `.cpp` files and template bodies in sibling `.inl` files. None of the libraries link ixwebsocket; callers that use `IxWsConnection` must link `ixwebsocket` separately.
+- The build produces **six** static libraries — two always-built common libs plus the four adapters. `exchange_common` compiles the exchange-agnostic non-template code — `src/exchange/common/{ws_client,ws,types,tick_price,credentials_file}.cpp` (generic WS dispatch, `SubscriptionHandle`/`RateLimitedWsErrorHandler`, canonical enum converters, `TickPrice`, and the shared `read_toml_credentials` TOML loader) — and links `nlohmann_json` (`PUBLIC`) plus toml++ (`PRIVATE`, build-only — header-only, used only by `credentials_file.cpp`), **not** OpenSSL/libcurl (the WS engine needs no HTTP/crypto). `exchange_http` compiles `src/exchange/common/http_client.cpp` (the shared `CurlHttpClient` REST transport) and links `CURL::libcurl` + `nlohmann_json` (`PUBLIC`) — kept separate so `exchange_common` stays curl-free (plan 010). `kraken` (six `.cpp` under `src/kraken/`: types, auth, rest_api, rest_client, ws_api, ws_client), `binance` (six under `src/binance/`: types, auth, rest_api, rest_client, ws_streams, ws_api), `coinbase` (five under `src/coinbase/`: types, auth, rest_api, rest_client, ws_streams), and `cryptocom` (six under `src/cryptocom/`: types, auth, rest_api, rest_client, heartbeat_connection, ws) are **peers**: each links `exchange_common`, `exchange_http`, and OpenSSL (`PUBLIC`), and **none links another**. OpenSSL is `PUBLIC` because `auth.hpp` declares HMAC/SHA helpers in a public header (defined in `auth.cpp`); libcurl reaches consumers transitively through `exchange_http`. After plan 010 the curl handling lives once in `CurlHttpClient`; after plan 016 every adapter header is purely declarative — request/response bodies live in these `.cpp` files and template bodies in sibling `.inl` files. None of the libraries link ixwebsocket; callers that use `IxWsConnection` must link `ixwebsocket` separately.
 - IXWebSocket and spdlog are **not** linked into any of the three libraries; they are used only by examples and tests.
 - Template methods for `ExchangeWsClient` live in `exchange/common/ws_client.inl` (included at the bottom of the `.hpp`). Non-template methods live in `src/exchange/common/ws_client.cpp`. The generic client itself is exchange-agnostic; each adapter supplies its `*_frame_descriptor()` plus its WS request/response types — whose bodies, post-plan-016, live in the adapter's `ws_api.cpp` (Kraken also has `ws_client.cpp` for `make_kraken_ws_client`; its `TypedSubscribeRequest` template bodies are in `ws_api.inl`). Keep the hpp/inl/cpp split consistent when adding new methods.
 - Push callbacks stored in `subscriptions_` are type-erased to `std::function<void(const json&)>` internally; the typed lambda wrapper is created once in the template method and stored at subscription time.

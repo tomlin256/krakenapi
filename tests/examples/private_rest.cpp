@@ -22,7 +22,7 @@ int main(int argc, char* argv[])
 
     std::string creds_name = "default";
     app.add_option("-c,--credentials", creds_name,
-                   "KrakenCredentials profile name (file at ~/.kraken/<name>)")
+                   "Credentials profile name (TOML file at ~/.kraken/<name>)")
         ->capture_default_str();
 
     CLI11_PARSE(app, argc, argv);
