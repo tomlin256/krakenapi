@@ -27,9 +27,14 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <string>
+
+#include <unistd.h>  // getpid
 
 using namespace exchange::coinbase::rest;
 using exchange::rest::HttpRequest;
@@ -200,4 +205,45 @@ TEST(CoinbaseAuth, DeleteRequest_SignsWithDeleteMethod) {
 TEST(CoinbaseAuth, ImplementsIRestAuth) {
     static_assert(std::is_base_of_v<exchange::rest::IRestAuth, CoinbaseAuth>,
                   "CoinbaseAuth must derive exchange::rest::IRestAuth");
+}
+
+// ── CoinbaseCredentials::from_file — TOML loader (plan 021) ──────────────────
+
+TEST(CoinbaseCredentialsFromFile, LoadsAllThreeFields) {
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() /
+                         ("cryptocogs_coinbase_creds_" + std::to_string(::getpid()));
+    fs::create_directories(dir);
+    {
+        std::ofstream f(dir / "default");
+        f << "api_key    = \"CB_KEY\"\n"
+             "api_secret = \"CB_SECRET\"\n"
+             "passphrase = \"CB_PASS\"\n";
+    }
+
+    const auto creds = CoinbaseCredentials::from_file("default", dir.string());
+    EXPECT_EQ(creds.api_key, "CB_KEY");
+    EXPECT_EQ(creds.api_secret, "CB_SECRET");
+    EXPECT_EQ(creds.passphrase, "CB_PASS");
+
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+}
+
+TEST(CoinbaseCredentialsFromFile, ThrowsWhenPassphraseMissing) {
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() /
+                         ("cryptocogs_coinbase_creds_missing_" + std::to_string(::getpid()));
+    fs::create_directories(dir);
+    {
+        std::ofstream f(dir / "default");
+        f << "api_key    = \"CB_KEY\"\n"
+             "api_secret = \"CB_SECRET\"\n";  // no passphrase
+    }
+
+    EXPECT_THROW(CoinbaseCredentials::from_file("default", dir.string()),
+                 std::runtime_error);
+
+    std::error_code ec;
+    fs::remove_all(dir, ec);
 }

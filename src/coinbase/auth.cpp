@@ -9,6 +9,8 @@
 
 #include "exchange/coinbase/auth.hpp"
 
+#include "exchange/common/credentials_file.hpp"
+
 #include <chrono>
 #include <stdexcept>
 #include <string>
@@ -96,6 +98,17 @@ const char* method_str(exchange::rest::HttpRequest::Method m) {
 }
 
 } // namespace
+
+// ── CoinbaseCredentials ──────────────────────────────────────────────────────
+
+CoinbaseCredentials CoinbaseCredentials::from_file(const std::string& name,
+                                                   const std::string& location) {
+    // TOML file with top-level string keys api_key / api_secret / passphrase
+    // (plan 021).
+    const auto v = exchange::rest::read_toml_credentials(
+        name, ".coinbase", location, {"api_key", "api_secret", "passphrase"});
+    return CoinbaseCredentials{v[0], v[1], v[2]};
+}
 
 // ── CoinbaseAuth ──────────────────────────────────────────────────────────────
 

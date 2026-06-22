@@ -59,14 +59,24 @@ std::string coinbase_sign(const std::string& api_secret,
 
 // ── Credential bundle ────────────────────────────────────────────────────────
 //
-// A plain struct (set the three fields directly — Coinbase has no standard
-// on-disk key file format, so there is no from_file loader, mirroring
-// BinanceCredentials).
+// A plain struct — set the three fields directly, or load them from a TOML file
+// with from_file (plan 021).
 
 struct CoinbaseCredentials {
     std::string api_key;
     std::string api_secret;  // base64-encoded
     std::string passphrase;
+
+    // Load all three fields from a TOML file (plan 021) with top-level string
+    // keys:
+    //   api_key    = "..."
+    //   api_secret = "..."
+    //   passphrase = "..."
+    // Path: location.empty() ? $HOME/.coinbase/<name> : <location>/<name>.
+    // Throws std::runtime_error if the file is missing/malformed or a key is
+    // absent, non-string, or empty.
+    static CoinbaseCredentials from_file(const std::string& name,
+                                         const std::string& location = "");
 };
 
 // ── IRestAuth implementor ─────────────────────────────────────────────────────
