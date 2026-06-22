@@ -72,6 +72,25 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(nlohmann_json)
 
 #-------------------------------------------------------------------------------
+# toml++ — header-only TOML parser (plan 021)
+#
+# Used ONLY inside src/exchange/common/credentials_file.cpp (the shared
+# Credentials::from_file loader). It never appears in a public header, so it is a
+# pure build-time implementation detail: exchange_common links it
+# PRIVATE $<BUILD_INTERFACE:...>, keeping it out of the cryptocogsTargets export
+# and needing no vendoring. Install rules are suppressed — same treatment as
+# JSON_Install / IXWEBSOCKET_INSTALL / INSTALL_GTEST.
+#-------------------------------------------------------------------------------
+
+set(TOMLPLUSPLUS_INSTALL OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    tomlplusplus
+    GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+    GIT_TAG        v3.4.0
+)
+FetchContent_MakeAvailable(tomlplusplus)
+
+#-------------------------------------------------------------------------------
 # Subdirectories
 #-------------------------------------------------------------------------------
 

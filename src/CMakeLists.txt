@@ -13,6 +13,7 @@ add_library(exchange_common STATIC
     exchange/common/ws.cpp
     exchange/common/tick_price.cpp
     exchange/common/types.cpp
+    exchange/common/credentials_file.cpp
 )
 add_library(cryptocogs::common ALIAS exchange_common)
 target_include_directories(exchange_common PUBLIC
@@ -25,8 +26,12 @@ target_include_directories(exchange_common PUBLIC
 # making the installed package self-contained — consumers need no separate
 # nlohmann_json. The INSTALL_INTERFACE include dir already covers the vendored
 # copy.
-target_link_libraries(exchange_common PUBLIC
-    $<BUILD_INTERFACE:nlohmann_json::nlohmann_json>)
+# toml++ backs the shared credentials_file.cpp loader only — it is header-only,
+# used in no public header, so link it PRIVATE and BUILD-only (same export guard
+# as nlohmann_json) to keep it out of the install export (plan 021).
+target_link_libraries(exchange_common
+    PUBLIC  $<BUILD_INTERFACE:nlohmann_json::nlohmann_json>
+    PRIVATE $<BUILD_INTERFACE:tomlplusplus::tomlplusplus>)
 # Export the C++17 requirement so downstream find_package(cryptocogs) consumers
 # inherit it automatically — the top-level CMAKE_CXX_STANDARD is directory-scoped
 # and does not reach the export (plan 017). cxx_std_17 is a floor, not a pin.

@@ -9,6 +9,13 @@ add_executable(test_tick_price test_tick_price.cpp)
 target_link_libraries(test_tick_price exchange_common GTest::gtest_main)
 gtest_discover_tests(test_tick_price)
 
+# Shared TOML credentials-file loader (exchange::rest::read_toml_credentials,
+# compiled into exchange_common). Like TickPrice, it is exchange-agnostic and
+# builds in any flag config.
+add_executable(test_credentials_file test_credentials_file.cpp)
+target_link_libraries(test_credentials_file exchange_common GTest::gtest_main)
+gtest_discover_tests(test_credentials_file)
+
 #-------------------------------------------------------------------------------
 # Kraken unit tests
 #-------------------------------------------------------------------------------
