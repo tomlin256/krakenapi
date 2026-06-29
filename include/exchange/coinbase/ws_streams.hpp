@@ -235,6 +235,15 @@ public:
         std::function<void(CoinbaseL2Snapshot)> on_snapshot,
         std::function<void(CoinbaseL2Update)>   on_update);
 
+    // Public unauthenticated order-book channel.  Delivers the same
+    // "snapshot" and "l2update" frames as subscribe_level2, but does not
+    // require authentication (unlike level2, which now requires a signed
+    // user channel).  Use this for keyless market-data feeds.
+    CoinbaseSubscriptionHandle subscribe_level2_batch(
+        const std::vector<std::string>& product_ids,
+        std::function<void(CoinbaseL2Snapshot)> on_snapshot,
+        std::function<void(CoinbaseL2Update)>   on_update);
+
     CoinbaseSubscriptionHandle subscribe_heartbeat(
         const std::vector<std::string>& product_ids,
         std::function<void(CoinbaseHeartbeatEvent)> cb);

@@ -108,6 +108,46 @@ TEST(CoinbaseWsClient, Level2SnapshotAndUpdateRouteToTheirCallbacks) {
     EXPECT_DOUBLE_EQ(upd->changes[0].size, 0.3);
 }
 
+TEST(CoinbaseWsClient, Level2BatchSubscribeFrameUsesLevel2BatchChannel) {
+    auto conn   = std::make_shared<MockWsConnection>();
+    auto client = make_coinbase_stream_client(conn);
+
+    client->subscribe_level2_batch({"BTC-USD", "ETH-USD"},
+                                   [](CoinbaseL2Snapshot) {}, [](CoinbaseL2Update) {});
+    conn->fire_open();
+
+    ASSERT_EQ(conn->sent_messages.size(), 1u);
+    auto sub = json::parse(conn->sent_messages[0]);
+    EXPECT_EQ(sub.at("type"), "subscribe");
+    EXPECT_EQ(sub.at("channels"), json::array({"level2_batch"}));
+    EXPECT_EQ(sub.at("product_ids"), json::array({"BTC-USD", "ETH-USD"}));
+}
+
+TEST(CoinbaseWsClient, Level2BatchSnapshotAndUpdateRouteToTheirCallbacks) {
+    auto conn   = std::make_shared<MockWsConnection>();
+    auto client = make_coinbase_stream_client(conn);
+
+    std::optional<CoinbaseL2Snapshot> snap;
+    std::optional<CoinbaseL2Update>   upd;
+    client->subscribe_level2_batch({"BTC-USD"},
+                                   [&](CoinbaseL2Snapshot s) { snap = s; },
+                                   [&](CoinbaseL2Update u)   { upd  = u; });
+    conn->fire_open();
+
+    conn->inject_message(wf::SNAPSHOT_JSON);
+    ASSERT_TRUE(snap.has_value());
+    ASSERT_EQ(snap->bids.size(), 2u);
+    EXPECT_DOUBLE_EQ(snap->bids[0].price, 63210.11);
+    EXPECT_DOUBLE_EQ(snap->asks[1].size, 2.1);
+
+    conn->inject_message(wf::L2UPDATE_JSON);
+    ASSERT_TRUE(upd.has_value());
+    ASSERT_EQ(upd->changes.size(), 2u);
+    EXPECT_EQ(upd->changes[0].side, "buy");
+    EXPECT_DOUBLE_EQ(upd->changes[0].price, 63210.11);
+    EXPECT_DOUBLE_EQ(upd->changes[0].size, 0.3);
+}
+
 TEST(CoinbaseWsClient, MatchFrameDispatched) {
     auto conn   = std::make_shared<MockWsConnection>();
     auto client = make_coinbase_stream_client(conn);

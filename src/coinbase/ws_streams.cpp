@@ -326,6 +326,21 @@ CoinbaseSubscriptionHandle CoinbaseStreamClient::subscribe_level2(
         });
 }
 
+CoinbaseSubscriptionHandle CoinbaseStreamClient::subscribe_level2_batch(
+    const std::vector<std::string>& product_ids,
+    std::function<void(CoinbaseL2Snapshot)> on_snapshot,
+    std::function<void(CoinbaseL2Update)>   on_update)
+{
+    return subscribe_raw("level2_batch", product_ids, {"snapshot", "l2update"},
+        [on_snapshot = std::move(on_snapshot),
+         on_update   = std::move(on_update)](const json& j) {
+            if (j.value("type", "") == "snapshot")
+                on_snapshot(CoinbaseL2Snapshot::from_json(j));
+            else
+                on_update(CoinbaseL2Update::from_json(j));
+        });
+}
+
 CoinbaseSubscriptionHandle CoinbaseStreamClient::subscribe_heartbeat(
     const std::vector<std::string>& product_ids,
     std::function<void(CoinbaseHeartbeatEvent)> cb)
