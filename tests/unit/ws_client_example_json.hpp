@@ -78,7 +78,7 @@ inline constexpr const char* kInstrumentSnapshotJson = R"({"channel":"instrument
 // Executions / Balances (private channels — synthetic examples)
 // ─────────────────────────────────────────────────────────────────────────────
 
-inline constexpr const char* kExecutionsSnapshotJson = R"({"channel":"executions","data":[{"avg_price":50000.0,"cl_ord_id":"my-order-1","cost":5000.0,"cum_qty":0.1,"exec_id":"EXEC-001","exec_type":"filled","fee":2.5,"fee_currency":"USD","last_price":50000.0,"last_qty":0.1,"leaves_qty":0.0,"limit_price":50000.0,"margin":false,"order_id":"ORDER-001","order_qty":0.1,"order_status":"filled","order_type":"limit","post_only":false,"side":"buy","symbol":"BTC/USD","time_in_force":"GTC","timestamp":"2026-03-15T12:00:00.000Z"}],"type":"snapshot"})";
+inline constexpr const char* kExecutionsSnapshotJson = R"({"channel":"executions","data":[{"avg_price":50000.0,"cl_ord_id":"my-order-1","cost":5000.0,"cum_qty":0.1,"exec_id":"EXEC-001","exec_type":"trade","fee_ccy_pref":"fciq","fees":[{"asset":"USD","qty":2.5}],"last_price":50000.0,"last_qty":0.1,"leaves_qty":0.0,"limit_price":50000.0,"liquidity_ind":"m","margin":false,"order_id":"ORDER-001","order_qty":0.1,"order_status":"filled","order_type":"limit","post_only":false,"side":"buy","symbol":"BTC/USD","time_in_force":"GTC","timestamp":"2026-03-15T12:00:00.000Z"}],"type":"snapshot"})";
 
 inline constexpr const char* kBalancesSnapshotJson = R"({"channel":"balances","data":[{"asset":"BTC","balance":1.5,"hold_trade":0.1},{"asset":"USD","balance":25000.0,"hold_trade":5000.0}],"type":"snapshot"})";
 

@@ -537,8 +537,21 @@ ExecutionData ExecutionData::from_json(const json& j) {
     e.timestamp    = j.value("timestamp", "");
     if (j.contains("cl_ord_id"))     e.cl_ord_id     = j["cl_ord_id"].get<std::string>();
     if (j.contains("order_userref")) e.order_userref = j["order_userref"].get<int64_t>();
-    if (j.contains("fee"))           e.fee           = j["fee"].get<double>();
-    if (j.contains("fee_currency"))  e.fee_currency  = j["fee_currency"].get<std::string>();
+    // Kraken WS v2 executions report fees as an array of {asset, qty} — currently
+    // always in the quote currency. Sum the quantities into `fee` and take the
+    // first element's asset as `fee_currency`. Fall back to a singular `fee` /
+    // `fee_currency` for legacy/synthetic payloads that predate the array form.
+    if (j.contains("fees") && j["fees"].is_array() && !j["fees"].empty()) {
+        double total = 0.0;
+        for (const auto& f : j["fees"]) total += f.value("qty", 0.0);
+        e.fee          = total;
+        e.fee_currency = j["fees"][0].value("asset", "");
+    } else if (j.contains("fee")) {
+        e.fee = j["fee"].get<double>();
+        if (j.contains("fee_currency")) e.fee_currency = j["fee_currency"].get<std::string>();
+    }
+    if (j.contains("liquidity_ind")) e.liquidity_ind = j["liquidity_ind"].get<std::string>();
+    if (j.contains("fee_ccy_pref"))  e.fee_ccy_pref  = j["fee_ccy_pref"].get<std::string>();
     if (j.contains("limit_price"))   e.limit_price   = j["limit_price"].get<double>();
     if (j.contains("time_in_force")) e.time_in_force = j["time_in_force"].get<std::string>();
     if (j.contains("post_only"))     e.post_only     = j["post_only"].get<bool>();

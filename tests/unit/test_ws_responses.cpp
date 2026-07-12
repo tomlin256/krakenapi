@@ -298,7 +298,7 @@ TEST(ParseExecutionsMessage, FieldsFromSampleJson) {
     ASSERT_EQ(m.data.size(), 1u);
     const auto& d = m.data[0];
     EXPECT_EQ(d.exec_id, "EXEC-001");
-    EXPECT_EQ(d.exec_type, "filled");
+    EXPECT_EQ(d.exec_type, "trade");
     EXPECT_EQ(d.order_id, "ORDER-001");
     EXPECT_EQ(d.symbol, "BTC/USD");
     EXPECT_EQ(d.side, "buy");
@@ -316,6 +316,10 @@ TEST(ParseExecutionsMessage, FieldsFromSampleJson) {
     EXPECT_DOUBLE_EQ(d.fee.value(), 2.5);
     ASSERT_TRUE(d.fee_currency.has_value());
     EXPECT_EQ(d.fee_currency.value(), "USD");
+    ASSERT_TRUE(d.liquidity_ind.has_value());
+    EXPECT_EQ(d.liquidity_ind.value(), "m");
+    ASSERT_TRUE(d.fee_ccy_pref.has_value());
+    EXPECT_EQ(d.fee_ccy_pref.value(), "fciq");
     ASSERT_TRUE(d.limit_price.has_value());
     EXPECT_DOUBLE_EQ(d.limit_price.value(), 50000.0);
     ASSERT_TRUE(d.time_in_force.has_value());
@@ -324,6 +328,43 @@ TEST(ParseExecutionsMessage, FieldsFromSampleJson) {
     EXPECT_FALSE(d.post_only.value());
     ASSERT_TRUE(d.margin.has_value());
     EXPECT_FALSE(d.margin.value());
+}
+
+TEST(ParseExecutionsMessage, MultiElementFeesArraySums) {
+    // Kraken reports fees as an array; the total is the sum of the element qtys,
+    // and fee_currency is the first element's asset.
+    const char* jsonStr = R"({"channel":"executions","type":"update","data":[{
+        "exec_id":"E1","exec_type":"trade","order_id":"O1","symbol":"BTC/USD",
+        "side":"sell","order_type":"limit","last_qty":0.01,"last_price":50000.0,
+        "liquidity_ind":"t","fees":[{"asset":"USD","qty":1.5},{"asset":"USD","qty":1.0}]
+    }]})";
+    auto m = exchange::kraken::ws::ExecutionsMessage::from_json(json::parse(jsonStr));
+    ASSERT_EQ(m.data.size(), 1u);
+    const auto& d = m.data[0];
+    ASSERT_TRUE(d.fee.has_value());
+    EXPECT_DOUBLE_EQ(d.fee.value(), 2.5);
+    ASSERT_TRUE(d.fee_currency.has_value());
+    EXPECT_EQ(d.fee_currency.value(), "USD");
+    ASSERT_TRUE(d.liquidity_ind.has_value());
+    EXPECT_EQ(d.liquidity_ind.value(), "t");
+}
+
+TEST(ParseExecutionsMessage, LegacySingularFeeFallback) {
+    // A payload without a `fees` array still parses via the singular `fee` /
+    // `fee_currency` fallback (legacy / synthetic form).
+    const char* jsonStr = R"({"channel":"executions","type":"update","data":[{
+        "exec_id":"E1","exec_type":"trade","order_id":"O1","symbol":"BTC/USD",
+        "side":"buy","order_type":"limit","last_qty":0.01,"last_price":50000.0,
+        "fee":2.5,"fee_currency":"USD"
+    }]})";
+    auto m = exchange::kraken::ws::ExecutionsMessage::from_json(json::parse(jsonStr));
+    ASSERT_EQ(m.data.size(), 1u);
+    const auto& d = m.data[0];
+    ASSERT_TRUE(d.fee.has_value());
+    EXPECT_DOUBLE_EQ(d.fee.value(), 2.5);
+    ASSERT_TRUE(d.fee_currency.has_value());
+    EXPECT_EQ(d.fee_currency.value(), "USD");
+    EXPECT_FALSE(d.liquidity_ind.has_value());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

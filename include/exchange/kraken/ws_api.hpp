@@ -475,8 +475,10 @@ struct ExecutionData {
     std::string timestamp;
     std::optional<std::string> cl_ord_id;
     std::optional<int64_t>     order_userref;
-    std::optional<double>      fee;
-    std::optional<std::string> fee_currency;
+    std::optional<double>      fee;            // total fee (summed from `fees[]`, quote ccy)
+    std::optional<std::string> fee_currency;   // asset of the first `fees[]` element
+    std::optional<std::string> liquidity_ind;  // "m" (maker) / "t" (taker)
+    std::optional<std::string> fee_ccy_pref;   // "fciq" (quote) / "fcib" (base)
     std::optional<double>      limit_price;
     std::optional<std::string> time_in_force;
     std::optional<bool>        post_only;
