@@ -28,3 +28,4 @@
 | 020 | [Crypto.com Exchange adapter — REST + WebSocket](plans/020-cryptocom-exchange-adapter.md) | Done |
 | 021 | [`from_file` credential loaders for Binance, Coinbase, Crypto.com](plans/021-credentials-from-file.md) | Done |
 | 022 | [Rename Kraken `Credentials` → `KrakenCredentials`](plans/022-rename-kraken-credentials.md) | Done |
+| 023 | [Crypto.com `user.trade` WS channel](plans/023-cryptocom-user-trade-channel.md) | Stub |
