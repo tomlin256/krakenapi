@@ -843,6 +843,10 @@ correlation `id`, then `req.build(creds)` signs the envelope); both return
 `exchange::rest::RestResponse<Req::response_type>`. `make_cryptocom_test_client(fn)`
 injects a mock performer. Order `price`/`quantity`/`notional` are caller-formatted
 exact decimal strings — produce them with `TickPrice::str()`.
+`CryptoComCreateOrderRequest::exec_inst` is an optional array of order-instruction
+strings (e.g. `req.exec_inst = {EXEC_INST_POST_ONLY}` for a maker-only order),
+serialised as a native JSON array and omitted from the body when unset or empty
+([plan 024](docs/plans/024-cryptocom-create-order-exec-inst.md)).
 
 | Public request | Path | Private request | Path |
 |---|---|---|---|

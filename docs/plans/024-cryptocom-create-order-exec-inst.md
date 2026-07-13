@@ -1,6 +1,6 @@
 # Plan 024 — `exec_inst` (post-only) support on `CryptoComCreateOrderRequest`
 
-**Status:** Proposed — awaiting approval
+**Status:** Done
 **Depends on:** [plan 020 — Crypto.com Exchange adapter](020-cryptocom-exchange-adapter.md) (Done)
 
 ## Motivation
