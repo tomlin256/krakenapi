@@ -29,3 +29,4 @@
 | 021 | [`from_file` credential loaders for Binance, Coinbase, Crypto.com](plans/021-credentials-from-file.md) | Done |
 | 022 | [Rename Kraken `Credentials` → `KrakenCredentials`](plans/022-rename-kraken-credentials.md) | Done |
 | 023 | [Crypto.com `user.trade` WS channel](plans/023-cryptocom-user-trade-channel.md) | Stub |
+| 024 | [`exec_inst` (post-only) support on `CryptoComCreateOrderRequest`](plans/024-cryptocom-create-order-exec-inst.md) | Proposed |
