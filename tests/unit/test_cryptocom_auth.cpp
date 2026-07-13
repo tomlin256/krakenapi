@@ -96,6 +96,14 @@ TEST(CryptoComParamsToStr, ArrayOfObjects_IteratesAndRecurses) {
     EXPECT_EQ(detail::params_to_str(params), "order_lista1b2");
 }
 
+// The exec_inst wire shape (plan 024): a bare string element recurses at
+// level+1, sees a non-object, and falls straight to scalar_to_str — so an
+// array of strings serialises with no separators, same as an array of objects.
+TEST(CryptoComParamsToStr, ArrayOfStrings_IteratesAndRecursesElementwise) {
+    const json params = {{"exec_inst", json::array({"POST_ONLY"})}};
+    EXPECT_EQ(detail::params_to_str(params), "exec_instPOST_ONLY");
+}
+
 TEST(CryptoComParamsToStr, ArrayAndScalarKeys_SortedTogether) {
     const json params = {{"z", "9"}, {"arr", json::array({{{"a", "1"}}})}};
     // sorted keys: "arr" then "z" → "arr" + "a1" + "z" + "9".
@@ -127,6 +135,23 @@ TEST(CryptoComSign, ComposesHexHmacOfDocumentedDigest) {
     const std::string sig = creds.sign("private/get-order-detail", id, params, nonce);
 
     const std::string digest = std::string("private/get-order-detail") + std::to_string(id) +
+                               TEST_KEY + detail::params_to_str(params) + std::to_string(nonce);
+    EXPECT_EQ(sig, detail::to_hex(detail::hmac_sha256(TEST_SECRET, digest)));
+}
+
+// Same construction-pinning approach as the case above, extended to a params
+// object carrying exec_inst (plan 024) — the array-recursion path in
+// params_to_str must not change how sign() composes its digest.
+TEST(CryptoComSign, ComposesHexHmacOfDocumentedDigest_WithExecInst) {
+    const CryptoComCredentials creds{TEST_KEY, TEST_SECRET};
+    const json    params = {{"instrument_name", "BTC_USD"},
+                            {"exec_inst", json::array({"POST_ONLY"})}};
+    const int64_t id     = 11;
+    const int64_t nonce  = 1587846358253;
+
+    const std::string sig = creds.sign("private/create-order", id, params, nonce);
+
+    const std::string digest = std::string("private/create-order") + std::to_string(id) +
                                TEST_KEY + detail::params_to_str(params) + std::to_string(nonce);
     EXPECT_EQ(sig, detail::to_hex(detail::hmac_sha256(TEST_SECRET, digest)));
 }

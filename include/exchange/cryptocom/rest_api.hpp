@@ -30,9 +30,10 @@
 // Private requests build the signed JSON envelope in
 // build(const CryptoComCredentials&) — Kraken-style, since the `sig` lives in
 // the body and depends on the params. Every signed param value is a JSON
-// *string* (the API requires it; see auth.hpp), so the params stay flat scalars
-// — exec_inst (an array) is deliberately omitted from v1 to avoid the
-// list-serialisation ambiguity in params_to_str.
+// *string* (the API requires it; see auth.hpp), so the params stay flat
+// scalars — except CryptoComCreateOrderRequest::exec_inst, a JSON array of
+// strings; see plan 024 for why params_to_str's array-recursion path
+// serialises it unambiguously.
 
 #include "exchange/cryptocom/auth.hpp"
 #include "exchange/cryptocom/types.hpp"
@@ -290,6 +291,10 @@ struct CryptoComCreateOrderResult {
     static CryptoComCreateOrderResult from_json(const json& j);
 };
 
+// Convenience constant for CryptoComCreateOrderRequest::exec_inst — avoids a raw
+// string literal at call sites, e.g. req.exec_inst = {EXEC_INST_POST_ONLY}.
+inline constexpr const char* EXEC_INST_POST_ONLY = "POST_ONLY";
+
 struct CryptoComCreateOrderRequest : TypedPrivateRequest<CryptoComCreateOrderResult> {
     std::string instrument_name;             // required
     Side        side{Side::Buy};             // required
@@ -299,6 +304,7 @@ struct CryptoComCreateOrderRequest : TypedPrivateRequest<CryptoComCreateOrderRes
     std::optional<std::string> notional;     // quote amount (MARKET BUY)
     std::optional<std::string> client_oid;   // max 36 chars
     std::optional<TimeInForce> time_in_force;
+    std::optional<std::vector<std::string>> exec_inst;  // e.g. {"POST_ONLY"}; omitted when unset
     HttpRequest build(const CryptoComCredentials& creds) const override;
 };
 

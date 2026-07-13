@@ -343,6 +343,7 @@ HttpRequest CryptoComCreateOrderRequest::build(const CryptoComCredentials& creds
     if (notional)      params["notional"]      = *notional;
     if (client_oid)    params["client_oid"]    = *client_oid;
     if (time_in_force) params["time_in_force"] = cryptocom_tif_to_string(*time_in_force);
+    if (exec_inst && !exec_inst->empty()) params["exec_inst"] = *exec_inst;
     return build_private(creds, id, "private/create-order", params);
 }
 

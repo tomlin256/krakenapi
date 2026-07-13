@@ -154,6 +154,24 @@ TEST(CryptoComRestRequests, CreateLimitOrder_ParamsAndSig) {
     EXPECT_EQ(p.at("time_in_force"),   "GOOD_TILL_CANCEL");
     EXPECT_EQ(p.at("client_oid"),      "abc-123");
     EXPECT_FALSE(p.contains("notional"));
+    EXPECT_FALSE(p.contains("exec_inst"));
+}
+
+TEST(CryptoComRestRequests, CreateLimitOrder_PostOnly_SetsExecInstArray) {
+    CryptoComCreateOrderRequest req;
+    req.instrument_name = "BTC_USD";
+    req.side            = Side::Sell;
+    req.type            = OrderType::Limit;
+    req.price           = "63000.00";
+    req.quantity        = "0.001";
+    req.time_in_force   = TimeInForce::GTC;
+    req.exec_inst       = {EXEC_INST_POST_ONLY};
+
+    auto r = req.build(CREDS);
+    expect_signed_envelope(r, "private/create-order");
+    auto body = json::parse(r.body);
+    const auto& p = body.at("params");
+    EXPECT_EQ(p.at("exec_inst"), json::array({"POST_ONLY"}));
 }
 
 TEST(CryptoComRestRequests, CreateMarketBuy_NotionalNoPrice) {
