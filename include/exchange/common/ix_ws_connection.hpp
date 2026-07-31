@@ -113,6 +113,38 @@ private:
 // Creates a fresh IxWsConnection, calls init() and connect().
 // Phase 1 (on_open) fires asynchronously; subscribe/execute calls made before
 // it fires are queued internally and flushed atomically on connect.
+//
+// ⚠ OWNERSHIP WARNING — prefer the conn-based factory for anything long-lived.
+//
+// This overload keeps the IxWsConnection alive solely through the returned
+// client: the local `conn` below dies at return, so ExchangeWsClient::conn_ is
+// the *only* owner of the connection, and therefore of its ix::WebSocket.
+//
+// That matters because ~ix::WebSocket calls stop(), which JOINS the socket's own
+// I/O thread — so destroying it *from* that thread is a self-join (EDEADLK,
+// "thread::join failed: Resource deadlock avoided"). And every inbound callback
+// registered by ExchangeWsClient::init takes a temporary strong reference to the
+// client on exactly that thread (`if (auto self = weak_self.lock())`). So if a
+// consumer releases its client while a callback is in flight, the I/O thread is
+// left holding the last reference, releases it at callback scope exit, and
+// destroys the socket on itself. The exception escapes the thread function and
+// terminates the process.
+//
+// Any consumer whose connection can drop or reconnect while it is running should
+// instead:
+//
+//   1. build the IxWsConnection itself and keep a shared_ptr to it,
+//   2. wrap it with make_exchange_ws_client(conn, identifier, error_handler),
+//   3. register callbacks, then call conn->connect(),
+//   4. on teardown: release the client, then call conn->disconnect() — which
+//      joins the I/O thread on the *caller's* thread — and only then drop conn.
+//
+// After disconnect() returns, no callback can still hold a reference, so the
+// socket is guaranteed to be destroyed on the caller's thread. (Downstream:
+// flywheel issue #83, where this killed long-running monitors.)
+//
+// This overload remains fine for short-lived, single-shot request/response use
+// where no callback can be in flight at teardown.
 
 inline std::shared_ptr<ExchangeWsClient>
 make_exchange_ws_client(const std::string&               url,
