@@ -30,4 +30,4 @@
 | 022 | [Rename Kraken `Credentials` → `KrakenCredentials`](plans/022-rename-kraken-credentials.md) | Done |
 | 023 | [Crypto.com `user.trade` WS channel](plans/023-cryptocom-user-trade-channel.md) | Stub |
 | 024 | [`exec_inst` (post-only) support on `CryptoComCreateOrderRequest`](plans/024-cryptocom-create-order-exec-inst.md) | Done |
-| 025 | [Kraken performance profiling — benchmark harness + hot-spot findings](plans/025-kraken-performance-profiling.md) | Proposed |
+| 025 | [Kraken performance profiling — benchmark harness + hot-spot findings](plans/025-kraken-performance-profiling.md) | Done |

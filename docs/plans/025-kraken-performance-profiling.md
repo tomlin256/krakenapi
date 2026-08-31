@@ -1,6 +1,6 @@
 # Plan 025 — Kraken performance profiling: benchmark harness + hot-spot findings
 
-**Status:** Proposed
+**Status:** Done
 **Depends on:** none (targets the Kraken adapter as of v0.5.3)
 
 ## Motivation
@@ -204,6 +204,95 @@ then a commit.
 - **Done:** all four benchmark source files build and run; findings section
   written with real numbers (and the sampling-profile outcome, success or
   skipped-with-reason); checkpoint green; plan status updated to **Done**.
+
+## Findings
+
+All numbers below are from `kraken_benchmarks` built `RelWithDebInfo`
+(`build-bench/`, `-DCRYPTOCOGS_BUILD_BENCHMARKS=ON`) on the machine this plan
+was executed on; re-run locally before trusting absolute numbers on different
+hardware, though the *relative* story is expected to hold anywhere.
+
+| Benchmark | Result | Verdict |
+|---|---|---|
+| `BM_TickPrice_From` | 2.1 ns | Negligible |
+| `BM_TickPrice_Str` | 18.1 ns | Negligible |
+| `BM_FrameDescriptor_Ticker` | 44 ns | Negligible |
+| `BM_KrakenSign` | 1.23 µs | Negligible vs. network |
+| `BM_AddOrderRequest_Build` | 2.82 µs | Negligible vs. network |
+| `BM_TickerFromJson` (DOM→struct only) | ~0.29 µs | Small |
+| `BM_ParseOpenOrdersResponse` (1/10/100 orders) | 4.0 / 35.2 / 369 µs | Negligible vs. network; scales ~N log N (map insert) as expected |
+| `BM_JsonParse_TickerRaw` (raw bytes→DOM) | **2.34 µs** | **Worth-optimizing bucket, if message rate warrants it — see below** |
+| `BM_BookFromJson` (10/50/100/500 levels) | 0.84 / 3.0 / 5.6 / 26.2 µs | Same parse-dominated story, scales ~linearly |
+| `BM_OnRawMessage_TickerPush` (full dispatch) | **2.78 µs** | 84% of this is `BM_JsonParse_TickerRaw` alone (see below) |
+| `BM_VectorPushBack_NoReserve` vs `_WithReserve` (100 / 500) | 199→64 ns / 495→300 ns | Real, modest — see reserve callout below |
+
+**Headline finding: `json::parse()` (raw bytes → DOM), not stack allocation or
+return-by-value, is the dominant cost on the WS hot path.** Of
+`BM_OnRawMessage_TickerPush`'s 2.78 µs total, `BM_JsonParse_TickerRaw` alone
+accounts for 2.34 µs (84%); `TickerMessage::from_json` (DOM→struct, already
+counted separately as `BM_TickerFromJson`) is 0.29 µs (10%); routing
+(`kraken_frame_descriptor`) is 44 ns (1.6%); the remaining ~100 ns (3.6%) is
+mutex/map-lookup/`std::function`-copy/callback overhead. This was
+corroborated independently by an 8253-sample macOS `sample` capture of a 25 s
+run of `BM_OnRawMessage_TickerPush` (`RelWithDebInfo`, PID confirmed via exact
+binary-name match, not the launching shell — the first attempt accidentally
+sampled `zsh` and was discarded): roughly 55-65% of self-time samples land
+directly inside nlohmann's lexer/parser/DOM-construction machinery
+(`lexer::scan_string`/`scan`/`scan_number`, `sax_parse_internal`,
+`json_value::destroy`, `std::__tree::__emplace_unique_key_args` +
+`__tree_balance_after_insert` — nlohmann's default object type is
+`std::map<std::string, json>`, so every `{...}` in the payload pays a
+red-black-tree insert), another ~15-20% is the C allocator (`_xzm_free`,
+`_xzm_xzone_malloc`, `malloc_type_malloc`) backing the many small per-node
+allocations a DOM parse creates and then immediately tears down each call,
+and `_platform_memcmp` alone was 11.6% of samples (key/literal comparisons in
+the lexer and tree lookups). Only 25 of 10253 top-of-stack samples (0.24%)
+landed inside `TickerMessage::from_json` itself, and no lock/mutex symbol
+exceeded 22 samples (0.2%) — the Self-review risk of sustained-load lock
+contention did not materialize.
+
+**Is 2.3 µs/message actually a problem?** At the full 2.78 µs/message
+dispatch cost, one core can process roughly 360,000 ticker messages/second
+before this becomes the bottleneck. A live Kraken WS ticker/book/trade feed
+for a realistic number of subscribed symbols is very unlikely to approach
+that rate — so on the evidence gathered here, this is real but not
+necessarily *worth* fixing without knowing Rob's actual production message
+rate. Flagged as a judgment call for Rob, not a recommendation either way.
+
+**Reserve-ceiling callout.** `.reserve()` on `BookData`'s bids/asks vectors is
+a real, cheap, low-risk win: at depth 100, reserving cuts one vector's build
+from 199 ns to 64 ns (saves ~135 ns/vector, ~270 ns for bids+asks combined) —
+about **4.8%** of `BM_BookFromJson/100`'s 5.6 µs total. At depth 500 it saves
+~390 ns combined against a 26.2 µs total — about **1.5%**, proportionally
+*smaller* because parse cost grows faster than the reserve win as depth
+increases. Verdict: worth doing (mechanical, near-zero risk, generalizes to
+every grepped site in Design decisions) but it is a minor contributor next to
+the parse cost above, not a fix for the headline finding.
+
+**REST-side confirms the Motivation's network-dominance hypothesis directly:**
+even parsing a 100-order `OpenOrdersResult` (369 µs) or signing+building an
+order (1.23 + 2.82 µs) is one to three orders of magnitude below typical
+network RTT (tens to hundreds of milliseconds) — none of it is worth touching
+on its own.
+
+**Candidate fixes, in priority order (implementation deferred — see Scope):**
+1. **`.reserve()` at every grepped `push_back`/`emplace_back` site** (Design
+   decisions list) — cheap, mechanical, no behavior change, ~1.5-5% win where
+   it applies. Lowest-risk, do-it-regardless-of-message-rate candidate.
+2. **Only if Rob confirms real subscribed message rates approach the
+   hundreds-of-thousands/sec region**: investigate reducing `json::parse`
+   cost on the highest-frequency channels specifically — e.g. a SAX-based
+   targeted extractor for `ticker`/`trade` pushes that skips full DOM
+   construction, or evaluating a faster parser for just that path. This is a
+   materially bigger, riskier change than #1 (touches the parse strategy, not
+   just a call site) and this plan does not recommend committing to it
+   without a confirmed production rate that makes it matter.
+3. **Not recommended:** anything targeting stack allocation or return-by-value
+   in the adapter's own code (`RestResponse<T>`, `HttpRequest`, `TickPrice`,
+   the signing intermediate strings) — every one of those benchmarked at
+   nanosecond-to-low-microsecond cost, confirming the Motivation's C++17
+   copy-elision assumption held. This was Rob's original worry; the evidence
+   says it isn't where the time goes.
 
 ## Self-review — risks, assumptions, follow-on
 
