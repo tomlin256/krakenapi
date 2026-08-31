@@ -150,7 +150,11 @@ then a commit.
   default `--benchmark_min_time`; full checkpoint (build + ctest) green.
 
 ### Step 3 — WS dispatch + reserve-ceiling benchmarks
-- `tests/benchmarks/bench_kraken_ws.cpp`: `BM_TickerFromJson`,
+- `tests/benchmarks/bench_kraken_ws.cpp`: `BM_JsonParse_TickerRaw` (raw-bytes-
+  to-DOM parse in isolation — added once `BM_OnRawMessage_TickerPush`'s total
+  turned out far larger than `BM_TickerFromJson`'s pre-parsed-DOM cost alone
+  could explain; quantifies the gap instead of leaving it as an inference),
+  `BM_TickerFromJson`,
   `BM_BookFromJson` (ranged book depth — 10/50/100/500 levels, same
   `Complexity(benchmark::oN)` treatment as Step 2's order parse, since
   `BookMessage::from_json`'s bids/asks loops are the deepest unreserved
@@ -160,12 +164,16 @@ then a commit.
   `tests/unit/mock_ws_connection.hpp` directly rather than duplicating it).
 - Also add an isolated **reserve-ceiling** pair, independent of JSON
   entirely: `BM_VectorPushBack_NoReserve` vs `BM_VectorPushBack_WithReserve`,
-  both filling a `std::vector<std::pair<double,double>>` (the `BookMessage`
-  bid/ask element shape) to N=100 — one via bare `push_back` in a loop
-  (mirrors every site found in the grep), the other pre-sized with
-  `.reserve(N)` first. This isolates exactly what `.reserve()` can save at a
-  realistic size, decoupled from parse cost, so Step 4 can judge whether it's
-  a meaningful fraction of `BM_BookFromJson`'s total or noise.
+  both filling a `std::vector<exchange::kraken::ws::BookEntry>` (the real
+  `BookMessage` bid/ask element type — `{double price, double qty}`, same
+  layout as `std::pair<double,double>`) at the same depths as
+  `BM_BookFromJson` (10/50/100/500, via matching `->Arg(...)` calls rather
+  than `RangeMultiplier` so the N values line up exactly) — one via bare
+  `push_back` in a loop (mirrors every site found in the grep), the other
+  pre-sized with `.reserve(n)` first. This isolates exactly what `.reserve()`
+  can save at each realistic size, decoupled from parse cost, so Step 4 can
+  judge whether it's a meaningful fraction of `BM_BookFromJson`'s total or
+  noise.
 - **Unit tests:** none new — same rationale as Step 2 (benchmarks exercise
   already-tested paths; the reserve-ceiling pair is a standalone
   `std::vector` measurement, not new library code).

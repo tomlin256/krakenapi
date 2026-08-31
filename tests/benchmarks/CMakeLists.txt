@@ -1,2 +1,2 @@
-add_executable(kraken_benchmarks bench_smoke.cpp bench_kraken_rest.cpp)
+add_executable(kraken_benchmarks bench_smoke.cpp bench_kraken_rest.cpp bench_kraken_ws.cpp)
 target_link_libraries(kraken_benchmarks kraken benchmark::benchmark_main)
