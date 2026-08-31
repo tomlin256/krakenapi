@@ -23,6 +23,7 @@ option(CRYPTOCOGS_BUILD_BINANCE   "Build the Binance exchange adapter"   ON)
 option(CRYPTOCOGS_BUILD_COINBASE  "Build the Coinbase exchange adapter"  ON)
 option(CRYPTOCOGS_BUILD_CRYPTOCOM "Build the Crypto.com exchange adapter" ON)
 option(CRYPTOCOGS_BUILD_TESTS "Build tests" ON)
+option(CRYPTOCOGS_BUILD_BENCHMARKS "Build Kraken performance benchmarks (plan 025)" OFF)
 
 # Dependency rules between the exchange/feature flags, checked at configure time.
 if(NOT CRYPTOCOGS_BUILD_KRAKEN AND NOT CRYPTOCOGS_BUILD_BINANCE AND
@@ -129,6 +130,31 @@ if(CRYPTOCOGS_BUILD_TESTS)
 
   enable_testing()
   add_subdirectory(tests)
+endif()
+
+#-------------------------------------------------------------------------------
+# Kraken performance benchmarks (plan 025) — off by default, independent of
+# CRYPTOCOGS_BUILD_TESTS: needs only the kraken lib and some shared test
+# fixture headers (included directly, not linked), not gtest/ixwebsocket.
+#-------------------------------------------------------------------------------
+
+if(CRYPTOCOGS_BUILD_BENCHMARKS)
+  if(NOT CRYPTOCOGS_BUILD_KRAKEN)
+    message(WARNING
+        "CRYPTOCOGS_BUILD_BENCHMARKS is ON but CRYPTOCOGS_BUILD_KRAKEN is OFF — "
+        "benchmarks need the kraken adapter; skipping.")
+  else()
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+      googlebenchmark
+      GIT_REPOSITORY https://github.com/google/benchmark.git
+      GIT_TAG        v1.9.5
+    )
+    FetchContent_MakeAvailable(googlebenchmark)
+
+    add_subdirectory(tests/benchmarks)
+  endif()
 endif()
 
 #-------------------------------------------------------------------------------
