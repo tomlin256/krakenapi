@@ -137,9 +137,13 @@ then a commit.
   fixture literals already used in `tests/unit/test_rest_responses.cpp` — Kraken's
   REST fixtures are inline `R"(...)"` strings there, not a shared header like
   the WS side's `ws_client_example_json.hpp`; `RangeMultiplier`/
-  `Complexity(benchmark::oN)` enabled so the report shows
-  whether cost scales linearly with N as expected of an unreserved
-  `push_back` loop, or worse). Add to `kraken_benchmarks`' sources.
+  `Complexity(benchmark::oN)` enabled to see how cost scales with N. Note:
+  `OpenOrdersResult::open` is a `std::map<std::string, OrderInfo>`
+  (`OpenOrdersResult::from_json`, `rest_api.cpp:305-311`), populated via
+  `r.open[k] = ...` — a tree insert, not a `push_back`, so this benchmark is
+  *not* a reserve candidate (`std::map` has no `reserve()`); it measures
+  JSON-parse-plus-O(N log N)-map-insertion cost on its own terms, distinct
+  from the vector-growth story below). Add to `kraken_benchmarks`' sources.
 - **Unit tests:** none new — benchmarks call already-tested `build()`/
   `parse_rest_response<T>` paths; no new library code is introduced.
 - **Done:** binary builds and runs; ns/op captured for all three benchmarks at
