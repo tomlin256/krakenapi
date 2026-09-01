@@ -61,6 +61,7 @@ CoinbaseProduct CoinbaseProduct::from_json(const json& j) {
 
 CoinbaseProductsResult CoinbaseProductsResult::from_json(const json& j) {
     CoinbaseProductsResult r;
+    r.products.reserve(j.size());
     for (const auto& row : j)
         r.products.push_back(CoinbaseProduct::from_json(row));
     return r;
@@ -96,12 +97,16 @@ CoinbaseBookLevel CoinbaseBookLevel::from_json(const json& row) {
 CoinbaseOrderBook CoinbaseOrderBook::from_json(const json& j) {
     CoinbaseOrderBook b;
     b.sequence = j.value("sequence", static_cast<int64_t>(0));
-    if (j.contains("bids"))
+    if (j.contains("bids")) {
+        b.bids.reserve(j.at("bids").size());
         for (const auto& row : j.at("bids"))
             b.bids.push_back(CoinbaseBookLevel::from_json(row));
-    if (j.contains("asks"))
+    }
+    if (j.contains("asks")) {
+        b.asks.reserve(j.at("asks").size());
         for (const auto& row : j.at("asks"))
             b.asks.push_back(CoinbaseBookLevel::from_json(row));
+    }
     return b;
 }
 
@@ -148,6 +153,7 @@ CoinbaseTrade CoinbaseTrade::from_json(const json& j) {
 
 CoinbaseTradesResult CoinbaseTradesResult::from_json(const json& j) {
     CoinbaseTradesResult r;
+    r.trades.reserve(j.size());
     for (const auto& row : j)
         r.trades.push_back(CoinbaseTrade::from_json(row));
     return r;
@@ -176,6 +182,7 @@ CoinbaseCandle CoinbaseCandle::from_json(const json& row) {
 
 CoinbaseCandlesResult CoinbaseCandlesResult::from_json(const json& j) {
     CoinbaseCandlesResult r;
+    r.candles.reserve(j.size());
     for (const auto& row : j)
         r.candles.push_back(CoinbaseCandle::from_json(row));
     return r;
@@ -231,6 +238,7 @@ CoinbaseAccount CoinbaseAccount::from_json(const json& j) {
 
 CoinbaseAccountsResult CoinbaseAccountsResult::from_json(const json& j) {
     CoinbaseAccountsResult r;
+    r.accounts.reserve(j.size());
     for (const auto& row : j)
         r.accounts.push_back(CoinbaseAccount::from_json(row));
     return r;
@@ -276,6 +284,7 @@ CoinbaseOrder CoinbaseOrder::from_json(const json& j) {
 
 CoinbaseOrdersResult CoinbaseOrdersResult::from_json(const json& j) {
     CoinbaseOrdersResult r;
+    r.orders.reserve(j.size());
     for (const auto& row : j)
         r.orders.push_back(CoinbaseOrder::from_json(row));
     return r;
@@ -330,6 +339,7 @@ CoinbaseCancelOrderResult CoinbaseCancelOrderResult::from_json(const json& j) {
 
 CoinbaseCancelAllResult CoinbaseCancelAllResult::from_json(const json& j) {
     CoinbaseCancelAllResult r;
+    r.order_ids.reserve(j.size());
     for (const auto& el : j)
         r.order_ids.push_back(el.get<std::string>());
     return r;
@@ -370,6 +380,7 @@ CoinbaseFill CoinbaseFill::from_json(const json& j) {
 
 CoinbaseFillsResult CoinbaseFillsResult::from_json(const json& j) {
     CoinbaseFillsResult r;
+    r.fills.reserve(j.size());
     for (const auto& row : j)
         r.fills.push_back(CoinbaseFill::from_json(row));
     return r;

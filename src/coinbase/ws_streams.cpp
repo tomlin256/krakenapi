@@ -76,14 +76,18 @@ CoinbaseMatchEvent CoinbaseMatchEvent::from_json(const json& j) {
 CoinbaseL2Snapshot CoinbaseL2Snapshot::from_json(const json& j) {
     CoinbaseL2Snapshot s;
     s.product_id = j.value("product_id", "");
-    if (j.contains("bids"))
+    if (j.contains("bids")) {
+        s.bids.reserve(j.at("bids").size());
         for (const auto& row : j.at("bids"))
             s.bids.push_back({std::stod(row.at(0).get<std::string>()),
                               std::stod(row.at(1).get<std::string>())});
-    if (j.contains("asks"))
+    }
+    if (j.contains("asks")) {
+        s.asks.reserve(j.at("asks").size());
         for (const auto& row : j.at("asks"))
             s.asks.push_back({std::stod(row.at(0).get<std::string>()),
                               std::stod(row.at(1).get<std::string>())});
+    }
     return s;
 }
 
@@ -91,11 +95,13 @@ CoinbaseL2Update CoinbaseL2Update::from_json(const json& j) {
     CoinbaseL2Update u;
     u.product_id = j.value("product_id", "");
     u.time       = j.value("time", "");
-    if (j.contains("changes"))
+    if (j.contains("changes")) {
+        u.changes.reserve(j.at("changes").size());
         for (const auto& row : j.at("changes"))
             u.changes.push_back({row.at(0).get<std::string>(),
                                  std::stod(row.at(1).get<std::string>()),
                                  std::stod(row.at(2).get<std::string>())});
+    }
     return u;
 }
 
