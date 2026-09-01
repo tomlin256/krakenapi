@@ -12,3 +12,8 @@ if(CRYPTOCOGS_BUILD_COINBASE)
   add_executable(coinbase_benchmarks bench_coinbase_ws.cpp)
   target_link_libraries(coinbase_benchmarks coinbase benchmark::benchmark_main)
 endif()
+
+if(CRYPTOCOGS_BUILD_CRYPTOCOM)
+  add_executable(cryptocom_benchmarks bench_cryptocom_ws.cpp)
+  target_link_libraries(cryptocom_benchmarks cryptocom benchmark::benchmark_main)
+endif()
