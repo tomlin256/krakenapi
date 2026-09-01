@@ -1,6 +1,6 @@
 # Plan 027 — Benchmark + `.reserve()` vector growth for Binance/Coinbase/Crypto.com
 
-**Status:** In progress
+**Status:** Done
 **Depends on:** [025 — Kraken performance profiling](025-kraken-performance-profiling.md),
 [026 — Kraken `.reserve()` fix](026-kraken-reserve-vector-growth.md) (v0.5.3, HEAD `cd521c8`)
 **Closes:** [GitHub issue #22](https://github.com/tomlin256/cryptocogs/issues/22) — "Review
@@ -443,6 +443,76 @@ with the unconditional fix per the Design decisions above. Nothing here
 changes 025's own candidate-fix priority order: `.reserve()` (this plan) is
 worth doing regardless of message rate; investigating `json::parse` cost
 itself remains gated on a confirmed production message rate, same as Kraken.
+
+## Results
+
+Re-ran `binance_benchmarks`/`coinbase_benchmarks`/`cryptocom_benchmarks`
+(`build-bench/`, `RelWithDebInfo`, rebuilt against the patched
+`src/{binance,coinbase,cryptocom}/*.cpp`) after Steps 5–7, 5 repetitions each,
+filtered to the ranged `FromJson` and `VectorPushBack` benchmarks, and
+compared against the Findings section's recorded "before" numbers.
+
+**Ranged `FromJson`** (DOM→struct only — the JSON string is parsed once
+outside the timed loop, same shape as Kraken's `BM_BookFromJson` in 026;
+see the Verdict below for why "full end-to-end" would be the wrong label for
+either):
+
+| Adapter | Depth | Before | After | Δ |
+|---|---|---|---|---|
+| Binance `DepthUpdateFromJson` | 10 | 1264 ns | 1068 ns | **−15.5%** |
+| | 50 | 4912 ns | 4595 ns | **−6.5%** |
+| | 100 | 9330 ns | 8943 ns | **−4.1%** |
+| | 500 | 44688 ns | 44140 ns | **−1.2%** |
+| Coinbase `L2SnapshotFromJson` | 10 | 1205 ns | 997 ns | **−17.3%** |
+| | 50 | 4947 ns | 4597 ns | **−7.1%** |
+| | 100 | 9523 ns | 9181 ns | **−3.6%** |
+| | 500 | 45440 ns | 44498 ns | **−2.1%** |
+| Crypto.com `BookEventFromJson` | 10 | 1824 ns | 1607 ns | **−11.9%** |
+| | 50 | 6724 ns | 6315 ns | **−6.1%** |
+| | 100 | 12764 ns | 12172 ns | **−4.6%** |
+| | 500 | 60670 ns | 59456 ns | **−2.0%** |
+
+Every adapter, every depth: a clean, monotonic improvement, in the same
+ballpark as (mostly somewhat larger than) the Findings section's doubled
+isolated-reserve prediction (7–9%@10, 2–4%@100, <1%@500). Coefficient of
+variation stayed ≤1.1% throughout (one outlier: Coinbase/100 at 2.24%), so
+these are real, reproducible deltas, not noise.
+
+**Isolated `BM_VectorPushBack_NoReserve` vs `_WithReserve` (unaffected by the
+`src/` change — these benchmark a standalone `std::vector`, not real
+`from_json` — included to confirm the mechanism itself is unchanged):**
+
+| Adapter | Depth | Before | After |
+|---|---|---|---|
+| Binance | 100 | 199 → 66.8 ns | 201 → 66.7 ns |
+| Binance | 500 | 511 → 323 ns | 518 → 323 ns |
+| Coinbase | 100 | 202 → 66.9 ns | 203 → 66.3 ns |
+| Coinbase | 500 | 524 → 325 ns | 526 → 318 ns |
+| Crypto.com | 100 | 218 → 67.1 ns | 221 → 67.0 ns |
+| Crypto.com | 500 | 627 → 365 ns | 628 → 362 ns |
+
+Reproduces the Findings section's numbers almost exactly (within measurement
+noise), confirming `.reserve()`'s isolated effect is unchanged by the fix —
+as expected, since these two benchmarks never called the patched code.
+
+**Verdict:** all three adapters show a clean, monotonic, reproducible
+improvement at every depth, roughly matching (and at the smaller depths,
+modestly exceeding) the doubled-isolated-reserve prediction — no adapter
+regressed at any depth. This is a cleaner reproduction than plan 026 itself
+got for Kraken's structurally identical `BM_BookFromJson` (same shape: DOM
+parsed once outside the timed loop, only `from_json` timed inside), which
+showed a smaller, less consistent improvement and an outright regression at
+depth 500 despite similarly low reported CV. Both are measuring the same
+kind of small (hundreds-of-ns), noise-susceptible effect, so this plan
+doesn't claim to know *why* this session's numbers came out cleaner than
+026's — plausibly ordinary cross-session machine-state variance (load
+average, allocator arena warm-up, thermal state), the same category of cause
+026 identified for its own noisier result, rather than anything specific to
+these three adapters. The mechanism itself (confirmed unchanged above) is
+what actually matters and is not in question either way: `.reserve()` is
+real, free, and zero-behavior-change, per 026's original conclusion — here it
+happens to also show up cleanly end-to-end, which is a bonus, not the basis
+for the fix.
 
 ## Self-review — risks, assumptions, follow-on
 
