@@ -140,6 +140,7 @@ CancelOrderResponse CancelOrderResponse::from_json(const json& j) {
         const auto& res = j["result"];
         if (res.contains("orders_cancelled")) {
             std::vector<CancelOrderResult> v;
+            v.reserve(res["orders_cancelled"].size());
             for (const auto& item : res["orders_cancelled"]) {
                 CancelOrderResult cr;
                 cr.order_id = item.at("order_id").get<std::string>();
@@ -222,6 +223,7 @@ BatchAddResponse BatchAddResponse::from_json(const json& j) {
         const auto& res = j["result"];
         if (res.contains("orders")) {
             std::vector<BatchAddResult> v;
+            v.reserve(res["orders"].size());
             for (const auto& item : res["orders"]) {
                 BatchAddResult br;
                 br.success  = item.value("success", false);
@@ -379,6 +381,7 @@ TickerMessage TickerMessage::from_json(const json& j) {
     m.channel = j.value("channel", "");
     m.type    = j.value("type", "");
     if (j.contains("data")) {
+        m.data.reserve(j["data"].size());
         for (const auto& item : j["data"])
             m.data.push_back(TickerData::from_json(item));
     }
@@ -391,10 +394,12 @@ BookData BookData::from_json(const json& j) {
     BookData b;
     b.symbol = j.value("symbol", "");
     if (j.contains("bids")) {
+        b.bids.reserve(j["bids"].size());
         for (const auto& item : j["bids"])
             b.bids.push_back({item["price"].get<double>(), item["qty"].get<double>()});
     }
     if (j.contains("asks")) {
+        b.asks.reserve(j["asks"].size());
         for (const auto& item : j["asks"])
             b.asks.push_back({item["price"].get<double>(), item["qty"].get<double>()});
     }
@@ -407,6 +412,7 @@ BookMessage BookMessage::from_json(const json& j) {
     m.channel = j.value("channel", "");
     m.type    = j.value("type", "");
     if (j.contains("data")) {
+        m.data.reserve(j["data"].size());
         for (const auto& item : j["data"])
             m.data.push_back(BookData::from_json(item));
     }
@@ -432,6 +438,7 @@ TradeMessage TradeMessage::from_json(const json& j) {
     m.channel = j.value("channel", "");
     m.type    = j.value("type", "");
     if (j.contains("data")) {
+        m.data.reserve(j["data"].size());
         for (const auto& item : j["data"])
             m.data.push_back(TradeData::from_json(item));
     }
@@ -461,6 +468,7 @@ OHLCMessage OHLCMessage::from_json(const json& j) {
     m.channel = j.value("channel", "");
     m.type    = j.value("type", "");
     if (j.contains("data")) {
+        m.data.reserve(j["data"].size());
         for (const auto& item : j["data"])
             m.data.push_back(OHLCData::from_json(item));
     }
@@ -506,12 +514,16 @@ InstrumentMessage InstrumentMessage::from_json(const json& j) {
     m.type    = j.value("type", "");
     if (j.contains("data") && j["data"].is_object()) {
         const auto& d = j["data"];
-        if (d.contains("assets") && d["assets"].is_array())
+        if (d.contains("assets") && d["assets"].is_array()) {
+            m.assets.reserve(d["assets"].size());
             for (const auto& item : d["assets"])
                 m.assets.push_back(AssetInfo::from_json(item));
-        if (d.contains("pairs") && d["pairs"].is_array())
+        }
+        if (d.contains("pairs") && d["pairs"].is_array()) {
+            m.pairs.reserve(d["pairs"].size());
             for (const auto& item : d["pairs"])
                 m.pairs.push_back(InstrumentInfo::from_json(item));
+        }
     }
     return m;
 }
@@ -565,6 +577,7 @@ ExecutionsMessage ExecutionsMessage::from_json(const json& j) {
     m.channel = j.value("channel", "");
     m.type    = j.value("type", "");
     if (j.contains("data")) {
+        m.data.reserve(j["data"].size());
         for (const auto& item : j["data"])
             m.data.push_back(ExecutionData::from_json(item));
     }
@@ -586,6 +599,7 @@ BalancesMessage BalancesMessage::from_json(const json& j) {
     m.channel = j.value("channel", "");
     m.type    = j.value("type", "");
     if (j.contains("data")) {
+        m.data.reserve(j["data"].size());
         for (const auto& item : j["data"])
             m.data.push_back(BalanceData::from_json(item));
     }

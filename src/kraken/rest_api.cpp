@@ -178,6 +178,7 @@ OHLCResult OHLCResult::from_json(const json& j) {
     for (const auto& [k, v] : j.items()) {
         if (k == "last") { r.last = v.get<int64_t>(); continue; }
         r.pair = k;
+        r.candles.reserve(v.size());
         for (const auto& c : v) {
             OHLCCandle candle;
             candle.time   = c[0].get<int64_t>();
@@ -209,6 +210,7 @@ OrderBookResult OrderBookResult::from_json(const json& j) {
         r.pair = k;
         auto parse = [](const json& arr) {
             std::vector<RestBookEntry> entries;
+            entries.reserve(arr.size());
             for (const auto& e : arr)
                 entries.push_back({std::stod(e[0].get<std::string>()),
                                    std::stod(e[1].get<std::string>()),
@@ -236,6 +238,7 @@ RecentTradesResult RecentTradesResult::from_json(const json& j) {
     for (const auto& [k, v] : j.items()) {
         if (k == "last") { r.last = v.get<std::string>(); continue; }
         r.pair = k;
+        r.trades.reserve(v.size());
         for (const auto& t : v) {
             PublicTrade pt;
             pt.price      = std::stod(t[0].get<std::string>());
@@ -543,6 +546,7 @@ HttpRequest AddOrderBatchRequest::build(const KrakenCredentials& creds) const {
 AddOrderBatchResult AddOrderBatchResult::from_json(const json& j) {
     AddOrderBatchResult r;
     if (j.contains("orders")) {
+        r.orders.reserve(j["orders"].size());
         for (const auto& o : j["orders"]) {
             BatchOrderResult br;
             if (o.contains("descr")) br.descr_order = o["descr"].value("order", "");
@@ -660,6 +664,7 @@ DepositMethod DepositMethod::from_json(const json& j) {
 
 DepositMethodsResult DepositMethodsResult::from_json(const json& j) {
     DepositMethodsResult r;
+    r.methods.reserve(j.size());
     for (const auto& m : j) r.methods.push_back(DepositMethod::from_json(m));
     return r;
 }
@@ -676,6 +681,7 @@ DepositAddress DepositAddress::from_json(const json& j) {
 
 DepositAddressesResult DepositAddressesResult::from_json(const json& j) {
     DepositAddressesResult r;
+    r.addresses.reserve(j.size());
     for (const auto& a : j) r.addresses.push_back(DepositAddress::from_json(a));
     return r;
 }
