@@ -32,4 +32,4 @@
 | 024 | [`exec_inst` (post-only) support on `CryptoComCreateOrderRequest`](plans/024-cryptocom-create-order-exec-inst.md) | Done |
 | 025 | [Kraken performance profiling — benchmark harness + hot-spot findings](plans/025-kraken-performance-profiling.md) | Done |
 | 026 | [Pre-size `std::vector` growth in Kraken `from_json` (`.reserve()`)](plans/026-kraken-reserve-vector-growth.md) | Done |
-| 027 | [Benchmark + `.reserve()` vector growth for Binance/Coinbase/Crypto.com](plans/027-remaining-adapters-reserve-vector-growth.md) | Draft |
+| 027 | [Benchmark + `.reserve()` vector growth for Binance/Coinbase/Crypto.com](plans/027-remaining-adapters-reserve-vector-growth.md) | In progress |

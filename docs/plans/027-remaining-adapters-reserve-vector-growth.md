@@ -1,6 +1,6 @@
 # Plan 027 — Benchmark + `.reserve()` vector growth for Binance/Coinbase/Crypto.com
 
-**Status:** Draft
+**Status:** In progress
 **Depends on:** [025 — Kraken performance profiling](025-kraken-performance-profiling.md),
 [026 — Kraken `.reserve()` fix](026-kraken-reserve-vector-growth.md) (v0.5.3, HEAD `cd521c8`)
 **Closes:** [GitHub issue #22](https://github.com/tomlin256/cryptocogs/issues/22) — "Review
@@ -355,6 +355,94 @@ build+run a `build-bench/` tree (`-DCRYPTOCOGS_BUILD_BENCHMARKS=ON`, same
 - **Done:** Results section written with real re-measured numbers for all
   three adapters; `docs/plans.md` updated; issue #22 closed; final checkpoint
   green.
+
+## Findings
+
+All numbers below are mean-of-5-repetitions from `binance_benchmarks`/
+`coinbase_benchmarks`/`cryptocom_benchmarks` built `RelWithDebInfo`
+(`build-bench/`, `-DCRYPTOCOGS_BUILD_BENCHMARKS=ON`) on the machine this plan
+was executed on, load average 2.0–2.9 throughout; coefficient of variation
+was ≤1.6% for every benchmark except the sub-20ns `WithReserve/10` entries
+(3.4–4.6% CV — expected at that absolute scale, where measurement granularity
+itself is a larger fraction of the result). Re-run locally before trusting
+absolute numbers on different hardware, though the *relative* story (per
+plan 025) is expected to hold anywhere.
+
+**Per-adapter dispatch breakdown** — mirrors plan 025's Kraken table
+(`BM_JsonParse_*Raw` / `BM_*FromJson` / `BM_OnRawMessage_*` end-to-end):
+
+| | Binance (aggTrade) | Coinbase (ticker) | Crypto.com (ticker) |
+|---|---|---|---|
+| `JsonParse` (raw bytes→DOM) | 1126 ns | 2742 ns | 2878 ns |
+| `FromJson` (DOM→struct) | 211 ns | 318 ns | 1057 ns |
+| `OnRawMessage` (full dispatch) | 1840 ns | 3105 ns | 4147 ns |
+| Parse — % of total | **61.2%** | **88.3%** | **69.4%** |
+| FromJson — % of total | 11.5% | 10.2% | 25.5% |
+| Dispatch/other — % of total | 27.3% | 1.4% | 5.1% |
+
+**Verdict: "parse dominates" holds for all three as the single largest cost
+component, but the margin varies — it does not uniformly reproduce Kraken's
+84%.** Coinbase (88.3%) reproduces Kraken's profile almost exactly (small
+1.4% dispatch remainder, matching Kraken's own ~5.2% frame-descriptor+mutex
+overhead in the same ballpark). Crypto.com (69.4%) and Binance (61.2%) still
+have parse as the largest single line item — larger than `FromJson` and
+dispatch combined in both cases — but with real, adapter-specific secondary
+costs:
+- **Crypto.com's `FromJson` (1057 ns) is ~3–5× Binance's/Coinbase's** (211/318
+  ns) despite a comparably small single-object payload. Plausible cause (not
+  investigated further — out of scope, see Scope): `CryptoComTickerEvent::
+  from_json`'s helper indirection (`result_obj`/`str_field`/`num_int`, each
+  re-walking `.contains()`+`.at()`) plus more fields in the terse-keyed ticker
+  payload (13 vs Binance's ~9). Flagged as an observation, not a
+  recommendation.
+- **Binance's dispatch/other share (27.3%) is ~5–19× the other two's** (1.4%
+  Coinbase, 5.1% Crypto.com). Plausible cause: the combined-stream envelope
+  unwrap (`{"stream":...,"data":...}`) plus routing by stream-name string
+  rather than a short "channel" string. Also flagged as an observation only.
+
+**Ranged `FromJson` (10/50/100/500 levels), ns** — same `Complexity(oN)`
+linear-scaling shape as Kraken's `BM_BookFromJson`:
+
+| Depth | Binance `DepthUpdateFromJson` | Coinbase `L2SnapshotFromJson` | Crypto.com `BookEventFromJson` |
+|---|---|---|---|
+| 10 | 1264 | 1205 | 1824 |
+| 50 | 4912 | 4947 | 6724 |
+| 100 | 9330 | 9523 | 12764 |
+| 500 | 44688 | 45440 | 60670 |
+
+**Reserve-ceiling callout** — isolated `BM_VectorPushBack_NoReserve` vs.
+`_WithReserve` (one vector; doubled below for the bids+asks pair the ranged
+benchmark actually parses, same treatment plan 025 used for Kraken's
+`BookData`):
+
+| Adapter | Depth | No-reserve | With-reserve | Save (bids+asks) | % of ranged `FromJson` total |
+|---|---|---|---|---|---|
+| Binance | 10 | 72.4 ns | 17.6 ns | 109.6 ns | 8.7% |
+| Binance | 50 | 144 ns | 43.5 ns | 201.0 ns | 4.1% |
+| Binance | 100 | 199 ns | 66.8 ns | 264.4 ns | 2.8% |
+| Binance | 500 | 511 ns | 323 ns | 376.0 ns | 0.84% |
+| Coinbase | 10 | 73.4 ns | 17.0 ns | 112.8 ns | 9.4% |
+| Coinbase | 50 | 147 ns | 43.8 ns | 206.4 ns | 4.2% |
+| Coinbase | 100 | 202 ns | 66.9 ns | 270.2 ns | 2.8% |
+| Coinbase | 500 | 524 ns | 325 ns | 398.0 ns | 0.88% |
+| Crypto.com | 10 | 82.1 ns | 16.7 ns | 130.8 ns | 7.2% |
+| Crypto.com | 50 | 159 ns | 38.7 ns | 240.6 ns | 3.6% |
+| Crypto.com | 100 | 218 ns | 67.1 ns | 301.8 ns | 2.4% |
+| Crypto.com | 500 | 627 ns | 365 ns | 524.0 ns | 0.86% |
+
+This reproduces Kraken's shape almost exactly (026: 4.8%@100, 1.5%@500) —
+all three land in the same 2–3%@100 / <1%@500 range, proportionally smaller
+at higher depth because parse cost grows faster than the reserve win. **This
+confirms 026's generic conclusion holds across adapters: real, cheap,
+worth doing, and definitionally not the fix for the headline parse cost.**
+
+**Conclusion for Steps 5–7:** all three adapters confirm issue #22's premise
+closely enough — parse is the largest cost component everywhere, and the
+`.reserve()` win is real and in the same 1–9% range Kraken showed — to proceed
+with the unconditional fix per the Design decisions above. Nothing here
+changes 025's own candidate-fix priority order: `.reserve()` (this plan) is
+worth doing regardless of message rate; investigating `json::parse` cost
+itself remains gated on a confirmed production message rate, same as Kraken.
 
 ## Self-review — risks, assumptions, follow-on
 
