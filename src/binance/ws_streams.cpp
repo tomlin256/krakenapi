@@ -157,12 +157,16 @@ BinanceDepthUpdateEvent BinanceDepthUpdateEvent::from_json(const json& frame) {
     e.symbol          = j.value("s", std::string{});
     e.first_update_id = j.value("U", int64_t{0});
     e.final_update_id = j.value("u", int64_t{0});
-    if (j.contains("b"))
+    if (j.contains("b")) {
+        e.bids.reserve(j["b"].size());
         for (const auto& row : j["b"])
             e.bids.push_back(BinanceBookLevel::from_json(row));
-    if (j.contains("a"))
+    }
+    if (j.contains("a")) {
+        e.asks.reserve(j["a"].size());
         for (const auto& row : j["a"])
             e.asks.push_back(BinanceBookLevel::from_json(row));
+    }
     return e;
 }
 
@@ -170,12 +174,16 @@ BinancePartialDepth BinancePartialDepth::from_json(const json& frame) {
     const json& j = detail::stream_payload(frame);
     BinancePartialDepth d;
     d.last_update_id = j.value("lastUpdateId", int64_t{0});
-    if (j.contains("bids"))
+    if (j.contains("bids")) {
+        d.bids.reserve(j["bids"].size());
         for (const auto& row : j["bids"])
             d.bids.push_back(BinanceBookLevel::from_json(row));
-    if (j.contains("asks"))
+    }
+    if (j.contains("asks")) {
+        d.asks.reserve(j["asks"].size());
         for (const auto& row : j["asks"])
             d.asks.push_back(BinanceBookLevel::from_json(row));
+    }
     return d;
 }
 

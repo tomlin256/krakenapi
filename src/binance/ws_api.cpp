@@ -47,7 +47,9 @@ void parse_ws_api_envelope(BinanceWsApiResponse& r, const json& j) {
     }
     r.success = !has_error && r.status < 400;
 
-    for (const auto& el : j.value("rateLimits", json::array()))
+    const json rate_limits = j.value("rateLimits", json::array());
+    r.rate_limits.reserve(rate_limits.size());
+    for (const auto& el : rate_limits)
         r.rate_limits.push_back(BinanceWsRateLimit::from_json(el));
 }
 

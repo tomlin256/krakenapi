@@ -71,6 +71,7 @@ BinanceTickerPriceEntry BinanceTickerPriceEntry::from_json(const json& j) {
 BinanceTickerPrice BinanceTickerPrice::from_json(const json& j) {
     BinanceTickerPrice t;
     if (j.is_array()) {
+        t.entries.reserve(j.size());
         for (const auto& el : j)
             t.entries.push_back(BinanceTickerPriceEntry::from_json(el));
     } else {
@@ -96,12 +97,16 @@ HttpRequest BinanceTickerPriceRequest::build() const {
 BinanceOrderBook BinanceOrderBook::from_json(const json& j) {
     BinanceOrderBook b;
     b.last_update_id = j.value("lastUpdateId", int64_t{0});
-    if (j.contains("bids"))
+    if (j.contains("bids")) {
+        b.bids.reserve(j["bids"].size());
         for (const auto& row : j["bids"])
             b.bids.push_back(BinanceBookLevel::from_json(row));
-    if (j.contains("asks"))
+    }
+    if (j.contains("asks")) {
+        b.asks.reserve(j["asks"].size());
         for (const auto& row : j["asks"])
             b.asks.push_back(BinanceBookLevel::from_json(row));
+    }
     return b;
 }
 
@@ -130,6 +135,7 @@ BinanceTrade BinanceTrade::from_json(const json& j) {
 
 BinanceTradesResult BinanceTradesResult::from_json(const json& j) {
     BinanceTradesResult r;
+    r.trades.reserve(j.size());
     for (const auto& el : j)
         r.trades.push_back(BinanceTrade::from_json(el));
     return r;
@@ -164,6 +170,7 @@ BinanceKline BinanceKline::from_json(const json& row) {
 
 BinanceKlinesResult BinanceKlinesResult::from_json(const json& j) {
     BinanceKlinesResult r;
+    r.klines.reserve(j.size());
     for (const auto& row : j)
         r.klines.push_back(BinanceKline::from_json(row));
     return r;
@@ -191,9 +198,11 @@ BinanceSymbolInfo BinanceSymbolInfo::from_json(const json& j) {
     s.quote_asset               = j.value("quoteAsset", "");
     s.quote_precision           = j.value("quotePrecision", 0);
     s.quote_asset_precision     = j.value("quoteAssetPrecision", 0);
-    if (j.contains("orderTypes"))
+    if (j.contains("orderTypes")) {
+        s.order_types.reserve(j["orderTypes"].size());
         for (const auto& ot : j["orderTypes"])
             s.order_types.push_back(ot.get<std::string>());
+    }
     s.iceberg_allowed           = j.value("icebergAllowed", false);
     s.oco_allowed               = j.value("ocoAllowed", false);
     s.is_spot_trading_allowed   = j.value("isSpotTradingAllowed", false);
@@ -205,9 +214,11 @@ BinanceExchangeInfo BinanceExchangeInfo::from_json(const json& j) {
     BinanceExchangeInfo e;
     e.timezone    = j.value("timezone", "");
     e.server_time = j.value("serverTime", int64_t{0});
-    if (j.contains("symbols"))
+    if (j.contains("symbols")) {
+        e.symbols.reserve(j["symbols"].size());
         for (const auto& s : j["symbols"])
             e.symbols.push_back(BinanceSymbolInfo::from_json(s));
+    }
     return e;
 }
 
@@ -249,6 +260,7 @@ BinanceTicker24hrEntry BinanceTicker24hrEntry::from_json(const json& j) {
 BinanceTicker24hr BinanceTicker24hr::from_json(const json& j) {
     BinanceTicker24hr t;
     if (j.is_array()) {
+        t.entries.reserve(j.size());
         for (const auto& el : j)
             t.entries.push_back(BinanceTicker24hrEntry::from_json(el));
     } else {
@@ -304,9 +316,13 @@ BinanceAccount BinanceAccount::from_json(const json& j) {
     a.prevent_sor                   = j.value("preventSor", false);
     a.update_time                   = j.value("updateTime", int64_t{0});
     a.account_type                  = j.value("accountType", "");
-    for (const auto& el : j.value("balances", json::array()))
+    const json balances = j.value("balances", json::array());
+    a.balances.reserve(balances.size());
+    for (const auto& el : balances)
         a.balances.push_back(BinanceBalance::from_json(el));
-    for (const auto& el : j.value("permissions", json::array()))
+    const json permissions = j.value("permissions", json::array());
+    a.permissions.reserve(permissions.size());
+    for (const auto& el : permissions)
         a.permissions.push_back(el.get<std::string>());
     a.uid = j.value("uid", int64_t{0});
     return a;
@@ -348,6 +364,7 @@ BinanceOrderInfo BinanceOrderInfo::from_json(const json& j) {
 
 BinanceOpenOrdersResult BinanceOpenOrdersResult::from_json(const json& j) {
     BinanceOpenOrdersResult r;
+    r.orders.reserve(j.size());
     for (const auto& el : j)
         r.orders.push_back(BinanceOrderInfo::from_json(el));
     return r;
@@ -395,6 +412,7 @@ BinanceMyTrade BinanceMyTrade::from_json(const json& j) {
 
 BinanceMyTradesResult BinanceMyTradesResult::from_json(const json& j) {
     BinanceMyTradesResult r;
+    r.trades.reserve(j.size());
     for (const auto& el : j)
         r.trades.push_back(BinanceMyTrade::from_json(el));
     return r;
@@ -454,7 +472,9 @@ BinanceNewOrderResponse BinanceNewOrderResponse::from_json(const json& j) {
         r.working_time = j.at("workingTime").get<int64_t>();
     if (j.contains("selfTradePreventionMode"))
         r.self_trade_prevention_mode = j.at("selfTradePreventionMode").get<std::string>();
-    for (const auto& el : j.value("fills", json::array()))
+    const json fills = j.value("fills", json::array());
+    r.fills.reserve(fills.size());
+    for (const auto& el : fills)
         r.fills.push_back(BinanceFill::from_json(el));
     return r;
 }
@@ -505,6 +525,7 @@ BinanceCancelOrderResponse BinanceCancelOrderResponse::from_json(const json& j) 
 
 BinanceCancelAllResponse BinanceCancelAllResponse::from_json(const json& j) {
     BinanceCancelAllResponse r;
+    r.orders.reserve(j.size());
     for (const auto& el : j)
         r.orders.push_back(BinanceCancelOrderResponse::from_json(el));
     return r;
