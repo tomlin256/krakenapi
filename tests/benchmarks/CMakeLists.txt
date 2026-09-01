@@ -7,3 +7,8 @@ if(CRYPTOCOGS_BUILD_BINANCE)
   add_executable(binance_benchmarks bench_binance_ws.cpp)
   target_link_libraries(binance_benchmarks binance benchmark::benchmark_main)
 endif()
+
+if(CRYPTOCOGS_BUILD_COINBASE)
+  add_executable(coinbase_benchmarks bench_coinbase_ws.cpp)
+  target_link_libraries(coinbase_benchmarks coinbase benchmark::benchmark_main)
+endif()
