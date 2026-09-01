@@ -120,6 +120,7 @@ CryptoComTradeEvent CryptoComTradeEvent::from_json(const json& frame) {
     const json& r = result_obj(frame);
     e.subscription    = str_field(r, "subscription");
     e.instrument_name = str_field(r, "instrument_name");
+    e.trades.reserve(result_data(frame).size());
     for (const auto& row : result_data(frame))
         e.trades.push_back(CryptoComWsTrade::from_json(row));
     return e;
@@ -147,10 +148,14 @@ CryptoComBookEvent CryptoComBookEvent::from_json(const json& frame) {
         const json& d = data.front();
         e.t = num_i64(d, "t");
         e.u = num_i64(d, "u");
-        if (d.contains("bids") && d.at("bids").is_array())
+        if (d.contains("bids") && d.at("bids").is_array()) {
+            e.bids.reserve(d.at("bids").size());
             for (const auto& row : d.at("bids")) e.bids.push_back(CryptoComWsBookLevel::from_json(row));
-        if (d.contains("asks") && d.at("asks").is_array())
+        }
+        if (d.contains("asks") && d.at("asks").is_array()) {
+            e.asks.reserve(d.at("asks").size());
             for (const auto& row : d.at("asks")) e.asks.push_back(CryptoComWsBookLevel::from_json(row));
+        }
     }
     return e;
 }
@@ -173,6 +178,7 @@ CryptoComCandlestickEvent CryptoComCandlestickEvent::from_json(const json& frame
     e.subscription    = str_field(r, "subscription");
     e.instrument_name = str_field(r, "instrument_name");
     e.interval        = str_field(r, "interval");
+    e.candles.reserve(result_data(frame).size());
     for (const auto& row : result_data(frame))
         e.candles.push_back(CryptoComWsCandle::from_json(row));
     return e;
@@ -200,6 +206,7 @@ CryptoComOrderUpdate CryptoComOrderUpdate::from_json(const json& row) {
 CryptoComUserOrderEvent CryptoComUserOrderEvent::from_json(const json& frame) {
     CryptoComUserOrderEvent e;
     e.subscription = str_field(result_obj(frame), "subscription");
+    e.orders.reserve(result_data(frame).size());
     for (const auto& row : result_data(frame))
         e.orders.push_back(CryptoComOrderUpdate::from_json(row));
     return e;
@@ -216,6 +223,7 @@ CryptoComBalanceUpdate CryptoComBalanceUpdate::from_json(const json& row) {
 CryptoComUserBalanceEvent CryptoComUserBalanceEvent::from_json(const json& frame) {
     CryptoComUserBalanceEvent e;
     e.subscription = str_field(result_obj(frame), "subscription");
+    e.balances.reserve(result_data(frame).size());
     for (const auto& row : result_data(frame))
         e.balances.push_back(CryptoComBalanceUpdate::from_json(row));
     return e;

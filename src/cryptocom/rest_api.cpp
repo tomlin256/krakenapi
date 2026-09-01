@@ -65,9 +65,11 @@ CryptoComInstrument CryptoComInstrument::from_json(const json& j) {
 
 CryptoComInstrumentsResult CryptoComInstrumentsResult::from_json(const json& j) {
     CryptoComInstrumentsResult r;
-    if (j.contains("data") && j.at("data").is_array())
+    if (j.contains("data") && j.at("data").is_array()) {
+        r.instruments.reserve(j.at("data").size());
         for (const auto& e : j.at("data"))
             r.instruments.push_back(CryptoComInstrument::from_json(e));
+    }
     return r;
 }
 
@@ -98,9 +100,11 @@ CryptoComTicker CryptoComTicker::from_json(const json& j) {
 
 CryptoComTickersResult CryptoComTickersResult::from_json(const json& j) {
     CryptoComTickersResult r;
-    if (j.contains("data") && j.at("data").is_array())
+    if (j.contains("data") && j.at("data").is_array()) {
+        r.tickers.reserve(j.at("data").size());
         for (const auto& e : j.at("data"))
             r.tickers.push_back(CryptoComTicker::from_json(e));
+    }
     return r;
 }
 
@@ -133,12 +137,16 @@ CryptoComOrderBook CryptoComOrderBook::from_json(const json& j) {
     if (j.contains("data") && j.at("data").is_array() && !j.at("data").empty()) {
         const auto& d = j.at("data").front();
         b.t = num_i64(d, "t");
-        if (d.contains("bids") && d.at("bids").is_array())
+        if (d.contains("bids") && d.at("bids").is_array()) {
+            b.bids.reserve(d.at("bids").size());
             for (const auto& row : d.at("bids"))
                 b.bids.push_back(CryptoComBookLevel::from_json(row));
-        if (d.contains("asks") && d.at("asks").is_array())
+        }
+        if (d.contains("asks") && d.at("asks").is_array()) {
+            b.asks.reserve(d.at("asks").size());
             for (const auto& row : d.at("asks"))
                 b.asks.push_back(CryptoComBookLevel::from_json(row));
+        }
     }
     return b;
 }
@@ -170,9 +178,11 @@ CryptoComCandlesResult CryptoComCandlesResult::from_json(const json& j) {
     CryptoComCandlesResult r;
     r.instrument_name = str_field(j, "instrument_name");
     r.interval        = str_field(j, "interval");
-    if (j.contains("data") && j.at("data").is_array())
+    if (j.contains("data") && j.at("data").is_array()) {
+        r.candles.reserve(j.at("data").size());
         for (const auto& e : j.at("data"))
             r.candles.push_back(CryptoComCandle::from_json(e));
+    }
     return r;
 }
 
@@ -203,9 +213,11 @@ CryptoComPublicTrade CryptoComPublicTrade::from_json(const json& j) {
 
 CryptoComTradesResult CryptoComTradesResult::from_json(const json& j) {
     CryptoComTradesResult r;
-    if (j.contains("data") && j.at("data").is_array())
+    if (j.contains("data") && j.at("data").is_array()) {
+        r.trades.reserve(j.at("data").size());
         for (const auto& e : j.at("data"))
             r.trades.push_back(CryptoComPublicTrade::from_json(e));
+    }
     return r;
 }
 
@@ -277,9 +289,11 @@ CryptoComOrder CryptoComOrder::from_json(const json& j) {
 
 CryptoComOrdersResult CryptoComOrdersResult::from_json(const json& j) {
     CryptoComOrdersResult r;
-    if (j.contains("data") && j.at("data").is_array())
+    if (j.contains("data") && j.at("data").is_array()) {
+        r.orders.reserve(j.at("data").size());
         for (const auto& e : j.at("data"))
             r.orders.push_back(CryptoComOrder::from_json(e));
+    }
     return r;
 }
 
@@ -306,17 +320,21 @@ CryptoComUserBalance CryptoComUserBalance::from_json(const json& j) {
     b.total_session_unrealized_pnl = sd(j, "total_session_unrealized_pnl");
     b.total_session_realized_pnl  = sd(j, "total_session_realized_pnl");
     b.instrument_name             = str_field(j, "instrument_name");
-    if (j.contains("position_balances") && j.at("position_balances").is_array())
+    if (j.contains("position_balances") && j.at("position_balances").is_array()) {
+        b.position_balances.reserve(j.at("position_balances").size());
         for (const auto& e : j.at("position_balances"))
             b.position_balances.push_back(CryptoComPositionBalance::from_json(e));
+    }
     return b;
 }
 
 CryptoComUserBalanceResult CryptoComUserBalanceResult::from_json(const json& j) {
     CryptoComUserBalanceResult r;
-    if (j.contains("data") && j.at("data").is_array())
+    if (j.contains("data") && j.at("data").is_array()) {
+        r.data.reserve(j.at("data").size());
         for (const auto& e : j.at("data"))
             r.data.push_back(CryptoComUserBalance::from_json(e));
+    }
     return r;
 }
 
@@ -417,9 +435,11 @@ CryptoComUserTrade CryptoComUserTrade::from_json(const json& j) {
 
 CryptoComUserTradesResult CryptoComUserTradesResult::from_json(const json& j) {
     CryptoComUserTradesResult r;
-    if (j.contains("data") && j.at("data").is_array())
+    if (j.contains("data") && j.at("data").is_array()) {
+        r.trades.reserve(j.at("data").size());
         for (const auto& e : j.at("data"))
             r.trades.push_back(CryptoComUserTrade::from_json(e));
+    }
     return r;
 }
 
