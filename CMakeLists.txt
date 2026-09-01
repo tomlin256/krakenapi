@@ -133,16 +133,21 @@ if(CRYPTOCOGS_BUILD_TESTS)
 endif()
 
 #-------------------------------------------------------------------------------
-# Kraken performance benchmarks (plan 025) — off by default, independent of
-# CRYPTOCOGS_BUILD_TESTS: needs only the kraken lib and some shared test
-# fixture headers (included directly, not linked), not gtest/ixwebsocket.
+# Performance benchmarks (plan 025 Kraken; plan 027 Binance/Coinbase/Crypto.com)
+# — off by default, independent of CRYPTOCOGS_BUILD_TESTS: each adapter's
+# benchmark binary needs only that adapter's lib and some shared test fixture
+# headers (included directly, not linked), not gtest/ixwebsocket. Per-adapter
+# gating happens inside tests/benchmarks/CMakeLists.txt, the same convention
+# tests/CMakeLists.txt already uses for unit tests.
 #-------------------------------------------------------------------------------
 
 if(CRYPTOCOGS_BUILD_BENCHMARKS)
-  if(NOT CRYPTOCOGS_BUILD_KRAKEN)
+  if(NOT CRYPTOCOGS_BUILD_KRAKEN AND NOT CRYPTOCOGS_BUILD_BINANCE AND
+     NOT CRYPTOCOGS_BUILD_COINBASE AND NOT CRYPTOCOGS_BUILD_CRYPTOCOM)
     message(WARNING
-        "CRYPTOCOGS_BUILD_BENCHMARKS is ON but CRYPTOCOGS_BUILD_KRAKEN is OFF — "
-        "benchmarks need the kraken adapter; skipping.")
+        "CRYPTOCOGS_BUILD_BENCHMARKS is ON but all of CRYPTOCOGS_BUILD_KRAKEN, "
+        "CRYPTOCOGS_BUILD_BINANCE, CRYPTOCOGS_BUILD_COINBASE and "
+        "CRYPTOCOGS_BUILD_CRYPTOCOM are OFF — nothing to benchmark; skipping.")
   else()
     set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
     set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
