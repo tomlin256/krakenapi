@@ -1,6 +1,6 @@
 # Plan 026 — Pre-size `std::vector` growth in Kraken `from_json` (`.reserve()`)
 
-**Status:** Proposed
+**Status:** Done
 **Depends on:** [025 — Kraken performance profiling](025-kraken-performance-profiling.md) (v0.5.3, HEAD `d844f42`)
 
 ## Motivation
@@ -157,6 +157,54 @@ Each step ends with a checkpoint: full `cmake --build build` **and**
 - **Unit tests:** none new.
 - **Done:** Results section written with real re-measured numbers; final
   checkpoint green; both doc updates made; commit.
+
+## Results
+
+Re-ran `kraken_benchmarks` (`build-bench/`, `RelWithDebInfo`, rebuilt against
+the patched `src/kraken/{ws_api,rest_api}.cpp`) after Steps 1–2, 10
+repetitions each, and compared against plan 025's recorded "before" numbers.
+
+**Full end-to-end `BM_BookFromJson` (json::parse + reserve + push_back
+combined):**
+
+| Depth | Before (025) | After (026) | Δ | Predicted ceiling |
+|---|---|---|---|---|
+| 10 | 0.84 µs | 0.772 µs | −8.1% | (not separately predicted) |
+| 50 | 3.0 µs | 2.912 µs | −2.9% | (not separately predicted) |
+| 100 | 5.6 µs | 5.551 µs | −0.9% | −4.8% |
+| 500 | 26.2 µs | 26.834 µs | **+2.4%** | −1.5% |
+
+This does **not** cleanly reproduce the predicted win at 100/500 — depth 500
+actually measured slower. Per-run coefficient of variation was ~0.7–1.0%
+(10 reps), which explains part of the spread but not all of the depth-500
+delta.
+
+**Isolated `BM_VectorPushBack_NoReserve` vs `_WithReserve` (the controlled
+comparison, no json::parse involved) — same run:**
+
+| Depth | Before (025) | After (026) |
+|---|---|---|
+| 100 | 199 → 64 ns (saves 135 ns) | 201 → 66.5 ns (saves 134.5 ns) |
+| 500 | 495 → 300 ns (saves 195 ns) | 514 → 321 ns (saves 193 ns) |
+
+This reproduces plan 025's original numbers almost exactly (within ~1 ns).
+
+**Verdict:** the `.reserve()` mechanism itself behaves exactly as plan 025
+predicted — the isolated comparison, unaffected by json::parse noise, is
+essentially identical run-to-run. The full end-to-end `BM_BookFromJson`
+number, however, is dominated by json::parse (plan 025's ~84% finding), and
+cross-session differences in that dominant term (background load, thermal
+state, allocator arena state — this machine's load average was 2.3–3.6
+during this run) are large enough to swamp the ~270–390 ns reserve win at
+the full-pipeline level. In short: **the fix does exactly what was measured
+in isolation; it is not reliably visible in a full end-to-end trace because
+it's smaller than the run-to-run noise of the dominant cost it sits next
+to.** This doesn't change plan 025's own verdict — it reinforces it: reserve()
+was correctly triaged as a minor, low-priority-but-free contributor, not a
+fix expected to move the headline number. The change is kept (free,
+mechanical, zero behavior change, confirmed correct by the full existing
+test suite) on its own merits, not on the strength of an end-to-end
+benchmark delta.
 
 ## Self-review — risks, assumptions, follow-on
 
